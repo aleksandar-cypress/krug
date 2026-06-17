@@ -99,6 +99,13 @@ App-ovi su instalirani i testirani na 3 uređaja paralelno: Samsung A37, Samsung
 - Local git config: `aleksandarr@gmail.com` (per-repo, ne global)
 - `gh auth login` setupovan (browser flow) — buduće push-eve radi bez prompta
 
+### FGS reliability sloj 2 — Boot + Worker keepalive (NOVO)
+- **`BootReceiver`** (`core/location/BootReceiver.kt`) — sluša `BOOT_COMPLETED`, `LOCKED_BOOT_COMPLETED`, `MY_PACKAGE_REPLACED`. Posle restart-a telefona auto-startuje FGS ako je user signed-in. Bez ovog korisnik bi morao da otvori app ručno posle reboot-a.
+- **`LocationHealthWorker`** (`core/location/LocationHealthWorker.kt`) — periodic 15-min WorkManager. Idempotentno zove `LocationTrackingService.start(context)` — no-op ako je FGS živ, restart + one-shot fix ako je mrtav. Zakazan u `KrugApplication.onCreate()` sa `ExistingPeriodicWorkPolicy.KEEP` (preživljava reinstall).
+- **Manifest** ima receiver deklarisan sa `BOOT_COMPLETED`, `LOCKED_BOOT_COMPLETED`, `MY_PACKAGE_REPLACED` action-ima.
+- **WorkManager dep** dodat: `androidx-work-runtime = 2.10.0`.
+- **Limit**: bez Cloud Functions (Blaze plan) ne možemo FCM high-priority data message da wake-ujemo iz Doze. Sloj 2 je best-effort — najgori scenario je 15-min gap u tracking-u kad OEM ubije FGS.
+
 ## Šta je urađeno u poslednjoj sesiji
 
 ### Build & infra popravke
@@ -160,13 +167,17 @@ App-ovi su instalirani i testirani na 3 uređaja paralelno: Samsung A37, Samsung
 | Šta | Effort | Prioritet |
 |-----|--------|-----------|
 | ~~Battery mode wiring u FGS~~ | ~~50 linija~~ | ✅ urađeno |
-| ~~Stroge Firestore + RTDB security rules~~ | ~~1-2h~~ | ✅ napisano (vidi `firestore.rules` + `database.rules.json`, treba deploy preko Console-a) |
-| Avatar fotke na markerima (sa Coil bitmap loader-om) | ~30 linija | srednje |
+| ~~Stroge Firestore + RTDB security rules~~ | ~~1-2h~~ | ✅ deployed via Firebase CLI |
+| ~~Avatar fotke na markerima~~ | ~~30 linija~~ | ✅ Coil bitmap loader + photoCache state map |
+| ~~MemberDetail bottom sheet~~ | ~~nekoliko sati~~ | ✅ tap pin / row → ModalBottomSheet sa stats + akcijama |
+| ~~Battery indicator ring oko pin-a~~ | ~~30 min~~ | ✅ Life360 stil, color-coded arc |
+| ~~Auto-startup posle reboot-a (FGS keepalive)~~ | ~~30 min~~ | ✅ BootReceiver + 15-min WorkManager |
 | Places + geofencing ("Marko stigao kući") | 1 dan | srednje |
-| MemberDetail bottom sheet na tap markera | nekoliko sati | nisko |
-| Brisanje naloga (fan-out kroz krugove + lokacije + SOS) | 1 dan | nisko |
+| History trail (last 24h locations) | 1 dan | nisko |
+| Brisanje naloga (fan-out kroz krugove + lokacije + SOS) | 1 dan | nisko (obavezno za GDPR/Play Store) |
 | Privacy policy URL + Terms URL (host na GitHub Pages) | 2h | obavezno pre Play Store-a |
-| **SOS push notifikacije** — trenutno samo banner kad je app open; FCM data message za "SOS od X" | nekoliko sati | visoko ako želiš ozbiljnu safety feature |
+| Crashlytics + App Check | ~1h | srednje (pre prod-a) |
+| **SOS push notifikacije** — trenutno samo banner kad je app open; FCM data message preko Cloud Function | par sati + Blaze upgrade | visoko ako želiš ozbiljnu safety feature |
 | **SOS auto-clear** posle X minuta | 30 min | nisko |
 | **Vibracija/zvuk** kad neko fire-uje SOS | 30 min | srednje |
 
