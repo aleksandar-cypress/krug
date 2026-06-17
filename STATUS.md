@@ -2,12 +2,102 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-16)
+## Gde smo stali (2026-06-17)
 
-Build je uspešan, SOS feature dodat, dark theme uklonjen (uvek light), onboarding persistence sređen.
-APK je instaliran na `RFGL30L2A5Z` i pokrenut. Spreman za testiranje sa drugim uređajem (recipient strana SOS-a) i nastavak razvoja.
+Build je uspešan i prošao više iteracija. Repo je pushovan na GitHub: **https://github.com/aleksandar-cypress/krug**
 
-**Trenutno aktivni anonimni test korisnik** — Firebase Anonymous Auth je omogućen u Console-u.
+App-ovi su instalirani i testirani na 3 uređaja paralelno: Samsung A37, Samsung S24 Ultra, Xiaomi 11 Lite NE. Google sign-in radi (S24), anonymous sign-in radi (A37/Xiaomi). Map pinovi, krugovi (create/join/leave/delete), SOS, security rules (deployed), refresh ping mehanizam — sve funkcionalno.
+
+## Šta je urađeno u sesiji 2026-06-17
+
+### Security rules + index
+- **`firestore.rules`** napisana i deployovana (`firebase deploy --only firestore:rules`):
+  - `users/{uid}`: read svi authenticated, write samo self, `settings/main` strogo lično
+  - `circles/{cid}`: read svi authenticated (potrebno za invite-accept), write strogo (owner update / self-join / self-leave; owner ne sme da napusti svoj krug)
+  - `circles/{cid}/members/{uid}`: read svi authenticated, write self ili owner
+  - `invites/{code}`: read svi authenticated, create samo članovi krug-a, update samo dodavanje sebe u `usedBy`
+- **`database.rules.json`** napisana i deployovana:
+  - `/locations/{uid}` + `/sos/{uid}`: write samo self, read svi authenticated
+  - `/locationRequests/{targetUid}/{requesterUid}`: write requester ili target (target za cleanup), read samo target
+- **`firestore.indexes.json`** — composite index na `circles` (memberIds array_contains + createdAt) — Firestore traži za `observeMyCircles` query
+- **`firebase.json` + `.firebaserc`** dodati za CLI deploy
+- Limitation: RTDB read na `/locations` je `auth != null` (bez denormalizovane peers liste, ne može strože). Documented kao TODO za Cloud Functions era.
+
+### Defensive fixes (snapshot listener crashes)
+- Svi `addSnapshotListener` u repos (Circle, User, Settings, Map) sad imaju **error handling** umesto silent `_` — log + fallback (null/empty)
+- `observeMyCircles` više nema `!!` na toObject (uzrok crash-a kad doc neispravan)
+- `acceptInvite` ima try-catch oko `getCircle` (network/permission errors ne crash-uju app)
+
+### Bug fix: stara lokacija pri ulasku u Map
+- `LocationTrackingService.onStartCommand` sad zove **`requestOneShotFix()`** — odmah povuče HIGH_ACCURACY GPS fix i publish-uje u RTDB, bez čekanja FGS callback intervala (2-10 min)
+- Aktivira se pri svakom ulasku u Map screen (`LocationTrackingService.start(context)` iz DisposableEffect)
+
+### CircleDetail screen (NOVO)
+- **`CircleDetailScreen.kt`** + **`CircleDetailViewModel.kt`** — tap krug iz liste otvara
+- Sadržaj: krug ime + boja header, member lista sa role-ovima (Vlasnik/Član), "Pozovi članove" dugme (generiše invite kod → ShowInvite)
+- **"Izađi iz kruga"** za članove, **"Obriši krug"** za vlasnika (sa confirm dialog-om)
+- Auto-pop na Map screen kad krug nestane (npr. vlasnik obrisao dok si gledao)
+- `CircleRepository.leaveCircle()` + `deleteCircle()` — owner ne može da napusti svoj krug (rules ga blokiraju)
+
+### Top-left "Krug" pill clickable
+- 0 krugova → "Krug", klik vodi na CircleList
+- 1 krug → ime tog kruga, klik vodi direktno na CircleDetail
+- 2+ krugova → "X krugova", klik vodi na CircleList
+
+### Identitet/imena
+- **`UserModel.deviceModel`** novi field — automatski popunjen sa `Build.MANUFACTURER + Build.MODEL` (npr. "Samsung SM-A376B")
+- **`UserRepository.upsertOnSignIn(user, deviceLabel)`** — pri sign-in-u kompjutuje displayName po prioritetu: Google name → email prefix → device model. **Postojeći displayName** se ne prepisuje (čuva nickname)
+- **Nickname UI**: Settings → Nalog → polje "Ime ili nadimak" + dugme Sačuvaj (`UserRepository.updateDisplayName`)
+- Member-i sad pokazuju ime + device model: "Aleksandar Vasilić · pre 5 min · Samsung S24 Ultra"
+
+### Map markeri (Life360 stil)
+- **`MapMarkers.pinMarker(context, hex, photo, initials, batteryPct)`** — kompletno redesign:
+  - **Pin oblik** (krug + uzak pointer dole, `sin25°` tangenta za prirodnu teardrop)
+  - **Beli outer ring** za kontrast
+  - **Photo** iz Google profila (učita se Coil-om u `photoCache` state map) — fallback **1-2 slova inicijala** ("Marko Vasilić" → "MV", "Samsung SM-A376B" → "SS")
+  - **Battery ring** oko pin glave — luk dužine batteryPct%, počinje na vrhu, color-coded (zelena ≥50%, žuta 20-49%, crvena <20%) sa svetlim track-om
+  - Per-uid stable color iz palette (8 boja)
+- **Tekst label ispod pin-a** — Mapbox `withTextField` sa display name-om, halo za čitljivost (truncate na 18 char)
+
+### MemberDetail bottom sheet (NOVO)
+- Tap pin na mapi ILI tap row u Članovi sheet-u → otvara `MemberDetailSheet`
+- Sadržaj: velika avatar (foto ili inicijal), ime, device model, **SOS banner** ako aktivan, stat chips (baterija u boji + last seen), 3 dugmeta:
+  - **"Centriraj na mapi"** — `mapViewState.flyTo` na članov location
+  - **"Osveži lokaciju"** — pošalje ping (vidi sledeću sekciju)
+  - **"Otvori u Google Maps"** — geo: intent sa labelom
+- Click handler na pin: `OnPointAnnotationClickListener` + `holder.annotationToUid[annotation.id]` mapiranje
+
+### Refresh ping mehanizam (NOVO — za situacije kad ne želiš da čekaš FGS interval)
+- Path: **`/locationRequests/{targetUid}/{requesterUid}`** sa ServerValue.TIMESTAMP
+- **`LocationRepository.requestRefresh()`** — pisanje pinga
+- **`LocationTrackingService.observeRefreshRequests()`** — sluša svoj path; na ping fire-uje `requestOneShotFix()` + briše entry (`clearRefreshRequests`)
+- Druga strana primi novu lokaciju kroz postojeći RTDB snapshot listener za par sekundi
+- **UI**: "Osveži lokaciju" dugme u MemberDetailSheet → state "Zahtev poslat…" → resetuje se posle 5s
+- **Caveat**: radi samo ako je target FGS živ. Ako je MIUI/Samsung battery saver ubio FGS, ping se piše ali niko ne odgovara. Target user mora da otvori app (ulazak u Map → FGS restart → one-shot fix odmah)
+
+### Mapbox optimizacija — fingerprint check
+- `MapboxContainer.update` lambda ranije je radio `deleteAll() + create()` na svakoj recompoziciji → flicker
+- Sad računamo fingerprint hash `(uid, lat, lng, batteryPct, sos, name, photo)` po članu; **preskače se redo ako se fingerprint ne promenio**
+- Recompozicije zbog photoCache/sheet state/itd. više ne baš drinče pinove
+
+### Offline persistence
+- **`FirebaseDatabase.setPersistenceEnabled(true)`** u `KrugApplication.onCreate()` — RTDB write-ovi se queue-uju na disku (preživljavaju kill/restart procesa) i sync-uju kad se net vrati
+- GPS fix-ovi se kaptuju nezavisno od interneta (FusedLocationProviderClient čita hardver direktno)
+
+### Onboarding fix — MIUI permission polling
+- `LocationPermissionPage`, `BackgroundLocationPage`, `NotificationsPermissionPage` sad imaju **polling fallback** (svake 500ms re-checkuje permission)
+- ON_RESUME observer nije pouzdan na MIUI/Xiaomi posle return-a iz system settings-a → polling rešava
+
+### Google sign-in — testovano na S24 Ultra
+- Postojeća `signInWithGoogle` flow radi out-of-box (SHA-1 debug fingerprint je već registrovan u Firebase Console)
+- `FirebaseUser.displayName` (npr. "Aleksandar Vasilić") se automatski koristi za pin label, member sheet, sve UI
+- Photo iz Google profila se učita preko Coil-a i upiše u pin bubble
+
+### Git repo
+- `git init -b main` + `.gitignore` (već postojao sa skip-om za `local.properties`, `app/google-services.json`, `*.keystore`, build artifacts)
+- Initial commit + remote `https://github.com/aleksandar-cypress/krug.git` + push to `main`
+- Local git config: `aleksandarr@gmail.com` (per-repo, ne global)
+- `gh auth login` setupovan (browser flow) — buduće push-eve radi bez prompta
 
 ## Šta je urađeno u poslednjoj sesiji
 

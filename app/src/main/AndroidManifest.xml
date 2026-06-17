@@ -45,6 +45,17 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
+        <!-- Boot + package replaced receiver — restart FGS automatski. -->
+        <receiver
+            android:name=".core.location.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

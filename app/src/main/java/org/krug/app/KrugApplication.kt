@@ -4,6 +4,7 @@ import android.app.Application
 import com.google.firebase.database.FirebaseDatabase
 import com.mapbox.common.MapboxOptions
 import dagger.hilt.android.HiltAndroidApp
+import org.krug.app.core.location.LocationHealthWorker
 import timber.log.Timber
 
 @HiltAndroidApp
@@ -22,5 +23,9 @@ class KrugApplication : Application() {
         } else {
             Timber.e("MAPBOX_PUBLIC_TOKEN is blank — set KRUG_MAPBOX_PUBLIC_TOKEN in local.properties")
         }
+        // Periodic 15-min keepalive — Android može da uspava FGS na agresivnim OEM-ima;
+        // worker pokušava da ga restartuje. ExistingPeriodicWorkPolicy.KEEP — ako je već
+        // zakazano, ne diramo (preživljava restart app-a).
+        LocationHealthWorker.schedule(this)
     }
 }

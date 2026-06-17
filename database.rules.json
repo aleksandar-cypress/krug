@@ -26,6 +26,15 @@
         "$other":      { ".validate": false }
       }
     },
+    "locationRequests": {
+      "$targetUid": {
+        ".read": "auth != null && auth.uid === $targetUid",
+        "$requesterUid": {
+          ".write": "auth != null && (auth.uid === $requesterUid || auth.uid === $targetUid)",
+          ".validate": "newData.isNumber() || !newData.exists()"
+        }
+      }
+    },
     "$other": {
       ".read": false,
       ".write": false

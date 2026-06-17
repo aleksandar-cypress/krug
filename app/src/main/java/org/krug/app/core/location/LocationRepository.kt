@@ -17,6 +17,9 @@ class LocationRepository @Inject constructor(
     private val database: FirebaseDatabase,
 ) {
     private fun locationRef(uid: String) = database.getReference("locations/$uid")
+    private fun requestsRef(targetUid: String) = database.getReference("locationRequests/$targetUid")
+    private fun requestEntry(targetUid: String, requesterUid: String) =
+        database.getReference("locationRequests/$targetUid/$requesterUid")
 
     suspend fun publish(
         uid: String,
@@ -47,5 +50,29 @@ class LocationRepository @Inject constructor(
         }
         ref.addValueEventListener(listener)
         awaitClose { ref.removeEventListener(listener) }
+    }
+
+    /** Pošalji "ping" target user-u da pošalje svežu lokaciju. */
+    suspend fun requestRefresh(targetUid: String, requesterUid: String) {
+        requestEntry(targetUid, requesterUid).setValue(ServerValue.TIMESTAMP).await()
+    }
+
+    /** Sluša ping-ove poslate ovom user-u. Vraća set requesterUid-ova. */
+    fun observeRefreshRequests(ownUid: String): Flow<Set<String>> = callbackFlow {
+        val ref = requestsRef(ownUid)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val ids = snapshot.children.mapNotNull { it.key }.toSet()
+                trySend(ids)
+            }
+            override fun onCancelled(error: DatabaseError) = Unit
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    /** Obriši sve ping zahteve za ovog user-a (posle što su processed). */
+    suspend fun clearRefreshRequests(ownUid: String) {
+        requestsRef(ownUid).removeValue().await()
     }
 }

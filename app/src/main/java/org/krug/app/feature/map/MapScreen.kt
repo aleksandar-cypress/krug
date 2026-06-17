@@ -212,6 +212,7 @@ fun MapScreen(
                         detailMember.location?.let { mapViewState.flyTo(it.lng, it.lat) }
                         detailUid = null
                     },
+                    onRefresh = { viewModel.refreshMember(detailMember.uid) },
                 )
             }
         }
@@ -497,6 +498,16 @@ private fun MapboxContainer(
         },
         update = { _ ->
             val manager = holder.annotationManager ?: return@AndroidView
+            // Fingerprint check — preskoči deleteAll+create ako se data nije promenila
+            // (recomposition se često događa zbog state-a koji ne utiče na pin-ove).
+            val fingerprint = members.joinToString("|") { m ->
+                val loc = m.location
+                val ph = m.photoUrl?.let { photoCache[it] }?.hashCode() ?: 0
+                "${m.uid}:${loc?.lat ?: ""}:${loc?.lng ?: ""}:${loc?.batteryPct ?: -1}:${m.sos != null}:${m.displayName}:$ph"
+            }
+            if (fingerprint == holder.lastFingerprint) return@AndroidView
+            holder.lastFingerprint = fingerprint
+
             manager.deleteAll()
             holder.annotationToUid.clear()
             members.forEach { member ->
@@ -546,6 +557,7 @@ private class MapViewHolder {
     var didFlyToSelf: Boolean = false
     val annotationToUid = mutableMapOf<String, String>()
     var onPinClick: ((String) -> Unit)? = null
+    var lastFingerprint: String = ""
 
     fun flyTo(lng: Double, lat: Double) {
         mapView?.mapboxMap?.flyTo(
@@ -678,7 +690,15 @@ private fun MemberDetailSheet(
     photo: Bitmap?,
     onOpenInMaps: () -> Unit,
     onFlyTo: () -> Unit,
+    onRefresh: () -> Unit,
 ) {
+    var refreshTriggered by remember { mutableStateOf(false) }
+    LaunchedEffect(refreshTriggered) {
+        if (refreshTriggered) {
+            kotlinx.coroutines.delay(5000)
+            refreshTriggered = false
+        }
+    }
     val markerColor = when {
         member.sos != null -> SosRed
         member.isSelf -> MaterialTheme.colorScheme.primary
@@ -782,6 +802,17 @@ private fun MemberDetailSheet(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Centriraj na mapi")
+            }
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    onRefresh()
+                    refreshTriggered = true
+                },
+                enabled = !refreshTriggered,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (refreshTriggered) "Zahtev poslat…" else "Osveži lokaciju")
             }
             Spacer(Modifier.height(8.dp))
             androidx.compose.material3.OutlinedButton(

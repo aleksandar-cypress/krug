@@ -130,4 +130,7 @@ dependencies {
 
     // Logging
     implementation(libs.timber)
+
+    // WorkManager — periodic health check / FGS keepalive
+    implementation(libs.androidx.work.runtime)
 }

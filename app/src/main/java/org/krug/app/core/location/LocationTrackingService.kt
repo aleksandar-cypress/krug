@@ -88,6 +88,7 @@ class LocationTrackingService : Service() {
         )
         fused = LocationServices.getFusedLocationProviderClient(this)
         observeSettings()
+        observeRefreshRequests()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -137,6 +138,20 @@ class LocationTrackingService : Service() {
                 currentSettings = settings
                 val (battery, charging) = readBattery()
                 reconfigureIfNeeded(battery, charging)
+            }
+        }
+    }
+
+    /** Drugi član krug-a je tražio osvežavanje — povuci sveži fix i očisti ping-ove. */
+    private fun observeRefreshRequests() {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        scope.launch {
+            locationRepository.observeRefreshRequests(uid).collectLatest { requesters ->
+                if (requesters.isEmpty()) return@collectLatest
+                Timber.d("Refresh request from ${requesters.size} member(s) — pulling fresh fix")
+                requestOneShotFix()
+                runCatching { locationRepository.clearRefreshRequests(uid) }
+                    .onFailure { Timber.w(it, "Failed to clear refresh requests") }
             }
         }
     }

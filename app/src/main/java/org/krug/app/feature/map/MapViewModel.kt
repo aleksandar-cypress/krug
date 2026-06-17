@@ -91,6 +91,15 @@ class MapViewModel @Inject constructor(
         }
     }
 
+    fun refreshMember(targetUid: String) {
+        val selfUid = authRepository.currentUser?.uid ?: return
+        if (targetUid == selfUid) return
+        viewModelScope.launch {
+            runCatching { locationRepository.requestRefresh(targetUid, selfUid) }
+                .onFailure { Timber.w(it, "Failed to ping refresh") }
+        }
+    }
+
     private fun combineForUser(selfUid: String): Flow<MapUiState> {
         val circlesFlow = circleRepository.observeMyCircles(selfUid)
         return circlesFlow.flatMapLatest { circles ->
