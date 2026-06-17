@@ -5,4 +5,6 @@ data class SosModel(
     val lng: Double = 0.0,
     val triggeredAt: Long = 0L,
     val message: String? = null,
+    /** ID kruga u kome je SOS pokrenut. Null = legacy SOS (pre uvođenja scope-a). */
+    val circleId: String? = null,
 )

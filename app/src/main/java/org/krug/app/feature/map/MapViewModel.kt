@@ -45,6 +45,7 @@ data class MapUiState(
     val selfUid: String? = null,
     val selfSosActive: Boolean = false,
     val myCircles: List<CircleBrief> = emptyList(),
+    val activeCircleId: String? = null,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -55,7 +56,7 @@ class MapViewModel @Inject constructor(
     private val locationRepository: LocationRepository,
     private val firestore: FirebaseFirestore,
     private val sosRepository: SosRepository,
-    localPrefs: LocalPrefs,
+    private val localPrefs: LocalPrefs,
 ) : ViewModel() {
 
     init {
@@ -69,15 +70,21 @@ class MapViewModel @Inject constructor(
         else combineForUser(user.uid)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MapUiState())
 
+    fun setActiveCircle(id: String) {
+        localPrefs.setActiveCircleId(id)
+    }
+
     fun triggerSos() {
         val uid = authRepository.currentUser?.uid ?: return
         val loc = uiState.value.selfLocation
+        val circleId = uiState.value.activeCircleId
         viewModelScope.launch {
             runCatching {
                 sosRepository.trigger(
                     uid = uid,
                     lat = loc?.lat ?: 0.0,
                     lng = loc?.lng ?: 0.0,
+                    circleId = circleId,
                 )
             }.onFailure { Timber.w(it, "Failed to trigger SOS") }
         }
@@ -102,22 +109,53 @@ class MapViewModel @Inject constructor(
 
     private fun combineForUser(selfUid: String): Flow<MapUiState> {
         val circlesFlow = circleRepository.observeMyCircles(selfUid)
-        return circlesFlow.flatMapLatest { circles ->
+        return combine(circlesFlow, localPrefs.activeCircleIdFlow) { circles, stored ->
+            circles to stored
+        }.flatMapLatest { (circles, storedActive) ->
             val briefs = circles.map { CircleBrief(it.id, it.name) }
-            val uids = circles.flatMap { it.memberIds }.toMutableSet().apply { add(selfUid) }.toList()
-            if (uids.isEmpty()) flowOf(MapUiState(selfUid = selfUid, myCircles = briefs))
-            else combine(uids.map { memberFlow(it, selfUid) }) { arr ->
-                val members = arr.toList()
+            // Aktivni krug = ono što je user izabrao (ako i dalje postoji), inače prvi.
+            val active = circles.firstOrNull { it.id == storedActive } ?: circles.firstOrNull()
+            // Mapa pokazuje samo članove aktivnog kruga (+ self).
+            val uids = if (active == null) setOf(selfUid).toList()
+            else (active.memberIds.toSet() + selfUid).toList()
+            combine(uids.map { memberFlow(it, selfUid) }) { arr ->
+                val now = System.currentTimeMillis()
+                val activeId = active?.id
+                // Defensive UI filter — SOS stariji od TTL ili koji nije za aktivni krug
+                // se tretira kao neaktivan na ovoj mapi. (Legacy SOS bez circleId-a prolaze.)
+                val members = arr.map { m ->
+                    val sos = m.sos
+                    val keep = sos != null &&
+                        now - sos.triggeredAt < SOS_TTL_MS &&
+                        (sos.circleId == null || sos.circleId == activeId)
+                    if (keep) m else m.copy(sos = null)
+                }
                 val self = members.firstOrNull { it.isSelf }
+                // Auto-clear: ako je self SOS prešao TTL, obriši u RTDB.
+                if (self?.sos == null) {
+                    val rawSelf = arr.firstOrNull { it.isSelf }
+                    if (rawSelf?.sos != null && now - rawSelf.sos.triggeredAt >= SOS_TTL_MS) {
+                        viewModelScope.launch {
+                            runCatching { sosRepository.clear(selfUid) }
+                                .onFailure { Timber.w(it, "Failed to auto-clear stale self SOS") }
+                        }
+                    }
+                }
                 MapUiState(
                     members = members,
                     selfLocation = self?.location,
                     selfUid = selfUid,
                     selfSosActive = self?.sos != null,
                     myCircles = briefs,
+                    activeCircleId = active?.id,
                 )
             }
         }
+    }
+
+    companion object {
+        /** SOS posle ovog vremena se automatski tretira kao neaktivan i čisti. */
+        const val SOS_TTL_MS = 30 * 60_000L
     }
 
     private fun memberFlow(uid: String, selfUid: String): Flow<MemberWithLocation> =

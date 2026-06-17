@@ -28,23 +28,45 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.krug.app.MainActivity
 import org.krug.app.R
+import org.krug.app.core.circle.CircleRepository
+import org.krug.app.core.permissions.PermissionUtils
 import org.krug.app.core.settings.BatteryMode
 import org.krug.app.core.settings.SettingsRepository
 import org.krug.app.core.settings.UserSettings
+import org.krug.app.core.sos.SosModel
+import org.krug.app.core.sos.SosNotifier
+import org.krug.app.core.sos.SosRepository
+import org.krug.app.core.user.UserRepository
 import timber.log.Timber
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @AndroidEntryPoint
 class LocationTrackingService : Service() {
 
     @Inject lateinit var firebaseAuth: FirebaseAuth
     @Inject lateinit var locationRepository: LocationRepository
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var circleRepository: CircleRepository
+    @Inject lateinit var userRepository: UserRepository
+    @Inject lateinit var sosRepository: SosRepository
+    @Inject lateinit var sosNotifier: SosNotifier
+
+    /** Per-uid map: poslednji `triggeredAt` koji je već notifikovan korisnika. */
+    private val knownSosTriggered = mutableMapOf<String, Long>()
 
     private lateinit var fused: FusedLocationProviderClient
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -80,20 +102,42 @@ class LocationTrackingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // Android 14+ ne dozvoljava startForeground sa LOCATION type-om bez
+        // ACCESS_FINE/COARSE_LOCATION. Bilo koji entry (BootReceiver, Worker, MapScreen)
+        // pošto smo bili odbijeni — stopSelf gracefully umesto da app crash-uje.
+        if (!PermissionUtils.hasForegroundLocation(this)) {
+            Timber.w("FGS started without location permission; stopping self")
+            stopSelf()
+            return
+        }
         ensureChannel(this)
-        ServiceCompat.startForeground(
-            this,
-            NOTIFICATION_ID,
-            buildNotification(),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
-        )
+        try {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                buildNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
+            )
+        } catch (e: SecurityException) {
+            Timber.w(e, "startForeground threw SecurityException; stopping self")
+            stopSelf()
+            return
+        }
         fused = LocationServices.getFusedLocationProviderClient(this)
         isRunning.set(true)
         observeSettings()
         observeRefreshRequests()
+        observeCircleSos()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Ako je onCreate rano izašao (no permission), `fused` nije inicijalizovan.
+        // Android i dalje deliveruje onStartCommand — moramo gracefully odustati.
+        if (!isRunning.get()) {
+            Timber.d("onStartCommand on uninitialized service; stopping")
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val initial = computeProfile(currentSettings)
         applyProfile(initial)
         // Skip GPS spike ako je poslednji publish skorašnji (česti Map ulaz/izlaz ne sme
@@ -147,6 +191,66 @@ class LocationTrackingService : Service() {
             }
         }
     }
+
+    /**
+     * Observe-uje SOS state svih članova svih krugova kojima pripadam.
+     * Notifikacija se okida samo ako sam član SOS-ovog kruga (sos.circleId).
+     * Legacy SOS bez circleId-a (stari klijenti) prolazi kroz fallback.
+     */
+    private fun observeCircleSos() {
+        val selfUid = firebaseAuth.currentUser?.uid ?: return
+        scope.launch {
+            circleRepository.observeMyCircles(selfUid)
+                .flatMapLatest { circles ->
+                    val myCircleIds = circles.map { it.id }.toSet()
+                    val others = circles.flatMap { it.memberIds }.toSet() - selfUid
+                    if (others.isEmpty()) flowOf(myCircleIds to emptyMap<String, SosModel?>())
+                    else combine(
+                        others.map { uid ->
+                            sosRepository.observe(uid).map { sos -> uid to sos }
+                        },
+                    ) { pairs -> myCircleIds to pairs.toMap() }
+                }
+                .collectLatest { (myCircleIds, sosMap) ->
+                    val currentUids = sosMap.keys
+                    sosMap.forEach { (uid, sos) -> handleSosUpdate(uid, sos, myCircleIds) }
+                    // Članovi više nisu u krug-u — sklon-i notifikacije.
+                    (knownSosTriggered.keys.toSet() - currentUids).forEach { uid ->
+                        sosNotifier.cancelSos(uid)
+                        knownSosTriggered.remove(uid)
+                    }
+                }
+        }
+    }
+
+    private suspend fun handleSosUpdate(uid: String, sos: SosModel?, myCircleIds: Set<String>) {
+        val now = System.currentTimeMillis()
+        val freshEnough = sos != null && sos.triggeredAt > 0L &&
+            (now - sos.triggeredAt) < SOS_TTL_MS
+        // Scope: sender mora biti u krugu koji ja pratim. Legacy SOS bez circleId-a
+        // prolazi kao fallback (postoji za backward compat sa starim klijentima).
+        val inScope = sos?.circleId == null || sos.circleId in myCircleIds
+        val isActive = freshEnough && inScope
+        val previousTs = knownSosTriggered[uid]
+        when {
+            isActive && previousTs != sos!!.triggeredAt -> {
+                val name = fetchDisplayName(uid)
+                sosNotifier.notifySos(uid, name)
+                knownSosTriggered[uid] = sos.triggeredAt
+                Timber.d("SOS notification fired for $uid ($name) circleId=${sos.circleId}")
+            }
+            !isActive && previousTs != null -> {
+                sosNotifier.cancelSos(uid)
+                knownSosTriggered.remove(uid)
+                Timber.d("SOS cancelled for $uid")
+            }
+        }
+    }
+
+    private suspend fun fetchDisplayName(uid: String): String =
+        withTimeoutOrNull(2_000L) {
+            userRepository.observeUser(uid).filterNotNull().first().displayName.orEmpty()
+        }.orEmpty()
 
     /** Drugi član krug-a je tražio osvežavanje — povuci sveži fix i očisti ping-ove. */
     private fun observeRefreshRequests() {
@@ -248,6 +352,7 @@ class LocationTrackingService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ONE_SHOT_COOLDOWN_MS = 3 * 60_000L
         const val PUBLISH_FRESHNESS_MS = 12 * 60_000L
+        const val SOS_TTL_MS = 30 * 60_000L
 
         /** Live-process flag. Worker chita ovo da preskoči start ako je FGS već živ. */
         val isRunning = AtomicBoolean(false)
@@ -269,6 +374,14 @@ class LocationTrackingService : Service() {
         }
 
         fun start(context: Context) {
+            // Bilo koji entry point (BootReceiver, Worker, MapScreen) može da nas
+            // pozove pre nego što je location permission dat (npr. odmah posle
+            // reinstall-a). Bez ove provere startForegroundService → onCreate →
+            // startForeground sa LOCATION type-om puca sa SecurityException na A14+.
+            if (!PermissionUtils.hasForegroundLocation(context)) {
+                Timber.d("LocationTrackingService.start skipped — no location permission")
+                return
+            }
             ensureChannel(context)
             val intent = Intent(context, LocationTrackingService::class.java)
             ContextCompat.startForegroundService(context, intent)

@@ -46,6 +46,9 @@
     <string name="map_members_empty">Pozovite nekoga da se pridruži krugu.</string>
     <string name="map_action_circles">Krugovi</string>
     <string name="map_pill_multi_circles">%1$d krugova</string>
+    <string name="map_circle_picker_title">Prebaci se u krug</string>
+    <string name="map_circle_picker_detail">Detalji</string>
+    <string name="map_circle_picker_manage">Upravljaj krugovima</string>
 
     <!-- Circles -->
     <string name="circles_title">Vaši krugovi</string>
@@ -85,6 +88,12 @@
     <string name="loc_notif_channel">Deljenje lokacije</string>
     <string name="loc_notif_title">Krug aktivan</string>
     <string name="loc_notif_text">Vaša lokacija se deli sa članovima vaših krugova.</string>
+
+    <!-- SOS notification -->
+    <string name="sos_notif_channel">SOS obaveštenja</string>
+    <string name="sos_notif_channel_desc">Hitna obaveštenja kada član kruga pokrene SOS.</string>
+    <string name="sos_notif_title">Hitno — %1$s traži pomoć</string>
+    <string name="sos_notif_body">Otvori Krug da vidiš lokaciju i pošalješ pomoć.</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Članovi</string>

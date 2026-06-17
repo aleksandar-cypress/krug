@@ -71,6 +71,9 @@ import com.mapbox.maps.plugin.annotation.generated.OnPointAnnotationClickListene
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
+import com.mapbox.maps.plugin.compass.compass
+import com.mapbox.maps.plugin.scalebar.scalebar
+import android.view.Gravity
 import org.krug.app.R
 import org.krug.app.core.location.LocationTrackingService
 
@@ -100,9 +103,14 @@ fun MapScreen(
         onDispose { }
     }
 
-    // Click handler za pin — otvara MemberDetail sheet.
-    DisposableEffect(mapViewState) {
-        mapViewState.onPinClick = { uid -> detailUid = uid }
+    // Click handler za pin — fly-to + otvori MemberDetail sheet.
+    DisposableEffect(mapViewState, state.members) {
+        mapViewState.onPinClick = { uid ->
+            state.members.firstOrNull { it.uid == uid }?.location?.let { loc ->
+                mapViewState.flyTo(loc.lng, loc.lat)
+            }
+            detailUid = uid
+        }
         onDispose { mapViewState.onPinClick = null }
     }
 
@@ -121,6 +129,7 @@ fun MapScreen(
 
     var sheetVisible by remember { mutableStateOf(false) }
     var sosConfirmVisible by remember { mutableStateOf(false) }
+    var circlePickerVisible by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val activeSosMembers = state.members.filter { it.sos != null }
@@ -137,8 +146,9 @@ fun MapScreen(
         ) {
             TopFloatingBar(
                 circles = state.myCircles,
+                activeCircleId = state.activeCircleId,
                 onOpenCircles = onOpenCircles,
-                onOpenCircleDetail = onOpenCircleDetail,
+                onOpenPicker = { circlePickerVisible = true },
                 onOpenSettings = onOpenSettings,
             )
             if (activeSosMembers.isNotEmpty()) {
@@ -165,7 +175,7 @@ fun MapScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .navigationBarsPadding()
-                .padding(end = 16.dp, bottom = 32.dp),
+                .padding(end = 16.dp, bottom = 44.dp),
         )
 
         MembersPill(
@@ -174,7 +184,7 @@ fun MapScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(bottom = 24.dp),
+                .padding(bottom = 36.dp),
         )
 
         if (sheetVisible) {
@@ -185,6 +195,9 @@ fun MapScreen(
             ) {
                 MembersSheet(state.members, onMemberClick = { uid ->
                     sheetVisible = false
+                    state.members.firstOrNull { it.uid == uid }?.location?.let { loc ->
+                        mapViewState.flyTo(loc.lng, loc.lat)
+                    }
                     detailUid = uid
                 })
             }
@@ -208,11 +221,31 @@ fun MapScreen(
                             runCatching { context.startActivity(intent) }
                         }
                     },
-                    onFlyTo = {
-                        detailMember.location?.let { mapViewState.flyTo(it.lng, it.lat) }
-                        detailUid = null
-                    },
                     onRefresh = { viewModel.refreshMember(detailMember.uid) },
+                )
+            }
+        }
+
+        if (circlePickerVisible && state.myCircles.isNotEmpty()) {
+            ModalBottomSheet(
+                onDismissRequest = { circlePickerVisible = false },
+                containerColor = MaterialTheme.colorScheme.surface,
+            ) {
+                CirclePickerSheet(
+                    circles = state.myCircles,
+                    activeCircleId = state.activeCircleId,
+                    onPick = { id ->
+                        viewModel.setActiveCircle(id)
+                        circlePickerVisible = false
+                    },
+                    onOpenDetail = { id ->
+                        circlePickerVisible = false
+                        onOpenCircleDetail(id)
+                    },
+                    onCreateNew = {
+                        circlePickerVisible = false
+                        onOpenCircles()
+                    },
                 )
             }
         }
@@ -255,20 +288,14 @@ fun MapScreen(
 @Composable
 private fun TopFloatingBar(
     circles: List<CircleBrief>,
+    activeCircleId: String?,
     onOpenCircles: () -> Unit,
-    onOpenCircleDetail: (String) -> Unit,
+    onOpenPicker: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    val pillLabel = when (circles.size) {
-        0 -> stringResource(R.string.map_title)
-        1 -> circles.first().name
-        else -> stringResource(R.string.map_pill_multi_circles, circles.size)
-    }
-    val onPillClick: () -> Unit = when (circles.size) {
-        0 -> onOpenCircles
-        1 -> { { onOpenCircleDetail(circles.first().id) } }
-        else -> onOpenCircles
-    }
+    val active = circles.firstOrNull { it.id == activeCircleId } ?: circles.firstOrNull()
+    val pillLabel = active?.name ?: stringResource(R.string.map_title)
+    val onPillClick: () -> Unit = if (circles.isEmpty()) onOpenCircles else onOpenPicker
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -488,6 +515,21 @@ private fun MapboxContainer(
                         }
                     },
                 )
+                // Compass se default-no pojavi top-right kad rotirаš mapu — ali tamo je
+                // Settings button. Isključujem ga jer ovaj app ne traži kompas (pin-ovi
+                // su orijentisani severom kroz "Centriraj" / flyTo akcije).
+                mv.compass.updateSettings { enabled = false }
+                // Scale bar — dole-levo, ispod Članovi pill-a (pill je centriran,
+                // levi ugao je slobodan). Metric units.
+                val density = ctx.resources.displayMetrics.density
+                mv.scalebar.updateSettings {
+                    position = Gravity.BOTTOM or Gravity.START
+                    marginLeft = 16f * density
+                    marginBottom = 8f * density
+                    marginTop = 0f
+                    marginRight = 0f
+                    isMetricUnits = true
+                }
                 mv.mapboxMap.setCamera(
                     CameraOptions.Builder()
                         .center(Point.fromLngLat(DEFAULT_LNG, DEFAULT_LAT))
@@ -567,6 +609,67 @@ private class MapViewHolder {
                 .build(),
             MapAnimationOptions.mapAnimationOptions { duration(1200L) },
         )
+    }
+}
+
+@Composable
+private fun CirclePickerSheet(
+    circles: List<CircleBrief>,
+    activeCircleId: String?,
+    onPick: (String) -> Unit,
+    onOpenDetail: (String) -> Unit,
+    onCreateNew: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 16.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.map_circle_picker_title),
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+            modifier = Modifier.padding(bottom = 12.dp),
+        )
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(circles, key = { it.id }) { c ->
+                val selected = c.id == activeCircleId
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        )
+                        .clickable { onPick(c.id) }
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    androidx.compose.material3.RadioButton(
+                        selected = selected,
+                        onClick = { onPick(c.id) },
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = c.name,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { onOpenDetail(c.id) }) {
+                        Text(stringResource(R.string.map_circle_picker_detail))
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        androidx.compose.material3.OutlinedButton(
+            onClick = onCreateNew,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(R.string.map_circle_picker_manage))
+        }
     }
 }
 
@@ -689,7 +792,6 @@ private fun MemberDetailSheet(
     member: MemberWithLocation,
     photo: Bitmap?,
     onOpenInMaps: () -> Unit,
-    onFlyTo: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     var refreshTriggered by remember { mutableStateOf(false) }
@@ -798,13 +900,6 @@ private fun MemberDetailSheet(
         Spacer(Modifier.height(20.dp))
         if (!member.isSelf && member.location != null) {
             androidx.compose.material3.Button(
-                onClick = onFlyTo,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Centriraj na mapi")
-            }
-            Spacer(Modifier.height(8.dp))
-            androidx.compose.material3.OutlinedButton(
                 onClick = {
                     onRefresh()
                     refreshTriggered = true

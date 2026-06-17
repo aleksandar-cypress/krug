@@ -18,12 +18,19 @@ class SosRepository @Inject constructor(
 ) {
     private fun ref(uid: String) = database.getReference("sos/$uid")
 
-    suspend fun trigger(uid: String, lat: Double, lng: Double, message: String? = null) {
+    suspend fun trigger(
+        uid: String,
+        lat: Double,
+        lng: Double,
+        circleId: String?,
+        message: String? = null,
+    ) {
         val data = mapOf(
             "lat" to lat,
             "lng" to lng,
             "triggeredAt" to ServerValue.TIMESTAMP,
             "message" to message,
+            "circleId" to circleId,
         )
         ref(uid).setValue(data).await()
     }
