@@ -36,9 +36,11 @@ fun LocationPermissionPage(onGranted: () -> Unit) {
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { result ->
-        granted = result.values.any { it } &&
-            PermissionUtils.hasForegroundLocation(context)
+    ) { _ ->
+        // Uvek čitaj autoritativno stanje iz sistema — `result.values` može biti
+        // prazno ili nedosledno na nekim OEM-ima.
+        granted = PermissionUtils.hasForegroundLocation(context)
+        if (granted) onGranted()
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -70,7 +72,14 @@ fun LocationPermissionPage(onGranted: () -> Unit) {
         body = stringResource(R.string.onb_loc_body),
         primaryButtonText = stringResource(R.string.onb_loc_grant),
         onPrimary = {
-            launcher.launch(PermissionUtils.foregroundLocationPermissions.toTypedArray())
+            // Ako je permission već granted (npr. user ga dao u prethodnoj sesiji), launcher
+            // ne pokazuje dijalog i `LaunchedEffect(granted)` ne re-fire-uje jer se vrednost
+            // ne menja. Pozovi onGranted ručno.
+            if (PermissionUtils.hasForegroundLocation(context)) {
+                onGranted()
+            } else {
+                launcher.launch(PermissionUtils.foregroundLocationPermissions.toTypedArray())
+            }
         },
         secondaryButtonText = stringResource(R.string.onb_loc_open_settings),
         onSecondary = { (context as? Activity)?.let { PermissionUtils.openAppSettings(it) } },
@@ -123,8 +132,9 @@ fun NotificationsPermissionPage(onContinueOrSkip: () -> Unit) {
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { result ->
-        granted = result || PermissionUtils.hasNotifications(context)
+    ) { _ ->
+        granted = PermissionUtils.hasNotifications(context)
+        if (granted) onContinueOrSkip()
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -154,7 +164,11 @@ fun NotificationsPermissionPage(onContinueOrSkip: () -> Unit) {
         body = stringResource(R.string.onb_notif_body),
         primaryButtonText = stringResource(R.string.onb_notif_grant),
         onPrimary = {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Već granted? Launcher ne pokazuje dijalog i LaunchedEffect(granted)
+            // ne re-fire-uje. Pozovi onContinueOrSkip ručno.
+            if (PermissionUtils.hasNotifications(context)) {
+                onContinueOrSkip()
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             } else {
                 onContinueOrSkip()

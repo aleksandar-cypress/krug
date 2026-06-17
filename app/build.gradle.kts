@@ -137,4 +137,8 @@ dependencies {
 
     // WorkManager — periodic health check / FGS keepalive
     implementation(libs.androidx.work.runtime)
+
+    // Android 12+ splash screen API — drži sistemski splash dok ViewModel ne odluči,
+    // pa direktno na sledeći route. Eliminiše "double splash" jump.
+    implementation(libs.androidx.core.splashscreen)
 }

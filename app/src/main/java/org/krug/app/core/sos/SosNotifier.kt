@@ -6,6 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.RingtoneManager
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -14,6 +18,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import org.krug.app.MainActivity
 import org.krug.app.R
+import timber.log.Timber
 
 /**
  * Lokalne SOS notifikacije — radi dok je FGS živ. Bez Cloud Functions / FCM-a
@@ -58,6 +63,7 @@ class SosNotifier @Inject constructor(
         )
         val title = context.getString(R.string.sos_notif_title, displayName.ifBlank { "Član" })
         val body = context.getString(R.string.sos_notif_body)
+        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
@@ -70,10 +76,35 @@ class SosNotifier @Inject constructor(
             .setAutoCancel(true)
             .setContentIntent(pi)
             .setOngoing(false)
+            // Belt-and-suspenders za pre-O — na O+ channel je autoritativan, ali ne škodi.
+            // Na O+ Samsung One UI ipak može da silence-uje sve, pa imamo i direktan
+            // Vibrator poziv ispod.
+            .setSound(soundUri)
+            .setVibrate(VIBRATION_PATTERN)
+            .setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_VIBRATE)
             .build()
         runCatching {
             NotificationManagerCompat.from(context).notify(notificationIdFor(uid), notification)
+            Timber.d("notifySos posted for $uid")
+        }.onFailure { Timber.w(it, "notifySos failed") }
+        // Direktan Vibrator poziv — radi i ako je channel/notification silent
+        // (Samsung One UI "Silent category" za sideload debug APK-ove).
+        triggerVibration()
+    }
+
+    private fun triggerVibration() {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val mgr = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+            mgr?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         }
+        if (vibrator == null || !vibrator.hasVibrator()) return
+        runCatching {
+            val effect = VibrationEffect.createWaveform(VIBRATION_PATTERN, -1)
+            vibrator.vibrate(effect)
+        }.onFailure { Timber.w(it, "Vibration failed") }
     }
 
     fun cancelSos(uid: String) {
@@ -84,7 +115,10 @@ class SosNotifier @Inject constructor(
         SOS_NOTIFICATION_BASE_ID + (uid.hashCode() and 0x7FFF)
 
     companion object {
-        const val CHANNEL_ID = "krug_sos"
+        // Bumpovan ID — channel settings se ne mogu menjati posle prvog kreiranja, pa
+        // moramo da pravimo novi channel kad menjamo importance/sound. v2 = HIGH + alarm.
+        const val CHANNEL_ID = "krug_sos_v2"
         private const val SOS_NOTIFICATION_BASE_ID = 2_000
+        private val VIBRATION_PATTERN = longArrayOf(0, 500, 200, 500, 200, 500)
     }
 }

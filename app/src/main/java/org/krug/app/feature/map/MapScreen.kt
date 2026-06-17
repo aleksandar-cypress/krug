@@ -59,6 +59,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mapbox.geojson.Point
@@ -221,7 +222,13 @@ fun MapScreen(
                             runCatching { context.startActivity(intent) }
                         }
                     },
-                    onRefresh = { viewModel.refreshMember(detailMember.uid) },
+                    onRefresh = {
+                        if (detailMember.isSelf) {
+                            LocationTrackingService.refreshSelf(context)
+                        } else {
+                            viewModel.refreshMember(detailMember.uid)
+                        }
+                    },
                 )
             }
         }
@@ -307,12 +314,26 @@ private fun TopFloatingBar(
             shadowElevation = 6.dp,
             onClick = onPillClick,
         ) {
-            Text(
-                text = pillLabel,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-            )
+            ) {
+                // Boja aktivnog kruga kao mala tačka levo od imena. Padne ako nema krugova.
+                active?.colorHex?.let { hex ->
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(Color(android.graphics.Color.parseColor(hex))),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                }
+                Text(
+                    text = pillLabel,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CircleIconButton(
@@ -366,11 +387,13 @@ private fun SosFab(
         onClick = onClick,
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = Icons.Filled.Warning,
-                contentDescription = "SOS",
-                tint = if (active) Color.White else SosRed,
-                modifier = Modifier.size(22.dp),
+            Text(
+                text = "SoS",
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.5.sp,
+                ),
+                color = if (active) Color.White else SosRed,
             )
         }
     }
@@ -898,7 +921,27 @@ private fun MemberDetailSheet(
         }
 
         Spacer(Modifier.height(20.dp))
-        if (!member.isSelf && member.location != null) {
+        if (member.isSelf) {
+            androidx.compose.material3.Button(
+                onClick = {
+                    onRefresh()
+                    refreshTriggered = true
+                },
+                enabled = !refreshTriggered,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (refreshTriggered) "Osveženo…" else "Osveži moju lokaciju")
+            }
+            if (member.location != null) {
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onOpenInMaps,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Otvori u Google Maps")
+                }
+            }
+        } else if (member.location != null) {
             androidx.compose.material3.Button(
                 onClick = {
                     onRefresh()
@@ -916,12 +959,6 @@ private fun MemberDetailSheet(
             ) {
                 Text("Otvori u Google Maps")
             }
-        } else if (member.isSelf) {
-            Text(
-                text = "Ovo si ti.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

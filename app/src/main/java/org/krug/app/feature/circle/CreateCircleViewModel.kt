@@ -36,7 +36,9 @@ class CreateCircleViewModel @Inject constructor(
     private val _state = MutableStateFlow(CreateCircleUiState())
     val state: StateFlow<CreateCircleUiState> = _state.asStateFlow()
 
-    fun setName(value: String) = _state.update { it.copy(name = value, nameError = false) }
+    fun setName(value: String) = _state.update {
+        it.copy(name = value.take(NAME_MAX_LENGTH), nameError = false)
+    }
     fun setColor(value: String) = _state.update { it.copy(selectedColor = value) }
     fun setIcon(value: String) = _state.update { it.copy(selectedIcon = value) }
     fun clearError() = _state.update { it.copy(genericError = null) }
@@ -54,7 +56,7 @@ class CreateCircleViewModel @Inject constructor(
             runCatching {
                 val circleId = circleRepository.createCircle(
                     ownerUid = uid,
-                    name = trimmed,
+                    name = trimmed.take(NAME_MAX_LENGTH),
                     colorHex = _state.value.selectedColor,
                     iconKey = _state.value.selectedIcon,
                 )
@@ -71,5 +73,9 @@ class CreateCircleViewModel @Inject constructor(
                     _state.update { it.copy(creating = false, genericError = "generic") }
                 }
         }
+    }
+
+    companion object {
+        const val NAME_MAX_LENGTH = 20
     }
 }

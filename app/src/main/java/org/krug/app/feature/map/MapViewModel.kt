@@ -37,7 +37,7 @@ data class MemberWithLocation(
     val isSelf: Boolean,
 )
 
-data class CircleBrief(val id: String, val name: String)
+data class CircleBrief(val id: String, val name: String, val colorHex: String)
 
 data class MapUiState(
     val members: List<MemberWithLocation> = emptyList(),
@@ -112,7 +112,7 @@ class MapViewModel @Inject constructor(
         return combine(circlesFlow, localPrefs.activeCircleIdFlow) { circles, stored ->
             circles to stored
         }.flatMapLatest { (circles, storedActive) ->
-            val briefs = circles.map { CircleBrief(it.id, it.name) }
+            val briefs = circles.map { CircleBrief(it.id, it.name, it.colorHex) }
             // Aktivni krug = ono što je user izabrao (ako i dalje postoji), inače prvi.
             val active = circles.firstOrNull { it.id == storedActive } ?: circles.firstOrNull()
             // Mapa pokazuje samo članove aktivnog kruga (+ self).

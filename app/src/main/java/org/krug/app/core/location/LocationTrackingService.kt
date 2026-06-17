@@ -140,11 +140,11 @@ class LocationTrackingService : Service() {
         }
         val initial = computeProfile(currentSettings)
         applyProfile(initial)
-        // Skip GPS spike ako je poslednji publish skorašnji (česti Map ulaz/izlaz ne sme
-        // svaki put da pali HIGH_ACCURACY fix). Worker takođe može da nas startuje —
-        // ako je publish svež, nema potrebe za novim fix-om.
+        // User-initiated refresh (dugme u MemberDetailSheet) preskače cooldown.
+        // Ostali entry pointovi (Worker, Map start, Boot) idu kroz freshness check.
+        val forceRefresh = intent?.getBooleanExtra(EXTRA_FORCE_REFRESH, false) == true
         val sincePublish = System.currentTimeMillis() - lastPublishAtMs
-        if (lastPublishAtMs == 0L || sincePublish > ONE_SHOT_COOLDOWN_MS) {
+        if (forceRefresh || lastPublishAtMs == 0L || sincePublish > ONE_SHOT_COOLDOWN_MS) {
             requestOneShotFix()
         } else {
             Timber.d("Skip one-shot fix; last publish was ${sincePublish}ms ago")
@@ -154,31 +154,61 @@ class LocationTrackingService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun requestOneShotFix() {
+        Timber.d("requestOneShotFix invoked (shareGlobal=${currentSettings.shareLocationGlobal})")
         if (!currentSettings.shareLocationGlobal) return
-        val uid = firebaseAuth.currentUser?.uid ?: return
-        val cts = CancellationTokenSource()
+        val uid = firebaseAuth.currentUser?.uid ?: run {
+            Timber.w("requestOneShotFix: no firebase user")
+            return
+        }
+        // Korak 1: instant publish keširane lokacije (Wi-Fi/cell/GPS cache, bez čekanja satelita).
+        // Bez ovoga, u zatvorenom prostoru getCurrentLocation vrati null i nikad se ne publish-uje
+        // dok ne istekne FGS interval (15 min na LOW profilu).
         try {
-            fused.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
-                .addOnSuccessListener { loc ->
-                    loc ?: return@addOnSuccessListener
-                    val (battery, charging) = readBattery()
-                    scope.launch {
-                        runCatching {
-                            locationRepository.publish(
-                                uid = uid,
-                                lat = loc.latitude,
-                                lng = loc.longitude,
-                                accuracy = loc.accuracy,
-                                batteryPct = battery,
-                                isCharging = charging,
-                            )
-                            lastPublishAtMs = System.currentTimeMillis()
-                        }.onFailure { Timber.w(it, "one-shot publish failed") }
-                    }
+            fused.lastLocation.addOnSuccessListener { loc ->
+                if (loc != null) {
+                    publishLocation(uid, loc, "last-location")
+                } else {
+                    Timber.d("lastLocation returned null")
                 }
-                .addOnFailureListener { Timber.w(it, "getCurrentLocation failed") }
+            }.addOnFailureListener { Timber.w(it, "getLastLocation failed") }
         } catch (e: SecurityException) {
-            Timber.w(e, "getCurrentLocation missing permission")
+            Timber.w(e, "getLastLocation missing permission")
+        }
+        // Korak 2: jednokratni location update — pouzdaniji od getCurrentLocation indoors.
+        // BALANCED priority koristi i mrežu i GPS, pa skoro uvek vrati nešto.
+        val req = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 0L)
+            .setMaxUpdates(1)
+            .setMaxUpdateAgeMillis(60_000L)
+            .setWaitForAccurateLocation(false)
+            .build()
+        val cb = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                result.lastLocation?.let { publishLocation(uid, it, "one-shot-updates") }
+                fused.removeLocationUpdates(this)
+            }
+        }
+        try {
+            fused.requestLocationUpdates(req, cb, Looper.getMainLooper())
+        } catch (e: SecurityException) {
+            Timber.w(e, "requestLocationUpdates(one-shot) missing permission")
+        }
+    }
+
+    private fun publishLocation(uid: String, loc: android.location.Location, source: String) {
+        val (battery, charging) = readBattery()
+        scope.launch {
+            runCatching {
+                locationRepository.publish(
+                    uid = uid,
+                    lat = loc.latitude,
+                    lng = loc.longitude,
+                    accuracy = loc.accuracy,
+                    batteryPct = battery,
+                    isCharging = charging,
+                )
+                lastPublishAtMs = System.currentTimeMillis()
+                Timber.d("Published $source fix (lat=${loc.latitude}, lng=${loc.longitude}, acc=${loc.accuracy})")
+            }.onFailure { Timber.w(it, "publish $source failed") }
         }
     }
 
@@ -357,6 +387,7 @@ class LocationTrackingService : Service() {
         const val ONE_SHOT_COOLDOWN_MS = 3 * 60_000L
         const val PUBLISH_FRESHNESS_MS = 12 * 60_000L
         const val SOS_TTL_MS = 30 * 60_000L
+        private const val EXTRA_FORCE_REFRESH = "force_refresh"
 
         /** Live-process flag. Worker chita ovo da preskoči start ako je FGS već živ. */
         val isRunning = AtomicBoolean(false)
@@ -388,6 +419,18 @@ class LocationTrackingService : Service() {
             }
             ensureChannel(context)
             val intent = Intent(context, LocationTrackingService::class.java)
+            ContextCompat.startForegroundService(context, intent)
+        }
+
+        /** User-initiated one-shot fix iz MemberDetailSheet (self). Preskače cooldown. */
+        fun refreshSelf(context: Context) {
+            if (!PermissionUtils.hasForegroundLocation(context)) {
+                Timber.d("LocationTrackingService.refreshSelf skipped — no location permission")
+                return
+            }
+            ensureChannel(context)
+            val intent = Intent(context, LocationTrackingService::class.java)
+                .putExtra(EXTRA_FORCE_REFRESH, true)
             ContextCompat.startForegroundService(context, intent)
         }
 

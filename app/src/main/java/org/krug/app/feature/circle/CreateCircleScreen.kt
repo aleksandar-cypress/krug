@@ -84,9 +84,18 @@ fun CreateCircleScreen(
                 label = { Text(stringResource(R.string.create_circle_name_label)) },
                 placeholder = { Text(stringResource(R.string.create_circle_name_placeholder)) },
                 isError = state.nameError,
-                supportingText = if (state.nameError) {
-                    { Text(stringResource(R.string.create_circle_error_empty)) }
-                } else null,
+                supportingText = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            if (state.nameError) stringResource(R.string.create_circle_error_empty)
+                            else "",
+                        )
+                        Text("${state.name.length}/${CreateCircleViewModel.NAME_MAX_LENGTH}")
+                    }
+                },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
