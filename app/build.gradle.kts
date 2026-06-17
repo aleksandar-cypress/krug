@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 val krugLocalProps = Properties().apply {
@@ -104,6 +105,9 @@ dependencies {
     implementation(libs.firebase.database)
     implementation(libs.firebase.messaging)
     implementation(libs.firebase.analytics)
+    implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.appcheck.playintegrity)
+    debugImplementation(libs.firebase.appcheck.debug)
     implementation(libs.play.services.auth)
 
     // Credential Manager (modern Google sign-in)

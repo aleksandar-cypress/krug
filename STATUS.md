@@ -285,8 +285,8 @@ Prijava: telefoni se ozbiljno greju u toku korišćenja. Diagnostika je pokazala
 | ~~MemberDetail bottom sheet~~ | ~~nekoliko sati~~ | ✅ tap pin / row → ModalBottomSheet sa stats + akcijama |
 | ~~Battery indicator ring oko pin-a~~ | ~~30 min~~ | ✅ Life360 stil, color-coded arc |
 | ~~Auto-startup posle reboot-a (FGS keepalive)~~ | ~~30 min~~ | ✅ BootReceiver + 15-min WorkManager |
-| Places + geofencing ("Marko stigao kući") | 1 dan | srednje |
-| History trail (last 24h locations) | 1 dan | nisko |
+| ~~Places + geofencing ("Marko stigao kući")~~ | 1 dan | **odloženo posle v1** (per user 2026-06-17) |
+| ~~History trail (last 24h locations)~~ | 1 dan | **odloženo posle v1** (per user 2026-06-17) |
 | Brisanje naloga (fan-out kroz krugove + lokacije + SOS) | 1 dan | nisko (obavezno za GDPR/Play Store) |
 | Privacy policy URL + Terms URL (host na GitHub Pages) | 2h | obavezno pre Play Store-a |
 | Crashlytics + App Check | ~1h | srednje (pre prod-a) |

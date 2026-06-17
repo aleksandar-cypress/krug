@@ -20,6 +20,7 @@ hilt-nav-compose = "1.2.0"
 firebase-bom = "33.7.0"
 play-services-auth = "21.2.0"
 google-services-plugin = "4.4.2"
+crashlytics-plugin = "3.0.2"
 
 # Mapbox
 mapbox = "11.8.1"
@@ -62,6 +63,9 @@ firebase-firestore = { module = "com.google.firebase:firebase-firestore-ktx" }
 firebase-database = { module = "com.google.firebase:firebase-database-ktx" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging-ktx" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics-ktx" }
+firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics-ktx" }
+firebase-appcheck-playintegrity = { module = "com.google.firebase:firebase-appcheck-playintegrity" }
+firebase-appcheck-debug = { module = "com.google.firebase:firebase-appcheck-debug" }
 play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
 
 mapbox-android = { module = "com.mapbox.maps:android", version.ref = "mapbox" }
@@ -89,3 +93,4 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 google-services = { id = "com.google.gms.google-services", version.ref = "google-services-plugin" }
+firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "crashlytics-plugin" }

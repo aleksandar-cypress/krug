@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Adaptive icon foreground. 12dp inset sa svih strana — uvlači ceo logo
+    unutar squircle safe zone-a. Bez ovoga su glave figura sečene na
+    Samsung One UI launcher-u (squircle mask seče sve bliže ivici).
+-->
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
     android:drawable="@drawable/krug_logo"
-    android:inset="6dp" />
+    android:inset="8dp" />
