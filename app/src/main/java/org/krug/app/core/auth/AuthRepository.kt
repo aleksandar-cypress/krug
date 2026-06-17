@@ -12,6 +12,7 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Co
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.database.FirebaseDatabase
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -77,6 +78,7 @@ class AuthRepository @Inject constructor(
                 .await()
             val user = authResult.user
                 ?: return SignInResult.Failure(SignInResult.Reason.Unknown)
+            refreshDatabaseAuth(user)
             userRepository.upsertOnSignIn(user, deviceLabel())
             SignInResult.Success(user)
         } catch (e: Exception) {
@@ -85,11 +87,29 @@ class AuthRepository @Inject constructor(
         }
     }
 
+    /**
+     * Force token refresh + RTDB connection bounce. Bez ovog, posle
+     * delete-account → re-sign-in, RTDB klijent može da drži stari token
+     * obrisanog korisnika i odbija sve write-ove kao "Permission denied".
+     */
+    private suspend fun refreshDatabaseAuth(user: FirebaseUser) {
+        runCatching {
+            user.getIdToken(true).await()
+            val db = FirebaseDatabase.getInstance()
+            db.goOffline()
+            db.goOnline()
+        }.onFailure { Timber.w(it, "refreshDatabaseAuth failed") }
+    }
+
     suspend fun signInAnonymously(): SignInResult {
         return try {
             val authResult = firebaseAuth.signInAnonymously().await()
             val user = authResult.user
                 ?: return SignInResult.Failure(SignInResult.Reason.Unknown)
+            // Posle delete-account → sign-in, RTDB klijent može da drži stari (sad
+            // nevažeći) auth token i odbija upis sa "Permission denied". Bounce-uj
+            // konekciju da se prihvati novi token.
+            refreshDatabaseAuth(user)
             userRepository.upsertOnSignIn(user, deviceLabel())
             SignInResult.Success(user)
         } catch (e: Exception) {
@@ -109,6 +129,22 @@ class AuthRepository @Inject constructor(
             CredentialManager.create(activityContext)
                 .clearCredentialState(androidx.credentials.ClearCredentialStateRequest())
         }.onFailure { Timber.w(it, "clearCredentialState failed") }
+    }
+
+    /**
+     * GDPR — obriši Firebase Auth user. Vraća true ako je uspešno, false ako Firebase
+     * traži recent re-login (FirebaseAuthRecentLoginRequiredException — nije implementiran
+     * reauth flow). Pozivalac treba da uradi cleanup Firestore/RTDB pre ovog poziva.
+     */
+    suspend fun deleteAccount(): Boolean {
+        val u = firebaseAuth.currentUser ?: return true
+        return try {
+            u.delete().await()
+            true
+        } catch (e: Exception) {
+            Timber.w(e, "deleteAccount: Firebase auth delete failed (likely needs reauth)")
+            false
+        }
     }
 
     private fun deviceLabel(): String {

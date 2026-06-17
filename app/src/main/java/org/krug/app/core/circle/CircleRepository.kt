@@ -103,4 +103,25 @@ class CircleRepository @Inject constructor(
         membersSnap.documents.forEach { runCatching { it.reference.delete().await() } }
         circle(circleId).delete().await()
     }
+
+    /**
+     * GDPR — za brisanje naloga. Prolazimo kroz sve krugove user-a:
+     *  - krugovi koje je on vlasnik → obriši ceo krug (svi članovi gube krug)
+     *  - krugovi gde je samo član → ukloni se iz memberIds + members subdoc
+     */
+    suspend fun cleanupForDeletedUser(uid: String) {
+        val mySnap = runCatching {
+            circles().whereArrayContains("memberIds", uid).get().await()
+        }.getOrNull() ?: return
+        mySnap.documents.forEach { doc ->
+            val ownerId = doc.getString("ownerId")
+            runCatching {
+                if (ownerId == uid) {
+                    deleteCircle(doc.id)
+                } else {
+                    leaveCircle(doc.id, uid)
+                }
+            }.onFailure { Timber.w(it, "cleanupForDeletedUser failed for circle ${doc.id}") }
+        }
+    }
 }

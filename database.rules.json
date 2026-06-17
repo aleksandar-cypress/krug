@@ -9,7 +9,7 @@
         "lng":        { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
         "accuracy":   { ".validate": "newData.isNumber()" },
         "batteryPct": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
-        "isCharging": { ".validate": "newData.isBoolean()" },
+        "charging":   { ".validate": "newData.isBoolean()" },
         "updatedAt":  { ".validate": "newData.isNumber()" },
         "$other":     { ".validate": false }
       }

@@ -34,7 +34,7 @@ class LocationRepository @Inject constructor(
             "lng" to lng,
             "accuracy" to accuracy,
             "batteryPct" to batteryPct,
-            "isCharging" to isCharging,
+            "charging" to isCharging,
             "updatedAt" to ServerValue.TIMESTAMP,
         )
         locationRef(uid).setValue(data).await()
@@ -80,5 +80,10 @@ class LocationRepository @Inject constructor(
         requesters.forEach { requesterUid ->
             runCatching { requestEntry(ownUid, requesterUid).removeValue().await() }
         }
+    }
+
+    /** GDPR — obriši sve RTDB tragove ovog usera (osim ping-ova koje su drugi poslali). */
+    suspend fun deleteForUser(uid: String) {
+        runCatching { locationRef(uid).removeValue().await() }
     }
 }

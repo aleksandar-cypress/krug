@@ -68,4 +68,16 @@ class UserRepository @Inject constructor(
         }
         awaitClose { reg.remove() }
     }
+
+    /** GDPR — obriši settings subcollection + user doc. */
+    suspend fun deleteUser(uid: String) {
+        // Settings subcollection (samo `main` doc, ali general-purpose za buduće dokumente).
+        runCatching {
+            userDoc(uid).collection("settings").get().await().documents.forEach { d ->
+                runCatching { d.reference.delete().await() }
+            }
+        }
+        runCatching { userDoc(uid).delete().await() }
+            .onFailure { Timber.w(it, "deleteUser doc failed for $uid") }
+    }
 }

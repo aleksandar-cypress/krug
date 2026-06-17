@@ -49,7 +49,7 @@ fun AccountScreen(
     val context = LocalContext.current
 
     var showSignOutConfirm by remember { mutableStateOf(false) }
-    var showDeleteUnavailable by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.signedOut) {
         if (state.signedOut) onSignedOut()
@@ -135,13 +135,27 @@ fun AccountScreen(
             }
             Spacer(Modifier.size(8.dp))
             TextButton(
-                onClick = { showDeleteUnavailable = true },
+                onClick = { showDeleteConfirm = true },
+                enabled = !state.deleting,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
-                    text = stringResource(R.string.account_delete),
-                    color = MaterialTheme.colorScheme.error,
-                )
+                if (state.deleting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        text = stringResource(R.string.account_delete_progress),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.account_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         }
     }
@@ -167,13 +181,39 @@ fun AccountScreen(
         )
     }
 
-    if (showDeleteUnavailable) {
+    if (showDeleteConfirm) {
         AlertDialog(
-            onDismissRequest = { showDeleteUnavailable = false },
+            onDismissRequest = { showDeleteConfirm = false },
             title = { Text(stringResource(R.string.account_delete_confirm_title)) },
-            text = { Text(stringResource(R.string.account_delete_not_available)) },
+            text = { Text(stringResource(R.string.account_delete_confirm_body)) },
             confirmButton = {
-                TextButton(onClick = { showDeleteUnavailable = false }) {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        viewModel.deleteAccount(context)
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.account_delete_confirm_cta),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    if (state.deleteNeedsReauth) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissDeleteReauth() },
+            title = { Text(stringResource(R.string.account_delete_reauth_title)) },
+            text = { Text(stringResource(R.string.account_delete_reauth_body)) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissDeleteReauth() }) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },

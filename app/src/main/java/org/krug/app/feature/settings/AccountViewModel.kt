@@ -13,7 +13,10 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.krug.app.core.auth.AuthRepository
+import org.krug.app.core.circle.CircleRepository
+import org.krug.app.core.location.LocationRepository
 import org.krug.app.core.location.LocationTrackingService
+import org.krug.app.core.sos.SosRepository
 import org.krug.app.core.user.UserRepository
 import timber.log.Timber
 
@@ -26,12 +29,18 @@ data class AccountUiState(
     val signedOut: Boolean = false,
     val saving: Boolean = false,
     val justSaved: Boolean = false,
+    val deleting: Boolean = false,
+    /** Set kad Firebase Auth.delete() traži recent re-login (nije implementiran reauth flow). */
+    val deleteNeedsReauth: Boolean = false,
 )
 
 @HiltViewModel
 class AccountViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository,
+    private val circleRepository: CircleRepository,
+    private val locationRepository: LocationRepository,
+    private val sosRepository: SosRepository,
 ) : ViewModel() {
 
     private val _state: MutableStateFlow<AccountUiState>
@@ -92,5 +101,42 @@ class AccountViewModel @Inject constructor(
             authRepository.signOut(context)
             _state.update { it.copy(signingOut = false, signedOut = true) }
         }
+    }
+
+    /**
+     * GDPR brisanje naloga — fan-out cleanup pa Firebase Auth delete.
+     * Redosled bitno: prvo data (dok je auth.uid još važeći), pa auth.delete().
+     */
+    fun deleteAccount(context: Context) {
+        val uid = authRepository.currentUser?.uid ?: return
+        if (_state.value.deleting) return
+        _state.update { it.copy(deleting = true, deleteNeedsReauth = false) }
+        viewModelScope.launch {
+            // 1. Zaustavi FGS odmah — više ne sme da publish-uje.
+            LocationTrackingService.stop(context)
+            // 2. RTDB cleanup (location + SOS).
+            runCatching { locationRepository.deleteForUser(uid) }
+                .onFailure { Timber.w(it, "delete RTDB location failed") }
+            runCatching { sosRepository.clear(uid) }
+                .onFailure { Timber.w(it, "delete RTDB SOS failed") }
+            // 3. Firestore: krugovi (vlasnik → obriši ceo, član → ukloni se) + user doc.
+            runCatching { circleRepository.cleanupForDeletedUser(uid) }
+                .onFailure { Timber.w(it, "circle cleanup failed") }
+            runCatching { userRepository.deleteUser(uid) }
+                .onFailure { Timber.w(it, "user doc delete failed") }
+            // 4. Firebase Auth delete. Ako traži recent re-login, signal-uj UI-u.
+            val authDeleted = authRepository.deleteAccount()
+            if (!authDeleted) {
+                _state.update { it.copy(deleting = false, deleteNeedsReauth = true) }
+                return@launch
+            }
+            // 5. Sign-out cleanup (clear credentials).
+            runCatching { authRepository.signOut(context) }
+            _state.update { it.copy(deleting = false, signedOut = true) }
+        }
+    }
+
+    fun dismissDeleteReauth() {
+        _state.update { it.copy(deleteNeedsReauth = false) }
     }
 }
