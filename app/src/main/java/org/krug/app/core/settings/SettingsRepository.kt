@@ -33,11 +33,6 @@ class SettingsRepository @Inject constructor(
         docFor(uid).set(mapOf("batteryMode" to mode.name), SetOptions.merge()).await()
     }
 
-    suspend fun updateHybridThreshold(uid: String, pct: Int) {
-        val clamped = pct.coerceIn(UserSettings.MIN_THRESHOLD, UserSettings.MAX_THRESHOLD)
-        docFor(uid).set(mapOf("hybridThresholdPct" to clamped), SetOptions.merge()).await()
-    }
-
     suspend fun updateShareGlobal(uid: String, share: Boolean) {
         docFor(uid).set(mapOf("shareLocationGlobal" to share), SetOptions.merge()).await()
     }
@@ -45,13 +40,22 @@ class SettingsRepository @Inject constructor(
     private fun parse(data: Map<String, Any?>?): UserSettings {
         if (data == null) return UserSettings()
         return UserSettings(
-            batteryMode = runCatching {
-                BatteryMode.valueOf(data["batteryMode"] as? String ?: BatteryMode.HYBRID.name)
-            }.getOrDefault(BatteryMode.HYBRID),
-            hybridThresholdPct = (data["hybridThresholdPct"] as? Number)?.toInt() ?: 15,
+            batteryMode = migrateMode(data["batteryMode"] as? String),
             shareLocationGlobal = data["shareLocationGlobal"] as? Boolean ?: true,
             notificationsEnabled = data["notificationsEnabled"] as? Boolean ?: true,
             language = data["language"] as? String ?: "sr",
         )
+    }
+
+    // Migracija sa starih naziva: CONSTANT (uvek HIGH) -> MAX,
+    // ADAPTIVE/HYBRID (uglavnom HIGH) -> BALANCED. Default je BALANCED.
+    private fun migrateMode(raw: String?): BatteryMode = when (raw) {
+        null -> BatteryMode.BALANCED
+        "SAVER" -> BatteryMode.SAVER
+        "BALANCED" -> BatteryMode.BALANCED
+        "MAX" -> BatteryMode.MAX
+        "CONSTANT" -> BatteryMode.MAX
+        "ADAPTIVE", "HYBRID" -> BatteryMode.BALANCED
+        else -> BatteryMode.BALANCED
     }
 }

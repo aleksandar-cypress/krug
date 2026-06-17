@@ -24,6 +24,7 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.AndroidEntryPoint
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,8 +56,7 @@ class LocationTrackingService : Service() {
         override fun onLocationResult(result: LocationResult) {
             val loc = result.lastLocation ?: return
             val (battery, charging) = readBattery()
-            // Re-evaluate profile so a battery drop below threshold downshifts on next tick.
-            reconfigureIfNeeded(battery, charging)
+            reconfigureIfNeeded()
             if (!currentSettings.shareLocationGlobal) {
                 Timber.d("Location sharing paused; skipping publish")
                 return
@@ -72,6 +72,7 @@ class LocationTrackingService : Service() {
                         batteryPct = battery,
                         isCharging = charging,
                     )
+                    lastPublishAtMs = System.currentTimeMillis()
                 }.onFailure { Timber.w(it, "publish location failed") }
             }
         }
@@ -87,21 +88,26 @@ class LocationTrackingService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
         )
         fused = LocationServices.getFusedLocationProviderClient(this)
+        isRunning.set(true)
         observeSettings()
         observeRefreshRequests()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val (battery, charging) = readBattery()
-        val initial = computeProfile(currentSettings, battery, charging)
+        val initial = computeProfile(currentSettings)
         applyProfile(initial)
-        requestOneShotFix()
+        // Skip GPS spike ako je poslednji publish skorašnji (česti Map ulaz/izlaz ne sme
+        // svaki put da pali HIGH_ACCURACY fix). Worker takođe može da nas startuje —
+        // ako je publish svež, nema potrebe za novim fix-om.
+        val sincePublish = System.currentTimeMillis() - lastPublishAtMs
+        if (lastPublishAtMs == 0L || sincePublish > ONE_SHOT_COOLDOWN_MS) {
+            requestOneShotFix()
+        } else {
+            Timber.d("Skip one-shot fix; last publish was ${sincePublish}ms ago")
+        }
         return START_STICKY
     }
 
-    // FGS interval može da bude do 10min (LOW) / 2min (HIGH) između callback-ova.
-    // Kad service tek startuje (npr. user otvara app posle dugog perioda), RTDB ima staru lokaciju
-    // — povuci sveži fix odmah da se mapa ne pokazuje juče-pre-juče.
     @SuppressLint("MissingPermission")
     private fun requestOneShotFix() {
         if (!currentSettings.shareLocationGlobal) return
@@ -122,6 +128,7 @@ class LocationTrackingService : Service() {
                                 batteryPct = battery,
                                 isCharging = charging,
                             )
+                            lastPublishAtMs = System.currentTimeMillis()
                         }.onFailure { Timber.w(it, "one-shot publish failed") }
                     }
                 }
@@ -136,8 +143,7 @@ class LocationTrackingService : Service() {
         scope.launch {
             settingsRepository.observe(uid).collectLatest { settings ->
                 currentSettings = settings
-                val (battery, charging) = readBattery()
-                reconfigureIfNeeded(battery, charging)
+                reconfigureIfNeeded()
             }
         }
     }
@@ -156,10 +162,10 @@ class LocationTrackingService : Service() {
         }
     }
 
-    private fun reconfigureIfNeeded(batteryPct: Int, charging: Boolean) {
-        val desired = computeProfile(currentSettings, batteryPct, charging)
+    private fun reconfigureIfNeeded() {
+        val desired = computeProfile(currentSettings)
         if (desired != currentProfile) {
-            Timber.d("Switching location profile: $currentProfile -> $desired (batt=$batteryPct, charging=$charging, mode=${currentSettings.batteryMode})")
+            Timber.d("Switching location profile: $currentProfile -> $desired (mode=${currentSettings.batteryMode})")
             applyProfile(desired)
         }
     }
@@ -182,24 +188,21 @@ class LocationTrackingService : Service() {
         }
     }
 
-    private fun computeProfile(
-        settings: UserSettings,
-        batteryPct: Int,
-        charging: Boolean,
-    ): LocationProfile {
-        if (charging) return LocationProfile.HIGH
-        return when (settings.batteryMode) {
-            BatteryMode.CONSTANT -> LocationProfile.HIGH
-            BatteryMode.ADAPTIVE, BatteryMode.HYBRID ->
-                if (batteryPct >= settings.hybridThresholdPct) LocationProfile.HIGH else LocationProfile.LOW
+    // BALANCED je default i čvrsto LOW — heat dolazi od HIGH-frekventnog GPS poll-a.
+    // SOS/refresh ping povlači sveži fix odvojeno (HIGH_ACCURACY one-shot).
+    // MAX je opt-in za korisnike koji eksplicitno žele najtačnije tracking.
+    private fun computeProfile(settings: UserSettings): LocationProfile =
+        when (settings.batteryMode) {
+            BatteryMode.MAX -> LocationProfile.HIGH
+            BatteryMode.BALANCED, BatteryMode.SAVER -> LocationProfile.LOW
         }
-    }
 
     override fun onDestroy() {
         try {
             fused.removeLocationUpdates(locationCallback)
         } catch (_: Exception) { /* no-op */ }
         scope.cancel()
+        isRunning.set(false)
         super.onDestroy()
     }
 
@@ -236,13 +239,21 @@ class LocationTrackingService : Service() {
         val fastestMs: Long,
         val displacementM: Float,
     ) {
-        HIGH(intervalMs = 120_000L, fastestMs = 60_000L, displacementM = 50f),
-        LOW(intervalMs = 600_000L, fastestMs = 300_000L, displacementM = 200f),
+        HIGH(intervalMs = 300_000L, fastestMs = 120_000L, displacementM = 100f),
+        LOW(intervalMs = 900_000L, fastestMs = 600_000L, displacementM = 300f),
     }
 
     companion object {
         const val CHANNEL_ID = "krug_location"
         const val NOTIFICATION_ID = 1001
+        const val ONE_SHOT_COOLDOWN_MS = 3 * 60_000L
+        const val PUBLISH_FRESHNESS_MS = 12 * 60_000L
+
+        /** Live-process flag. Worker chita ovo da preskoči start ako je FGS već živ. */
+        val isRunning = AtomicBoolean(false)
+
+        /** Timestamp poslednjeg uspešnog publish-a. Worker chita za freshness check. */
+        @Volatile var lastPublishAtMs: Long = 0L
 
         fun ensureChannel(context: Context) {
             val mgr = NotificationManagerCompat.from(context)

@@ -135,13 +135,12 @@
 
     <!-- Battery mode -->
     <string name="battery_title">Mod baterije</string>
-    <string name="battery_constant">Stalan</string>
-    <string name="battery_constant_desc">Lokacija se uvek deli, nezavisno od nivoa baterije.</string>
-    <string name="battery_adaptive">Adaptivni</string>
-    <string name="battery_adaptive_desc">Kada baterija padne, frekvencija slanja se smanjuje.</string>
-    <string name="battery_hybrid">Hibridni (preporučeno)</string>
-    <string name="battery_hybrid_desc">Kao adaptivni, ali pitate korisnika da pauzira deljenje pri niskoj bateriji.</string>
-    <string name="battery_threshold">Prag baterije: %1$d%%</string>
+    <string name="battery_balanced">Balans (preporučeno)</string>
+    <string name="battery_balanced_desc">Lokacija se osvežava ređe da telefon ne bi grejao. Kad neko zatraži tvoju lokaciju ili pokreneš SOS, šalje se sveži fix odmah.</string>
+    <string name="battery_saver">Štedi bateriju</string>
+    <string name="battery_saver_desc">Najsporiji updates, najmanji uticaj na bateriju i temperaturu. Koristi kad ne moraš da budeš praćen u realnom vremenu.</string>
+    <string name="battery_max">Maksimalna tačnost</string>
+    <string name="battery_max_desc">Najčešći updates — najtačnija lokacija. Telefon će se primetno grejati i trošiti bateriju.</string>
 
     <!-- About -->
     <string name="about_title">O aplikaciji</string>

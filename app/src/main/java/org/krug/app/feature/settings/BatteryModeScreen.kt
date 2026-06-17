@@ -13,7 +13,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -58,11 +57,6 @@ class BatteryModeViewModel @Inject constructor(
         val uid = authRepository.currentUser?.uid ?: return
         viewModelScope.launch { settingsRepository.updateBatteryMode(uid, mode) }
     }
-
-    fun setThreshold(pct: Int) {
-        val uid = authRepository.currentUser?.uid ?: return
-        viewModelScope.launch { settingsRepository.updateHybridThreshold(uid, pct) }
-    }
 }
 
 @Composable
@@ -80,37 +74,23 @@ fun BatteryModeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             ModeCard(
-                title = stringResource(R.string.battery_hybrid),
-                description = stringResource(R.string.battery_hybrid_desc),
-                selected = state.batteryMode == BatteryMode.HYBRID,
-                onClick = { viewModel.setMode(BatteryMode.HYBRID) },
+                title = stringResource(R.string.battery_balanced),
+                description = stringResource(R.string.battery_balanced_desc),
+                selected = state.batteryMode == BatteryMode.BALANCED,
+                onClick = { viewModel.setMode(BatteryMode.BALANCED) },
             )
             ModeCard(
-                title = stringResource(R.string.battery_adaptive),
-                description = stringResource(R.string.battery_adaptive_desc),
-                selected = state.batteryMode == BatteryMode.ADAPTIVE,
-                onClick = { viewModel.setMode(BatteryMode.ADAPTIVE) },
+                title = stringResource(R.string.battery_saver),
+                description = stringResource(R.string.battery_saver_desc),
+                selected = state.batteryMode == BatteryMode.SAVER,
+                onClick = { viewModel.setMode(BatteryMode.SAVER) },
             )
             ModeCard(
-                title = stringResource(R.string.battery_constant),
-                description = stringResource(R.string.battery_constant_desc),
-                selected = state.batteryMode == BatteryMode.CONSTANT,
-                onClick = { viewModel.setMode(BatteryMode.CONSTANT) },
+                title = stringResource(R.string.battery_max),
+                description = stringResource(R.string.battery_max_desc),
+                selected = state.batteryMode == BatteryMode.MAX,
+                onClick = { viewModel.setMode(BatteryMode.MAX) },
             )
-
-            if (state.batteryMode == BatteryMode.HYBRID) {
-                Spacer(Modifier.size(8.dp))
-                Text(
-                    text = stringResource(R.string.battery_threshold, state.hybridThresholdPct),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Slider(
-                    value = state.hybridThresholdPct.toFloat(),
-                    onValueChange = { viewModel.setThreshold(it.toInt()) },
-                    valueRange = UserSettings.MIN_THRESHOLD.toFloat()..UserSettings.MAX_THRESHOLD.toFloat(),
-                    steps = UserSettings.MAX_THRESHOLD - UserSettings.MIN_THRESHOLD - 1,
-                )
-            }
         }
     }
 }

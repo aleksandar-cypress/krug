@@ -15,7 +15,15 @@ import android.graphics.Typeface
 import androidx.core.graphics.toColorInt
 
 object MapMarkers {
-    private val cache = mutableMapOf<String, Bitmap>()
+    private const val CACHE_MAX_ENTRIES = 32
+
+    // LRU cache — ograničen broj entry-ja sa eviction-om najstarijeg.
+    // Bez ovoga svaka promena baterije pravila je novu bitmapu i čuvala je zauvek.
+    private val cache: MutableMap<String, Bitmap> =
+        object : LinkedHashMap<String, Bitmap>(0, 0.75f, true) {
+            override fun removeEldestEntry(eldest: Map.Entry<String, Bitmap>?): Boolean =
+                size > CACHE_MAX_ENTRIES
+        }
 
     // Stabilna paleta — svaki član dobija svoju boju na osnovu hash-a uid-a.
     val palette = listOf(
@@ -52,7 +60,10 @@ object MapMarkers {
         initials: String? = null,
         batteryPct: Int? = null,
     ): Bitmap {
-        val cacheKey = "$hex|${photo?.hashCode() ?: 0}|${initials.orEmpty()}|${batteryPct ?: -1}"
+        // Bucket batteryPct na korake od 10% (0, 10, 20…100) da cache key ne menja
+        // na svaku 1% promenu baterije — to je bio leak izvor.
+        val battBucket = batteryPct?.let { ((it + 5) / 10) * 10 }?.coerceIn(0, 100) ?: -1
+        val cacheKey = "$hex|${photo?.hashCode() ?: 0}|${initials.orEmpty()}|$battBucket"
         cache[cacheKey]?.let { return it }
 
         val density = context.resources.displayMetrics.density
