@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Krug — Pravne informacije</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #0f172a;
+    --muted: #475569;
+    --accent: #6366f1;
+    --border: #e2e8f0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.55;
+  }
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 24px;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .logo {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 800;
+    font-size: 28px;
+    letter-spacing: -1px;
+  }
+  h1 { margin: 0; font-size: 28px; letter-spacing: -0.5px; }
+  p.tag { margin: 4px 0 0; color: var(--muted); font-size: 15px; }
+  nav { display: grid; gap: 12px; margin-top: 24px; }
+  nav a {
+    display: block;
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--fg);
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  nav a:hover { border-color: var(--accent); transform: translateY(-1px); }
+  nav a strong { display: block; font-size: 17px; }
+  nav a span { color: var(--muted); font-size: 14px; }
+  footer { margin-top: 48px; color: var(--muted); font-size: 13px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="logo">K</div>
+    <div>
+      <h1>Krug</h1>
+      <p class="tag">Deljenje lokacije sa porodicom i prijateljima</p>
+    </div>
+  </header>
+
+  <nav>
+    <a href="privacy.html">
+      <strong>Politika privatnosti</strong>
+      <span>Koje podatke prikupljamo, gde ih čuvamo i vaša prava</span>
+    </a>
+    <a href="terms.html">
+      <strong>Uslovi korišćenja</strong>
+      <span>Pravila i uslovi pod kojima koristite Krug</span>
+    </a>
+  </nav>
+
+  <footer>
+    &copy; Krug · <a href="mailto:aleksandarr@gmail.com" style="color:var(--muted)">Kontakt</a>
+  </footer>
+</main>
+</body>
+</html>

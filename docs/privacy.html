@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Politika privatnosti — Krug</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #0f172a;
+    --muted: #475569;
+    --accent: #6366f1;
+    --border: #e2e8f0;
+    --code-bg: #f1f5f9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.65;
+  }
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 14px;
+    margin-bottom: 32px;
+  }
+  .back:hover { text-decoration: underline; }
+  h1 { font-size: 32px; letter-spacing: -0.5px; margin: 0 0 8px; }
+  .updated { color: var(--muted); font-size: 14px; margin: 0 0 32px; }
+  h2 { font-size: 20px; margin-top: 40px; margin-bottom: 8px; letter-spacing: -0.3px; }
+  h3 { font-size: 16px; margin-top: 20px; margin-bottom: 4px; }
+  p, li { font-size: 16px; color: #1e293b; }
+  ul { padding-left: 20px; }
+  ul li { margin-bottom: 4px; }
+  a { color: var(--accent); }
+  code, .pill {
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 48px 0 24px; }
+  .contact { background: var(--code-bg); padding: 20px; border-radius: 12px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="index.html">← Nazad</a>
+
+  <h1>Politika privatnosti</h1>
+  <p class="updated">Poslednja izmena: 17. jun 2026.</p>
+
+  <p>Krug je Android aplikacija koja omogućava deljenje lokacije unutar privatnih krugova porodice i prijatelja. Ova politika privatnosti opisuje koje lične podatke prikupljamo, zašto ih prikupljamo, kako ih čuvamo i koja prava imate u vezi sa njima.</p>
+
+  <h2>1. Ko smo mi</h2>
+  <p>Aplikaciju Krug razvija i održava Aleksandar Vasilić kao lični projekat. Kontakt: <a href="mailto:aleksandarr@gmail.com">aleksandarr@gmail.com</a>.</p>
+
+  <h2>2. Koje podatke prikupljamo</h2>
+
+  <h3>2.1. Podaci o lokaciji</h3>
+  <ul>
+    <li>GPS koordinate (geografska širina i dužina)</li>
+    <li>Preciznost lokacije (u metrima)</li>
+    <li>Nivo baterije i stanje punjenja uređaja (da članovi vašeg kruga znaju kada vam baterija slabi)</li>
+    <li>Vreme poslednjeg ažuriranja</li>
+  </ul>
+  <p>Lokacija se ažurira u pozadini (foreground service) sve dok je ova opcija uključena.</p>
+
+  <h3>2.2. Podaci o nalogu</h3>
+  <ul>
+    <li>Ime za prikaz (iz Google naloga ili koje vi unesete)</li>
+    <li>Email adresa (samo ako se prijavite preko Google naloga)</li>
+    <li>URL profilne fotografije (samo ako koristite Google nalog)</li>
+    <li>Model uređaja (npr. „Samsung SM-A376B") — za identifikaciju u listi članova</li>
+    <li>Jedinstveni Firebase UID (interni identifikator)</li>
+  </ul>
+
+  <h3>2.3. Podaci o krugovima</h3>
+  <ul>
+    <li>Imena krugova i njihove boje koje sami zadate</li>
+    <li>Lista članova kruga (njihovi UID-ovi)</li>
+    <li>Pozivnice (jedinstveni kodovi koje generišete)</li>
+  </ul>
+
+  <h3>2.4. SOS događaji</h3>
+  <p>Kada aktivirate SOS, sačuva se trenutna lokacija, vreme aktivacije i krug u kome ste aktivirali SOS. Podatak ostaje aktivan do 30 minuta ili dok ga ne otkažete.</p>
+
+  <h3>2.5. Podešavanja</h3>
+  <ul>
+    <li>Režim baterije (Balans / Štedi bateriju / Maksimalna tačnost)</li>
+    <li>Status deljenja lokacije (uključeno/isključeno)</li>
+    <li>Jezik aplikacije</li>
+  </ul>
+
+  <h3>2.6. Dijagnostički podaci</h3>
+  <p>Prikupljamo anonimne izveštaje o padovima aplikacije i tehničke greške putem Firebase Crashlytics-a. Ovi izveštaji ne sadrže vašu lokaciju niti druge lične podatke.</p>
+
+  <h2>3. Zašto prikupljamo ove podatke</h2>
+  <ul>
+    <li><strong>Osnovna funkcija:</strong> deljenje lokacije sa članovima vaših krugova. Bez ovih podataka aplikacija ne može da radi.</li>
+    <li><strong>SOS:</strong> da članovi vašeg kruga dobiju obaveštenje i tačnu lokaciju kada vam je potrebna pomoć.</li>
+    <li><strong>Pouzdanost servisa:</strong> dijagnostički izveštaji o padovima da bismo aplikaciju brže popravljali.</li>
+  </ul>
+  <p>Pravni osnov za obradu je vaš pristanak (GDPR čl. 6.1.a) koji dajete prilikom uključivanja deljenja lokacije i koji možete u svakom trenutku povući.</p>
+
+  <h2>4. Sa kim delimo podatke</h2>
+  <p>Vaša lokacija je vidljiva isključivo članovima krugova kojima pripadate. Ne prodajemo, ne iznajmljujemo i ne ustupamo vaše podatke trećim licima u marketinške ili oglašivačke svrhe.</p>
+
+  <h3>Tehnički saradnici (sub-procesori)</h3>
+  <ul>
+    <li><strong>Google Firebase</strong> (Google LLC / Google Ireland Ltd) — autentifikacija, baza podataka, push obaveštenja, dijagnostika. Podaci se čuvaju u EU regionu (multi-region <span class="pill">eur3</span> za Firestore, <span class="pill">europe-west1</span> za Realtime Database).</li>
+    <li><strong>Mapbox</strong> (Mapbox, Inc.) — renderovanje mape. Vaša lokacija se NE šalje Mapbox-u — aplikacija samo preuzima slojeve mape sa njihovih servera.</li>
+  </ul>
+
+  <h2>5. Bezbednost</h2>
+  <ul>
+    <li>Sva komunikacija ide preko HTTPS/TLS-a.</li>
+    <li>Firebase App Check štiti od neautorizovanih API poziva van naše aplikacije.</li>
+    <li>Pristup vašoj lokaciji i SOS podacima je ograničen Firebase security rules-ima — niko izvan vaših krugova ne može da ih čita.</li>
+    <li>Vaša lozinka se ne čuva u našoj aplikaciji (autentifikacija je preko Google naloga ili anonimno).</li>
+  </ul>
+
+  <h2>6. Koliko dugo čuvamo podatke</h2>
+  <ul>
+    <li><strong>Lokacija (RTDB):</strong> samo poslednja poznata lokacija, prepiše se svakim novim ažuriranjem. Istorija se ne čuva.</li>
+    <li><strong>SOS:</strong> automatski se briše nakon 30 minuta ili kada ga otkažete.</li>
+    <li><strong>Nalog i krugovi:</strong> čuvaju se dok je vaš nalog aktivan.</li>
+    <li><strong>Dijagnostika:</strong> 90 dana (standardna Crashlytics retencija).</li>
+  </ul>
+  <p>Kada obrišete nalog (vidi tačku 7.2), svi vaši podaci se trajno brišu u roku od 30 dana.</p>
+
+  <h2>7. Vaša prava (GDPR)</h2>
+
+  <h3>7.1. Pristup podacima i izmena</h3>
+  <p>Sve podatke o sebi koje aplikacija prikuplja možete videti i izmeniti direktno u aplikaciji (ime, foto, podešavanja).</p>
+
+  <h3>7.2. Brisanje naloga</h3>
+  <p>Možete zatražiti brisanje naloga slanjem email-a na <a href="mailto:aleksandarr@gmail.com">aleksandarr@gmail.com</a>. Bićete uklonjeni iz svih krugova, vaša lokacija i SOS podaci biće obrisani, kao i sav vaš profil. (Funkcija „Obriši nalog" u aplikaciji je u izradi.)</p>
+
+  <h3>7.3. Povlačenje pristanka</h3>
+  <p>Možete u svakom trenutku isključiti deljenje lokacije u Podešavanja → Privatnost. Nakon toga vaša lokacija se više neće slati.</p>
+
+  <h3>7.4. Žalba nadzornom organu</h3>
+  <p>Imate pravo da podnesete žalbu Povereniku za informacije od javnog značaja i zaštitu podataka o ličnosti Republike Srbije (<a href="https://www.poverenik.rs">poverenik.rs</a>).</p>
+
+  <h2>8. Korisnici mlađi od 13 godina</h2>
+  <p>Krug nije namenjen korisnicima mlađim od 13 godina. Ako saznamo da je nalog napravljen za dete mlađe od 13 godina bez saglasnosti roditelja, taj nalog ćemo obrisati.</p>
+
+  <h2>9. Promene ove politike</h2>
+  <p>Ako budemo menjali ovu politiku, ažurirana verzija će biti objavljena na ovoj stranici sa novim datumom. Značajne izmene biće najavljene u aplikaciji.</p>
+
+  <h2>10. Kontakt</h2>
+  <div class="contact">
+    <p style="margin:0">Za sva pitanja u vezi sa privatnošću ili obradom podataka možete nas kontaktirati na:<br>
+    <a href="mailto:aleksandarr@gmail.com"><strong>aleksandarr@gmail.com</strong></a></p>
+  </div>
+</main>
+</body>
+</html>
