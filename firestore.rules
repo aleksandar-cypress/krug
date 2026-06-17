@@ -1,0 +1,108 @@
+rules_version = '2';
+
+// Krug — Firestore security rules.
+// Deploy via Firebase Console: Firestore Database → Rules → paste → Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isAuthed() && request.auth.uid == uid;
+    }
+
+    function circleData(cid) {
+      return get(/databases/$(database)/documents/circles/$(cid)).data;
+    }
+
+    // users/{uid}
+    // Profile podaci (displayName, email, photoUrl, fcmToken) — čitljivi svim authenticated
+    // korisnicima jer klijent učitava profile za sve članove krugova bez denormalizacije.
+    // TODO: kad budemo imali Cloud Functions, denormalizuj listu "peers" i strogo ograniči read.
+    match /users/{uid} {
+      allow read: if isAuthed();
+      allow create, update: if isSelf(uid);
+      allow delete: if false;
+
+      // Settings — strogo lično.
+      match /settings/{doc} {
+        allow read, write: if isSelf(uid);
+      }
+    }
+
+    // circles/{cid}
+    // Read dozvoljen svim authenticated korisnicima jer invite-accept flow (klijent-side)
+    // mora da pročita krug PRE nego što se user upiše u memberIds. Bez Cloud Functions
+    // server-side validacije, ovo je neophodno. Write rules ostaju stroge.
+    match /circles/{cid} {
+      allow read: if isAuthed();
+
+      // Create: caller mora biti owner i upisan u memberIds.
+      allow create: if isAuthed()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.auth.uid in request.resource.data.memberIds
+        && request.resource.data.memberIds.size() == 1;
+
+      // Update:
+      //   - Owner može da menja sve (osim da prebaci ownerId).
+      //   - Bilo koji authenticated user može da doda SAMO sebe u memberIds
+      //     (invite-accept flow; klijent prvo proverava invite, rules ne mogu).
+      allow update: if isAuthed() && (
+        // Owner update — ownerId mora ostati isti.
+        (resource.data.ownerId == request.auth.uid
+          && request.resource.data.ownerId == resource.data.ownerId)
+        ||
+        // Self-join: jedina izmena je dodavanje request.auth.uid u memberIds.
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
+          && request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1
+          && request.auth.uid in request.resource.data.memberIds
+          && !(request.auth.uid in resource.data.memberIds))
+        ||
+        // Self-leave: jedina izmena je uklanjanje request.auth.uid iz memberIds.
+        // Vlasnik ne sme da napusti svoj krug (mora prvo da prebaci ownership ili obriše).
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
+          && request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1
+          && request.auth.uid in resource.data.memberIds
+          && !(request.auth.uid in request.resource.data.memberIds)
+          && resource.data.ownerId != request.auth.uid)
+      );
+
+      allow delete: if isAuthed() && resource.data.ownerId == request.auth.uid;
+
+      // circles/{cid}/members/{memberUid}
+      match /members/{memberUid} {
+        allow read: if isAuthed();
+        allow create, update: if isSelf(memberUid);
+        allow delete: if isSelf(memberUid)
+          || (isAuthed() && request.auth.uid == circleData(cid).ownerId);
+      }
+    }
+
+    // invites/{code}
+    // Kod je 6-cifreni; čitanje dozvoljeno authenticated korisnicima da bi validirali kod.
+    match /invites/{code} {
+      allow read: if isAuthed();
+
+      // Create: inviter mora biti caller i član krug-a.
+      allow create: if isAuthed()
+        && request.resource.data.inviterUid == request.auth.uid
+        && request.auth.uid in circleData(request.resource.data.circleId).memberIds;
+
+      // Update: jedina dozvoljena izmena — dodaj svoj uid u usedBy.
+      allow update: if isAuthed()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy'])
+        && request.resource.data.usedBy.size() == resource.data.usedBy.size() + 1
+        && request.auth.uid in request.resource.data.usedBy
+        && !(request.auth.uid in resource.data.usedBy);
+
+      allow delete: if isAuthed() && resource.data.inviterUid == request.auth.uid;
+    }
+
+    // Sve ostalo — odbij.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

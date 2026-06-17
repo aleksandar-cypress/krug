@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand palette (Life360-inspired, modern) -->
+    <color name="brand_indigo_500">#4F46E5</color>
+    <color name="brand_indigo_600">#4338CA</color>
+    <color name="brand_coral_500">#FF6B35</color>
+    <color name="ic_launcher_background">#4F46E5</color>
+
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+</resources>

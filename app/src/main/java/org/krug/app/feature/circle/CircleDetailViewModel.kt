@@ -1,0 +1,169 @@
+package org.krug.app.feature.circle
+
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.google.firebase.firestore.FirebaseFirestore
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import org.krug.app.core.auth.AuthRepository
+import org.krug.app.core.circle.CircleModel
+import org.krug.app.core.circle.CircleRepository
+import org.krug.app.core.circle.InviteRepository
+import org.krug.app.core.user.UserModel
+import timber.log.Timber
+
+data class CircleDetailMember(
+    val uid: String,
+    val displayName: String,
+    val isOwner: Boolean,
+    val isSelf: Boolean,
+)
+
+data class CircleDetailUiState(
+    val loading: Boolean = true,
+    val circleId: String = "",
+    val circleName: String = "",
+    val colorHex: String = "#4F46E5",
+    val isOwner: Boolean = false,
+    val members: List<CircleDetailMember> = emptyList(),
+    val pendingInviteCode: String? = null,
+    val generatingInvite: Boolean = false,
+    val leaving: Boolean = false,
+    val deleting: Boolean = false,
+    val leftOrDeleted: Boolean = false,
+    val errorMessage: String? = null,
+)
+
+@HiltViewModel
+class CircleDetailViewModel @Inject constructor(
+    savedState: SavedStateHandle,
+    private val authRepository: AuthRepository,
+    private val circleRepository: CircleRepository,
+    private val inviteRepository: InviteRepository,
+    private val firestore: FirebaseFirestore,
+) : ViewModel() {
+
+    private val circleId: String = savedState.get<String>("circleId")
+        ?: throw IllegalStateException("circleId arg missing")
+
+    private val _state = MutableStateFlow(CircleDetailUiState(circleId = circleId))
+    val state: StateFlow<CircleDetailUiState> = _state.asStateFlow()
+
+    init {
+        val selfUid = authRepository.currentUser?.uid
+        var hadCircle = false
+        combine(
+            observeCircle(circleId),
+            authRepository.observeAuthState(),
+        ) { circle, user ->
+            circle to user?.uid
+        }.onEach { (circle, uid) ->
+            if (circle == null) {
+                // Krug obrisan dok je user gledao detail — auto-back.
+                if (hadCircle) {
+                    _state.value = _state.value.copy(loading = false, leftOrDeleted = true)
+                } else {
+                    _state.value = _state.value.copy(loading = false)
+                }
+                return@onEach
+            }
+            hadCircle = true
+            // Load member profiles in parallel.
+            viewModelScope.launch {
+                val memberProfiles = circle.memberIds.map { memberUid ->
+                    runCatching { fetchUser(memberUid) }.getOrNull() ?: UserModel(uid = memberUid)
+                }
+                _state.value = _state.value.copy(
+                    loading = false,
+                    circleName = circle.name,
+                    colorHex = circle.colorHex,
+                    isOwner = (uid != null && uid == circle.ownerId),
+                    members = memberProfiles.map { profile ->
+                        val name = profile.displayName
+                            .ifBlank { profile.email.substringBefore('@') }
+                            .ifBlank { profile.deviceModel }
+                        CircleDetailMember(
+                            uid = profile.uid,
+                            displayName = name,
+                            isOwner = profile.uid == circle.ownerId,
+                            isSelf = profile.uid == uid,
+                        )
+                    },
+                )
+            }
+        }.launchIn(viewModelScope)
+        // Snapshot init so empty UID doesn't break.
+        if (selfUid == null) _state.value = _state.value.copy(loading = false)
+    }
+
+    fun generateInvite() {
+        val uid = authRepository.currentUser?.uid ?: return
+        if (_state.value.generatingInvite) return
+        _state.value = _state.value.copy(generatingInvite = true)
+        viewModelScope.launch {
+            val code = runCatching { inviteRepository.createInvite(circleId, uid) }
+            _state.value = _state.value.copy(
+                generatingInvite = false,
+                pendingInviteCode = code.getOrNull(),
+                errorMessage = code.exceptionOrNull()?.let { "Greška pri pozivanju" },
+            )
+        }
+    }
+
+    fun consumeInviteCode() {
+        _state.value = _state.value.copy(pendingInviteCode = null)
+    }
+
+    fun leave() {
+        val uid = authRepository.currentUser?.uid ?: return
+        if (_state.value.leaving) return
+        _state.value = _state.value.copy(leaving = true)
+        viewModelScope.launch {
+            runCatching { circleRepository.leaveCircle(circleId, uid) }
+                .onFailure { Timber.w(it, "Failed to leave circle") }
+            _state.value = _state.value.copy(leaving = false, leftOrDeleted = true)
+        }
+    }
+
+    fun delete() {
+        if (_state.value.deleting) return
+        _state.value = _state.value.copy(deleting = true)
+        viewModelScope.launch {
+            runCatching { circleRepository.deleteCircle(circleId) }
+                .onFailure { Timber.w(it, "Failed to delete circle") }
+            _state.value = _state.value.copy(deleting = false, leftOrDeleted = true)
+        }
+    }
+
+    private fun observeCircle(cid: String): Flow<CircleModel?> = callbackFlow {
+        val reg = firestore.collection("circles").document(cid)
+            .addSnapshotListener { snap, error ->
+                if (error != null) {
+                    Timber.w(error, "observeCircle error for $cid")
+                    trySend(null)
+                    return@addSnapshotListener
+                }
+                val model = snap?.toObject(CircleModel::class.java)?.copy(id = snap.id)
+                trySend(model)
+            }
+        awaitClose { reg.remove() }
+    }
+
+    private suspend fun fetchUser(uid: String): UserModel? {
+        val snap = firestore.collection("users").document(uid).get().await()
+        return snap.toObject(UserModel::class.java)
+    }
+}
