@@ -2,7 +2,169 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-17)
+## Gde smo stali (2026-06-17, peta sesija — beta-ready)
+
+Repo public: **https://github.com/aleksandar-cypress/krug**
+GitHub Pages live: **https://aleksandar-cypress.github.io/krug/** (Privacy Policy + Terms)
+Firebase App Distribution **enabled**, beta grupa kreirana, prvi release `0.1.0-debug (1)` distribuiran.
+
+Testirano paralelno: Samsung A37, Samsung S24 Ultra (Google sign-in radi na S24, anonimni na A37). Brisanje naloga GDPR fan-out radi. Glass UI + Inter font + members peek live.
+
+## Peta sesija (2026-06-17) — UI polish + GDPR + distribution
+
+### Self-refresh dugme
+- `LocationTrackingService.refreshSelf(context)` — startuje FGS sa `EXTRA_FORCE_REFRESH=true` koji preskače 3-min cooldown.
+- `MemberDetailSheet` self grana sad ima "Osveži moju lokaciju" dugme + "Otvori u Google Maps" (ako ima lokaciju).
+- `MapScreen` rutira: `member.isSelf` → `LocationTrackingService.refreshSelf(context)`, ostali → `viewModel.refreshMember(uid)`.
+
+### Location publish reliability
+- `requestOneShotFix()` u FGS sad radi **dva paralelna fix-a**:
+  1. `getLastLocation()` — instant cache (Wi-Fi/cell/GPS), publish odmah
+  2. `requestLocationUpdates(maxUpdates=1, BALANCED)` — sveži fix kao upgrade, pouzdaniji indoors od `getCurrentLocation(HIGH_ACCURACY)` koji često vraća null
+- `publishLocation(uid, loc, source)` helper sa Timber-om za debug.
+
+### Permission detection on Splash (reinstall fix)
+- `SplashViewModel.decide()` sad **prvo** proverava `PermissionUtils.hasForegroundLocation(context)`. Ako nema → `OnboardingPending` bez obzira na Firestore/LocalPrefs flag.
+- **NE proverava `hasNotifications`** — notifikacije imaju "Preskoči" dugme; ako traži, korisnik koji je svesno odbio bi se beskonačno vraćao u onboarding (Samsung A37 bug).
+- Bez ovog, posle reinstall-a OS-level permissions su izbrisani ali Firestore pamti `onboardingCompleted=true` → user sleće na Map bez ijednog permission-a → FGS tiho odustaje (`SecurityException` na startForeground sa LOCATION type-om bez ACCESS_FINE_LOCATION na Android 14+).
+
+### PermissionPages granted-shortcut
+- `LocationPermissionPage`, `NotificationsPermissionPage`, `BatteryOptimizationPage` — `onPrimary` sad direktno zove `onGranted()` / `onContinueOrSkip()` ako je permission/exemption već granted.
+- **Razlog:** `LaunchedEffect(granted)` se fire-uje samo kad se ključ MENJA. Ako je permission već granted (npr. iz prethodne sesije), `granted=true` na start-u; tap dugmeta pokrene launcher koji sistem odmah resolve-uje sa already-granted → callback ne menja stanje → `LaunchedEffect` se ne re-fire-uje → page se ne pomera. A37 ostao zaglavljen na "Dozvoli pristup lokaciji" iako je permission bio granted.
+
+### SOS sound/vibration v2
+- Notification channel ID **`krug_sos` → `krug_sos_v2`**. Channel postavke (importance, sound, vibration) na Androidu se ne mogu menjati posle prvog kreiranja — fresh ID forsira ponovno kreiranje sa našim novim postavkama (IMPORTANCE_HIGH, alarm sound, vibration pattern `[0, 500, 200, 500, 200, 500]`).
+- **Direktan `Vibrator.vibrate(VibrationEffect)`** poziv u `notifySos()` kao belt-and-suspenders fallback — radi i kad Samsung One UI "Silent category" silence-uje sideload debug APK notifikacije.
+
+### Splash double-jump fix (Android 12+)
+- `androidx.core:core-splashscreen 1.0.1` dep + `SplashGate` singleton objekt sa `AtomicBoolean ready`.
+- `MainActivity.onCreate`: `installSplashScreen().setKeepOnScreenCondition { !SplashGate.ready.get() }` PRE `super.onCreate`. Drži sistemski splash dok `SplashViewModel.decide()` ne postavi `SplashGate.ready=true`.
+- Compose `SplashScreen` više ne pokazuje logo/text/spinner — samo bela Box pozadina. Eliminisao "system splash logo → Compose splash logo različite veličine → next route" jump.
+
+### Privacy Policy + Terms na GitHub Pages
+- `docs/index.html` — landing sa linkovima.
+- `docs/privacy.html` — GDPR-aligned politika (10 sekcija): koje podatke prikupljamo, EU region (Firestore `eur3`, RTDB `europe-west1`), Mapbox ne dobija lokaciju, retention, prava korisnika, Poverenik link, kontakt.
+- `docs/terms.html` — 14 sekcija: definicije, prihvatanje, opis usluge, **SOS disclaimer** ka 192/193/194/112, obaveze korisnika, odricanje od garancija, srpsko pravo + Beograd nadležnost.
+- **Kontakt email svuda: `aleksandarr@gmail.com`** (NIKADA `aleksandar.vasilic@login5.org` za Krug — saved kao memory).
+- `AboutScreen` dugmiće "Politika privatnosti" i "Uslovi korišćenja" sad otvaraju prave URL-ove preko `Intent.ACTION_VIEW`.
+- **GitHub Pages enabled** (Source: Deploy from branch `main` /docs). Repo morao da bude **public** (GH Pages je free samo za public repos).
+
+### Top bar pill — color dot + circle name
+- `CircleBrief +colorHex: String` prosleđen kroz `MapViewModel.combineForUser`.
+- TopFloatingBar pill: tačka boje aktivnog kruga (10dp) levo od imena. Pokazuje ime aktivnog kruga uvek (ne više "X krugova" count).
+
+### SoS dugme tekst
+- `SosFab` — tekst **"SoS"** umesto `Icons.Filled.Warning` ikone. `titleSmall` + FontWeight.Black + letter-spacing 0.5sp.
+- Inactive = glass-style, Active = solid crveni (urgency override).
+
+### Create Circle 20-char limit
+- `CreateCircleViewModel.NAME_MAX_LENGTH = 20`. `setName` i `submit` enforce-uju (defense-in-depth).
+- TextField supportingText: live counter `"X/20"`.
+
+### Glass morphism na map pill-ovima
+- `Modifier.krugGlass(shape)` helper — translucent white vertical gradient (alpha 0.82→0.72) + suptilan border gradient + 14dp shadow.
+- Primenjeno na: TopFloatingBar pill, CircleIconButton (Group/Settings), MembersPill, inactive SosFab.
+- Bez prave backdrop blur-a (zahtevalo bi `haze` lib ili `RenderEffect`) — translucent + border + shadow je dovoljan vizuelni efekat iznad Mapbox-a.
+
+### Inter font (downloadable Google Fonts)
+- `androidx.compose.ui:ui-text-google-fonts` dep + `res/values/font_certs.xml` (GMS provider sertifikati).
+- `KrugTypography` rebuilt: ceo font sistem koristi `Inter` (Regular/Medium/SemiBold/Bold/Black). Tightened letter-spacing na display/headline (Inter dobro nosi -0.7 do -1.0 sp).
+- Prvi run može imati 1-2s kašnjenja dok GMS download-uje font; cache-uje se posle.
+
+### Members peek (bottom pill avatars umesto count-a)
+- `MembersPill(members, photoCache, onClick, modifier)` umesto starog `(count, ...)`.
+- Stack od **3 mini avatara (26dp)** sa **30% preklapanjem** + beli 1.5dp border (kao iOS Find My / WhatsApp grupe). `+N` badge za overflow.
+- `MemberMiniAvatar` koristi member boju ili Coil-cached fotku.
+- **Active SOS** → pulsirajući crveni border preko `rememberInfiniteTransition` + `animateFloat` (alpha 1.0 ↔ 0.35, 700ms reverse).
+
+### Logo size bumps
+- AuthScreen logo: 140dp → 180dp (container shape 40→48, shadow 12→16, inner padding 14→12).
+- AboutScreen logo: 96dp → 160dp.
+
+### `isCharging` → `charging` rename
+- Kotlin `is` prefix na Boolean property je konfundovao Firebase ClassMapper, generišući "No setter/field for isCharging" warning na svakom read-u.
+- Promenjeno u `LocationModel`, `LocationRepository.publish` (zapisuje key `charging`), i **`database.rules.json`** (validator zove se `charging`).
+- **KRITIČNO:** ako se promeni field name a rule se ne update-uje, `$other.validate: false` blokira sve write-ove kao "Permission denied". Već videno na A37 — `charging` field nije bio dozvoljen dok nismo deploy-ovali update-ovana pravila.
+
+### GDPR account deletion (Spark plan, no Cloud Functions)
+- **Repo fan-out:**
+  - `LocationRepository.deleteForUser(uid)` — `/locations/{uid}` RTDB
+  - `SosRepository.clear(uid)` — već postojao
+  - `CircleRepository.cleanupForDeletedUser(uid)` — krugovi gde sam vlasnik → `deleteCircle`, krugovi gde sam član → `leaveCircle`
+  - `UserRepository.deleteUser(uid)` — settings subcollection + user doc
+  - `AuthRepository.deleteAccount()` — `FirebaseUser.delete()`; vraća `false` ako Firebase traži recent re-login (Google sign-in)
+- **Orchestrator:** `AccountViewModel.deleteAccount(context)` u tačnom redosledu: stop FGS → RTDB cleanup → Firestore fan-out → Auth delete. Ako auth delete vrati `false`, signal-uj UI-u preko `deleteNeedsReauth=true`.
+- **UI:** AccountScreen real confirmation dialog ("Obriši trajno") + progress text "Brisanje…" + reauth-needed dialog. Stari "Brisanje dolazi uskoro" stub obrisan.
+
+### Auth-bounce posle re-sign-in (RTDB Permission denied fix)
+- Symptom: posle `deleteAccount → signInAnonymously`, RTDB klijent je čuvao stari token (obrisanog korisnika) i odbijao SVE publish-ove kao "Permission denied" čak i sa novim `firebaseAuth.currentUser.uid`.
+- Fix: `AuthRepository.refreshDatabaseAuth(user)` se zove posle svake (anonimne i Google) prijave:
+  - `user.getIdToken(true)` — force refresh JWT
+  - `FirebaseDatabase.goOffline()` + `goOnline()` — bounce konekciju da pokupi novi token
+
+### Firebase App Distribution
+- App ID (debug): `1:441540594744:android:bd8143f5ad8d84e9fb6acd`
+- App ID (release): `1:441540594744:android:ccf79ac86d8a6c2afb6acd`
+- Grupa **`beta`** (display: "Beta Testers") kreirana.
+- Tester-i u grupi:
+  - `aleksandarr@gmail.com`
+  - `jelenavasilic84@gmail.com`
+- Prvi release: **`0.1.0-debug (1)`** — distribuiran beta grupi 2026-06-17.
+- Console URL: https://console.firebase.google.com/project/krug-86527/appdistribution
+
+#### Distribute komanda za buduće build-ove
+```bash
+./gradlew assembleDebug
+firebase appdistribution:distribute app/build/outputs/apk/debug/app-debug.apk \
+  --app 1:441540594744:android:bd8143f5ad8d84e9fb6acd \
+  --groups beta \
+  --release-notes "..."
+```
+
+## Šta NE radi još (punch lista — preostalo)
+
+| Šta | Effort | Prioritet |
+|-----|--------|-----------|
+| **Pin animacije na mapi** (SOS ripple + pulse na update) | ~1.5h | UI WOW, sledeća sesija |
+| Map style toggle (light/dark auto prema vremenu) | ~15min | UI nice-to-have |
+| Subtle haptics na tap pina/dugmadi | ~20min | UI polish |
+| Sign-out cleanup (cancel RTDB listener-e) | ~20min | quality |
+| Auto-clear stale `/locationRequests` sa TTL-om | ~20min | quality |
+| Google reauth flow za delete-account (Recent login required) | ~1h | nice-to-have |
+| Release signing config + Play Store internal testing | ~2h | sledeći production korak |
+| `LocalLifecycleOwner` deprecation warnings (Compose 1.7) | ~10min | sitnica |
+
+## Komande za sledeću sesiju
+
+```bash
+# Build + install paralelno na oba uređaja
+./gradlew assembleDebug
+adb -s R5CWC1F9FND install -r app/build/outputs/apk/debug/app-debug.apk &
+adb -s RFGL30L2A5Z install -r app/build/outputs/apk/debug/app-debug.apk
+
+# Firebase distribute novom buildu
+firebase appdistribution:distribute app/build/outputs/apk/debug/app-debug.apk \
+  --app 1:441540594744:android:bd8143f5ad8d84e9fb6acd \
+  --groups beta \
+  --release-notes "..."
+
+# Deploy RTDB rules (ako menjamo database.rules.json)
+firebase deploy --only database
+
+# Deploy Firestore rules (ako menjamo firestore.rules)
+firebase deploy --only firestore:rules
+
+# Logcat filter za Krug-only debug
+adb -s RFGL30L2A5Z logcat --pid=$(adb -s RFGL30L2A5Z shell pidof org.krug.app.debug)
+```
+
+## Test uređaji
+- **Samsung S24 Ultra** (`R5CWC1F9FND`) — Google sign-in
+- **Samsung A37** (`RFGL30L2A5Z`) — anonimni sign-in (testiramo brisanje + reauth flow)
+
+---
+
+## Prethodne sesije
 
 Build je uspešan i prošao više iteracija. Repo je pushovan na GitHub: **https://github.com/aleksandar-cypress/krug**
 
