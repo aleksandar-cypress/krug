@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Splash screen icon. Android 12+ splash render-uje icon u krug od 192dp sa
+    safe zone-om ~160dp. Naš krug_logo ima figure pri ivici pa treba veći inset
+    od onog za launcher (8dp) da figure ne budu sečene na splash circle-u.
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/krug_logo"
+    android:inset="28dp" />
