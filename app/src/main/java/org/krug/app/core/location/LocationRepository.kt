@@ -71,8 +71,14 @@ class LocationRepository @Inject constructor(
         awaitClose { ref.removeEventListener(listener) }
     }
 
-    /** Obriši sve ping zahteve za ovog user-a (posle što su processed). */
-    suspend fun clearRefreshRequests(ownUid: String) {
-        requestsRef(ownUid).removeValue().await()
+    /**
+     * Obriši ping zahteve od konkretnih requester-a (posle što su processed).
+     * Brišemo po child path-u jer rules dozvoljavaju write samo na
+     * /locationRequests/{targetUid}/{requesterUid} — ne na parent path-u.
+     */
+    suspend fun clearRefreshRequests(ownUid: String, requesters: Set<String>) {
+        requesters.forEach { requesterUid ->
+            runCatching { requestEntry(ownUid, requesterUid).removeValue().await() }
+        }
     }
 }

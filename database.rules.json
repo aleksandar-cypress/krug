@@ -23,6 +23,7 @@
         "lng":         { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
         "triggeredAt": { ".validate": "newData.isNumber()" },
         "message":     { ".validate": "newData.isString() || !newData.exists()" },
+        "circleId":    { ".validate": "newData.isString() || !newData.exists()" },
         "$other":      { ".validate": false }
       }
     },

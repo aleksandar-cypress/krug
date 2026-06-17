@@ -256,11 +256,15 @@ class LocationTrackingService : Service() {
     private fun observeRefreshRequests() {
         val uid = firebaseAuth.currentUser?.uid ?: return
         scope.launch {
-            locationRepository.observeRefreshRequests(uid).collectLatest { requesters ->
-                if (requesters.isEmpty()) return@collectLatest
+            // `collect` (NE collectLatest!) — moramo da završimo clear pre nego što
+            // procesujemo sledeću emisiju. collectLatest je cancellated clear coroutine
+            // čim listener re-emit-uje (local cache update), entry ostaje, listener
+            // re-fire, end of loop sa ~80ms petljom HIGH_ACCURACY GPS-a.
+            locationRepository.observeRefreshRequests(uid).collect { requesters ->
+                if (requesters.isEmpty()) return@collect
                 Timber.d("Refresh request from ${requesters.size} member(s) — pulling fresh fix")
                 requestOneShotFix()
-                runCatching { locationRepository.clearRefreshRequests(uid) }
+                runCatching { locationRepository.clearRefreshRequests(uid, requesters) }
                     .onFailure { Timber.w(it, "Failed to clear refresh requests") }
             }
         }
