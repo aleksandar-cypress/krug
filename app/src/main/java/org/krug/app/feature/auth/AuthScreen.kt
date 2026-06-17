@@ -87,13 +87,13 @@ fun AuthScreen(
             Spacer(Modifier.weight(0.8f))
 
             Surface(
-                shape = RoundedCornerShape(40.dp),
+                shape = RoundedCornerShape(48.dp),
                 color = Color.White,
-                shadowElevation = 12.dp,
-                modifier = Modifier.size(140.dp),
+                shadowElevation = 16.dp,
+                modifier = Modifier.size(180.dp),
             ) {
                 Box(
-                    modifier = Modifier.padding(14.dp),
+                    modifier = Modifier.padding(12.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Image(

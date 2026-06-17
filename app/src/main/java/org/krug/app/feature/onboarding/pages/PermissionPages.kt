@@ -204,7 +204,15 @@ fun BatteryOptimizationPage(onContinueOrSkip: () -> Unit) {
         title = stringResource(R.string.onb_bat_title),
         body = stringResource(R.string.onb_bat_body),
         primaryButtonText = stringResource(R.string.onb_bat_open),
-        onPrimary = { (context as? Activity)?.let { PermissionUtils.openBatteryOptimizationRequest(it) } },
+        onPrimary = {
+            // Već exempt — sistem dialog ne pokazuje ništa, LaunchedEffect(ignoring)
+            // ne re-fire-uje jer se vrednost ne menja. Advanc-uj ručno.
+            if (PermissionUtils.isIgnoringBatteryOptimizations(context)) {
+                onContinueOrSkip()
+            } else {
+                (context as? Activity)?.let { PermissionUtils.openBatteryOptimizationRequest(it) }
+            }
+        },
         secondaryButtonText = stringResource(R.string.action_skip),
         onSecondary = onContinueOrSkip,
     )

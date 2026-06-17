@@ -1,6 +1,12 @@
 package org.krug.app.feature.map
 
 import android.annotation.SuppressLint
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -49,17 +55,21 @@ import androidx.compose.runtime.setValue
 import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import androidx.compose.foundation.border
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mapbox.geojson.Point
@@ -180,7 +190,8 @@ fun MapScreen(
         )
 
         MembersPill(
-            count = state.members.size,
+            members = state.members,
+            photoCache = photoCache,
             onClick = { sheetVisible = true },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -292,6 +303,33 @@ fun MapScreen(
     }
 }
 
+/**
+ * "Frosted glass" pill — translucent white + suptilan inner highlight + jak shadow.
+ * Iznad colorful Mapbox-a daje vizuelni utisak frosted glass-a bez stvarnog
+ * backdrop blur-a (koji bi tražio dodatnu lib kao haze).
+ */
+private fun Modifier.krugGlass(shape: Shape): Modifier = this
+    .shadow(elevation = 14.dp, shape = shape, clip = false)
+    .clip(shape)
+    .background(
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.82f),
+                Color.White.copy(alpha = 0.72f),
+            ),
+        ),
+    )
+    .border(
+        width = 1.dp,
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.65f),
+                Color.White.copy(alpha = 0.15f),
+            ),
+        ),
+        shape = shape,
+    )
+
 @Composable
 private fun TopFloatingBar(
     circles: List<CircleBrief>,
@@ -303,37 +341,34 @@ private fun TopFloatingBar(
     val active = circles.firstOrNull { it.id == activeCircleId } ?: circles.firstOrNull()
     val pillLabel = active?.name ?: stringResource(R.string.map_title)
     val onPillClick: () -> Unit = if (circles.isEmpty()) onOpenCircles else onOpenPicker
+    val pillShape = RoundedCornerShape(28.dp)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 6.dp,
-            onClick = onPillClick,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .krugGlass(pillShape)
+                .clickable(onClick = onPillClick)
+                .padding(horizontal = 20.dp, vertical = 12.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-            ) {
-                // Boja aktivnog kruga kao mala tačka levo od imena. Padne ako nema krugova.
-                active?.colorHex?.let { hex ->
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(Color(android.graphics.Color.parseColor(hex))),
-                    )
-                    Spacer(Modifier.width(10.dp))
-                }
-                Text(
-                    text = pillLabel,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface,
+            // Boja aktivnog kruga kao mala tačka levo od imena. Padne ako nema krugova.
+            active?.colorHex?.let { hex ->
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(Color(android.graphics.Color.parseColor(hex))),
                 )
+                Spacer(Modifier.width(10.dp))
             }
+            Text(
+                text = pillLabel,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CircleIconButton(
@@ -356,19 +391,18 @@ private fun CircleIconButton(
     description: String,
     onClick: () -> Unit,
 ) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 6.dp,
-        modifier = Modifier.size(48.dp),
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .krugGlass(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        IconButton(onClick = onClick, modifier = Modifier.fillMaxSize()) {
-            Icon(
-                imageVector = icon,
-                contentDescription = description,
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-        }
+        Icon(
+            imageVector = icon,
+            contentDescription = description,
+            tint = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
@@ -378,24 +412,26 @@ private fun SosFab(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
+    // Active SOS = solid crveni (signal urgency). Inactive = glass (suptilno, ne ometa).
+    val activeModifier = Modifier
+        .shadow(elevation = 14.dp, shape = CircleShape, clip = false)
+        .clip(CircleShape)
+        .background(SosRedDark)
+    Box(
         modifier = modifier
-            .shadow(elevation = 8.dp, shape = CircleShape, clip = false)
-            .size(48.dp),
-        shape = CircleShape,
-        color = if (active) SosRedDark else MaterialTheme.colorScheme.surface,
-        onClick = onClick,
+            .size(48.dp)
+            .then(if (active) activeModifier else Modifier.krugGlass(CircleShape))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = "SoS",
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 0.5.sp,
-                ),
-                color = if (active) Color.White else SosRed,
-            )
-        }
+        Text(
+            text = "SoS",
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.5.sp,
+            ),
+            color = if (active) Color.White else SosRed,
+        )
     }
 }
 
@@ -462,52 +498,134 @@ private fun SosBanner(
 
 @Composable
 private fun MembersPill(
-    count: Int,
+    members: List<MemberWithLocation>,
+    photoCache: Map<String, Bitmap>,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
+    val shape = RoundedCornerShape(28.dp)
+    val avatarSize = 26.dp
+    val overlap = 9.dp
+    val maxVisible = 3
+    val visible = members.take(maxVisible)
+    val extra = (members.size - maxVisible).coerceAtLeast(0)
+
+    Row(
         modifier = modifier
-            .shadow(elevation = 10.dp, shape = RoundedCornerShape(28.dp), clip = false),
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surface,
-        onClick = onClick,
+            .krugGlass(shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
+        Text(
+            text = stringResource(R.string.map_members_sheet_title),
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        if (members.isEmpty()) {
+            // Krug bez članova — mini empty state.
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(avatarSize)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .border(1.5.dp, Color.White, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Group,
                     contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp),
                 )
             }
-            Text(
-                text = stringResource(R.string.map_members_sheet_title),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
+        } else {
+            // Avatari sa 30% preklapanjem + beli border (kao iOS Find My / WhatsApp grupe).
+            Row(horizontalArrangement = Arrangement.spacedBy(-overlap)) {
+                visible.forEachIndexed { index, member ->
+                    Box(modifier = Modifier.zIndex((maxVisible - index).toFloat())) {
+                        MemberMiniAvatar(
+                            member = member,
+                            photoCache = photoCache,
+                            size = avatarSize,
+                        )
+                    }
+                }
+                if (extra > 0) {
+                    Box(modifier = Modifier.zIndex(0f)) {
+                        Box(
+                            modifier = Modifier
+                                .size(avatarSize)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                                .border(1.5.dp, Color.White, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "+$extra",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = Color.White,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemberMiniAvatar(
+    member: MemberWithLocation,
+    photoCache: Map<String, Bitmap>,
+    size: androidx.compose.ui.unit.Dp,
+) {
+    val markerColor = when {
+        member.sos != null -> SosRed
+        member.isSelf -> MaterialTheme.colorScheme.primary
+        else -> Color(android.graphics.Color.parseColor(MapMarkers.colorForUid(member.uid)))
+    }
+    val photo = member.photoUrl?.let { photoCache[it] }
+    // SOS active → suptilan crveni pulsing border (povezuje se sa SOS feature-om).
+    val borderColor = if (member.sos != null) {
+        val infinite = rememberInfiniteTransition(label = "sosBorder")
+        val alpha by infinite.animateFloat(
+            initialValue = 1f,
+            targetValue = 0.35f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 700, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "sosBorderAlpha",
+        )
+        SosRed.copy(alpha = alpha)
+    } else {
+        Color.White
+    }
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(markerColor)
+            .border(1.5.dp, borderColor, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (photo != null) {
+            androidx.compose.foundation.Image(
+                bitmap = photo.asImageBitmap(),
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clip(CircleShape),
             )
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Text(
-                    text = count.toString(),
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                )
-            }
+        } else {
+            Text(
+                text = MapMarkers.computeInitials(member.displayName),
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = Color.White,
+            )
         }
     }
 }

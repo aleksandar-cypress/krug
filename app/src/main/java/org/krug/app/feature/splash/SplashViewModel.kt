@@ -57,12 +57,13 @@ class SplashViewModel @Inject constructor(
         }
         // OS permissions se brišu uninstall-om dok Firestore i lokalni flag i dalje pamte
         // da je onboarding završen. Bez ove provere user posle reinstall-a sleće na Map
-        // bez ijednog permission-a — FGS ne radi, ništa se ne publishuje, refresh dugme
-        // tiho ne radi ništa.
-        val permissionsOk = PermissionUtils.hasForegroundLocation(context) &&
-            PermissionUtils.hasNotifications(context)
-        if (!permissionsOk) {
-            Timber.d("Splash: permissions missing — routing to onboarding")
+        // bez location permission-a — FGS ne radi, ništa se ne publishuje, refresh dugme
+        // tiho ne radi ništa. Samo foreground location je obavezan; notifikacije su
+        // optional (onboarding ima "Preskoči" dugme) pa ih ne smemo tražiti ovde —
+        // inače user koji je svesno odbio notifikacije završi u beskonačnoj onboarding
+        // petlji.
+        if (!PermissionUtils.hasForegroundLocation(context)) {
+            Timber.d("Splash: foreground location missing — routing to onboarding")
             _decision.value = SplashDecision.OnboardingPending
             return
         }
