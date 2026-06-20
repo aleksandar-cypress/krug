@@ -12,7 +12,6 @@ import kotlinx.coroutines.launch
 import org.krug.app.core.auth.AuthRepository
 import org.krug.app.core.circle.CirclePresets
 import org.krug.app.core.circle.CircleRepository
-import org.krug.app.core.circle.InviteRepository
 import timber.log.Timber
 
 data class CreateCircleUiState(
@@ -23,14 +22,12 @@ data class CreateCircleUiState(
     val nameError: Boolean = false,
     val genericError: String? = null,
     val createdCircleId: String? = null,
-    val inviteCode: String? = null,
 )
 
 @HiltViewModel
 class CreateCircleViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val circleRepository: CircleRepository,
-    private val inviteRepository: InviteRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CreateCircleUiState())
@@ -54,19 +51,15 @@ class CreateCircleViewModel @Inject constructor(
         _state.update { it.copy(creating = true) }
         viewModelScope.launch {
             runCatching {
-                val circleId = circleRepository.createCircle(
+                circleRepository.createCircle(
                     ownerUid = uid,
                     name = trimmed.take(NAME_MAX_LENGTH),
                     colorHex = _state.value.selectedColor,
                     iconKey = _state.value.selectedIcon,
                 )
-                val code = inviteRepository.createInvite(circleId, uid)
-                circleId to code
             }
-                .onSuccess { (circleId, code) ->
-                    _state.update {
-                        it.copy(creating = false, createdCircleId = circleId, inviteCode = code)
-                    }
+                .onSuccess { circleId ->
+                    _state.update { it.copy(creating = false, createdCircleId = circleId) }
                 }
                 .onFailure { e ->
                     Timber.e(e, "createCircle failed")

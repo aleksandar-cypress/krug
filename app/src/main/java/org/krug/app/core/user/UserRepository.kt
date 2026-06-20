@@ -10,6 +10,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import org.krug.app.core.util.DeviceNames
 import timber.log.Timber
 
 @Singleton
@@ -25,10 +26,12 @@ class UserRepository @Inject constructor(
             ref.get().await().getString("displayName")
         }.getOrNull().orEmpty()
 
+        // Fallback name iz device-a koristi FRIENDLY oblik ("Galaxy A37 5G" umesto
+        // sirovog "SM-A376B") da bi novi anonimni user-i imali čitljivo ime odmah.
         val computedName = when {
             user.displayName.orEmpty().isNotBlank() -> user.displayName!!
             user.email.orEmpty().isNotBlank() -> user.email!!.substringBefore('@')
-            else -> deviceLabel
+            else -> DeviceNames.friendly(deviceLabel)
         }
         val finalName = existingName.ifBlank { computedName }
 

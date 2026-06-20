@@ -105,10 +105,11 @@ fun KrugNavHost() {
         composable<CreateCircle> {
             CreateCircleScreen(
                 onBack = { nav.popBackStack() },
-                onCreated = { circleId, circleName, code ->
-                    // Pop create off the stack so back from invite lands on circle list.
+                onCreated = { circleId ->
+                    // Pop CreateCircle off, ide direktno u CircleDetail gde vlasnik
+                    // bira tip pozivnice (običan / dete) pre nego što kod bude generisan.
                     nav.popBackStack()
-                    nav.navigate(ShowInvite(circleId = circleId, circleName = circleName, code = code))
+                    nav.navigate(CircleDetail(circleId))
                 },
             )
         }

@@ -35,9 +35,25 @@ class LocationRepository @Inject constructor(
             "accuracy" to accuracy,
             "batteryPct" to batteryPct,
             "charging" to isCharging,
+            "paused" to false,
             "updatedAt" to ServerValue.TIMESTAMP,
         )
         locationRef(uid).setValue(data).await()
+    }
+
+    /**
+     * Označi self lokaciju kao pauziranu — peers odmah vide "Privatni mod" badge bez
+     * čekanja 15min staleness threshold-a. Ne briše lat/lng (peers imaju last-known kao
+     * fallback za "Otvori u Google Maps").
+     */
+    suspend fun setPaused(uid: String, paused: Boolean) {
+        runCatching {
+            locationRef(uid).child("paused").setValue(paused).await()
+            // Kad se vraća iz pause-a, takođe ažuriraj updatedAt da signaliziramo "ponovo live".
+            if (!paused) {
+                locationRef(uid).child("updatedAt").setValue(ServerValue.TIMESTAMP).await()
+            }
+        }
     }
 
     fun observe(uid: String): Flow<LocationModel?> = callbackFlow {

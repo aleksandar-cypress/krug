@@ -108,14 +108,38 @@ fun CircleDetailScreen(
             )
             Spacer(Modifier.size(24.dp))
 
-            Button(
-                onClick = viewModel::generateInvite,
-                enabled = !state.generatingInvite,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Outlined.PersonAdd, contentDescription = null)
+            // Vlasnik dobija dva entry-ja: običan poziv i poziv za dete (preset isChild=true
+            // čim novi član prihvati invite). Članovi (non-owner) ne vide ova dugmad.
+            if (state.isOwner) {
+                Button(
+                    onClick = { viewModel.generateInvite(forChild = false) },
+                    enabled = !state.generatingInvite,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Outlined.PersonAdd, contentDescription = null)
+                    Spacer(Modifier.size(8.dp))
+                    Text(stringResource(R.string.circle_detail_invite_cta))
+                }
                 Spacer(Modifier.size(8.dp))
-                Text(stringResource(R.string.circle_detail_invite_cta))
+                OutlinedButton(
+                    onClick = { viewModel.generateInvite(forChild = true) },
+                    enabled = !state.generatingInvite,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Outlined.ChildCare, contentDescription = null)
+                    Spacer(Modifier.size(8.dp))
+                    Text("Pozovi dete (roditeljska kontrola)")
+                }
+            } else {
+                Button(
+                    onClick = { viewModel.generateInvite(forChild = false) },
+                    enabled = !state.generatingInvite,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Outlined.PersonAdd, contentDescription = null)
+                    Spacer(Modifier.size(8.dp))
+                    Text(stringResource(R.string.circle_detail_invite_cta))
+                }
             }
 
             Spacer(Modifier.size(24.dp))

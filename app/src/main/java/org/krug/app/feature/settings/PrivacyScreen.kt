@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import org.krug.app.R
 import org.krug.app.core.auth.AuthRepository
 import org.krug.app.core.circle.CircleRepository
+import org.krug.app.core.location.LocationRepository
 import org.krug.app.core.settings.SettingsRepository
 import org.krug.app.core.settings.UserSettings
 
@@ -52,6 +53,7 @@ class PrivacyViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val settingsRepository: SettingsRepository,
     private val circleRepository: CircleRepository,
+    private val locationRepository: LocationRepository,
 ) : ViewModel() {
 
     val state: StateFlow<PrivacyUiState> = authRepository.observeAuthState()
@@ -70,7 +72,13 @@ class PrivacyViewModel @Inject constructor(
         val uid = authRepository.currentUser?.uid ?: return
         // Defensive: dete ne sme da menja sharing — UI bi tako bilo i tako zaključano.
         if (state.value.isChildAnywhere) return
-        viewModelScope.launch { settingsRepository.updateShareGlobal(uid, value) }
+        viewModelScope.launch {
+            settingsRepository.updateShareGlobal(uid, value)
+            // Sync u RTDB tako da peers odmah vide "Privatni mod" (bez čekanja 15min
+            // staleness threshold-a). Kad uključi nazad, paused=false + FGS će ubrzo
+            // publish-ovati svežu lokaciju.
+            locationRepository.setPaused(uid, paused = !value)
+        }
     }
 }
 

@@ -69,7 +69,7 @@ class CircleDetailViewModel @Inject constructor(
         var hadCircle = false
         combine(
             observeCircle(circleId),
-            observeMembersSubcollection(circleId),
+            circleRepository.observeMembersChildMap(circleId),
             authRepository.observeAuthState(),
         ) { circle, memberDocs, user ->
             Triple(circle, memberDocs, user?.uid)
@@ -122,12 +122,14 @@ class CircleDetailViewModel @Inject constructor(
         }
     }
 
-    fun generateInvite() {
+    fun generateInvite(forChild: Boolean = false) {
         val uid = authRepository.currentUser?.uid ?: return
         if (_state.value.generatingInvite) return
         _state.value = _state.value.copy(generatingInvite = true)
         viewModelScope.launch {
-            val code = runCatching { inviteRepository.createInvite(circleId, uid) }
+            val code = runCatching {
+                inviteRepository.createInvite(circleId, uid, prefillIsChild = forChild)
+            }
             _state.value = _state.value.copy(
                 generatingInvite = false,
                 pendingInviteCode = code.getOrNull(),
@@ -171,23 +173,6 @@ class CircleDetailViewModel @Inject constructor(
                 }
                 val model = snap?.toObject(CircleModel::class.java)?.copy(id = snap.id)
                 trySend(model)
-            }
-        awaitClose { reg.remove() }
-    }
-
-    /** Member subcollection → mapa uid → isChild za sve članove ovog kruga. */
-    private fun observeMembersSubcollection(cid: String): Flow<Map<String, Boolean>> = callbackFlow {
-        val reg = firestore.collection("circles").document(cid).collection("members")
-            .addSnapshotListener { snap, error ->
-                if (error != null) {
-                    Timber.w(error, "observeMembersSubcollection error for $cid")
-                    trySend(emptyMap())
-                    return@addSnapshotListener
-                }
-                val map = snap?.documents.orEmpty().associate { d ->
-                    d.id to (d.getBoolean("isChild") == true)
-                }
-                trySend(map)
             }
         awaitClose { reg.remove() }
     }

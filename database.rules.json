@@ -10,6 +10,7 @@
         "accuracy":   { ".validate": "newData.isNumber()" },
         "batteryPct": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
         "charging":   { ".validate": "newData.isBoolean()" },
+        "paused":     { ".validate": "newData.isBoolean()" },
         "updatedAt":  { ".validate": "newData.isNumber()" },
         "$other":     { ".validate": false }
       }

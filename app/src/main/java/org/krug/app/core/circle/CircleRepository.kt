@@ -79,7 +79,7 @@ class CircleRepository @Inject constructor(
     }
 
     /** Add user to circle.memberIds + create members subdoc. Used by InviteRepository on accept. */
-    suspend fun joinCircle(circleId: String, uid: String) {
+    suspend fun joinCircle(circleId: String, uid: String, asChild: Boolean = false) {
         firestore.runTransaction { tx ->
             val cref = circle(circleId)
             val snap = tx.get(cref)
@@ -90,6 +90,7 @@ class CircleRepository @Inject constructor(
                 mapOf(
                     "role" to MemberModel.ROLE_MEMBER,
                     "shareLocation" to true,
+                    "isChild" to asChild,
                     "joinedAt" to FieldValue.serverTimestamp(),
                 ),
             )
@@ -120,6 +121,22 @@ class CircleRepository @Inject constructor(
                 arr.any { it }
             }
         }
+
+    /** Mapa uid → isChild za sve članove ovog kruga. Live snapshot. */
+    fun observeMembersChildMap(circleId: String): Flow<Map<String, Boolean>> = callbackFlow {
+        val reg = members(circleId).addSnapshotListener { snap, error ->
+            if (error != null) {
+                Timber.w(error, "observeMembersChildMap error for $circleId")
+                trySend(emptyMap())
+                return@addSnapshotListener
+            }
+            val map = snap?.documents.orEmpty().associate { d ->
+                d.id to (d.getBoolean("isChild") == true)
+            }
+            trySend(map)
+        }
+        awaitClose { reg.remove() }
+    }
 
     private fun observeMyCircleIds(uid: String): Flow<List<String>> = callbackFlow {
         val reg = circles()

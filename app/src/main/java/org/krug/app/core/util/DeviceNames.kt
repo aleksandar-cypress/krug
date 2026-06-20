@@ -2,10 +2,36 @@ package org.krug.app.core.util
 
 /**
  * Mapira sirovi `Build.MODEL` (npr. "SM-S928B") na ljudski naziv ("Galaxy S24 Ultra").
- * Beta-grupa je dominantno Samsung, pa pokrivamo Galaxy S/A/Z liniju. Ostali
- * brand-ovi (Pixel, Xiaomi novi modeli) već vraćaju friendly ime u Build.MODEL.
+ * Beta-grupa je Samsung + Xiaomi; pokrivamo Galaxy S/A/Z liniju + popularne Xiaomi/Redmi
+ * modele koji vraćaju cryptic kod u Build.MODEL umesto imena.
  */
 object DeviceNames {
+
+    /** Xiaomi modeli — Build.MODEL vraća cryptic interni kod (npr. "21081111RG"). */
+    private val xiaomiPrefixes: List<Pair<String, String>> = listOf(
+        // Mi/Xiaomi flagship
+        "23090RA98G" to "Xiaomi 13T",
+        "23078RKD5G" to "Xiaomi 13T Pro",
+        "23117RA68G" to "Xiaomi 14",
+        "2211133G" to "Xiaomi 13",
+        "2210132G" to "Xiaomi 13 Pro",
+        "2201123G" to "Xiaomi 12",
+        "2201122G" to "Xiaomi 12 Pro",
+        // Mi 11 series — Lite/NE/5G suffixe izostavljamo (suvišno za prikaz)
+        "21081111RG" to "Mi 11",
+        "M2101K9AG" to "Mi 11",
+        "M2102K1G" to "Mi 11",
+        "2107113SG" to "Mi 11T",
+        "2107113SI" to "Mi 11T",
+        // Redmi Note
+        "2201117TG" to "Redmi Note 11",
+        "2201116TG" to "Redmi Note 11",
+        "22101316G" to "Redmi Note 12",
+        "23028RA60L" to "Redmi Note 12 Pro",
+        // Poco
+        "2104290C" to "POCO F3",
+        "M2007J20CG" to "POCO X3",
+    )
 
     private val samsungPrefixes: List<Pair<String, String>> = listOf(
         // Galaxy S series (S24 → najnoviji unazad)
@@ -56,14 +82,33 @@ object DeviceNames {
         // Često je raw već "Samsung SM-…"; ekstraktuj samo model deo
         val modelPart = trimmed.substringAfterLast(' ', missingDelimiterValue = trimmed)
         val brandPart = trimmed.substringBeforeLast(' ', missingDelimiterValue = "")
-        val match = samsungPrefixes.firstOrNull { (prefix, _) ->
+
+        // Samsung
+        samsungPrefixes.firstOrNull { (prefix, _) ->
             modelPart.startsWith(prefix, ignoreCase = true)
-        }
-        return if (match != null) {
+        }?.let { (_, name) ->
             val brand = if (brandPart.isNotBlank()) brandPart else "Samsung"
-            "$brand ${match.second}"
-        } else {
-            raw
+            return "$brand $name"
         }
+
+        // Xiaomi / Redmi / POCO — Build.MANUFACTURER je "Xiaomi" za sve, friendly ime
+        // ide bez ponavljanja prefiksa (npr. "Xiaomi Mi 11 Lite", ne "Xiaomi Mi 11 Lite Xiaomi").
+        xiaomiPrefixes.firstOrNull { (prefix, _) ->
+            modelPart.startsWith(prefix, ignoreCase = true)
+        }?.let { (_, name) ->
+            // Ako ime već počinje sa Xiaomi/Redmi/POCO, ne dupliraj brand prefiks.
+            return if (
+                name.startsWith("Xiaomi", true) ||
+                name.startsWith("Redmi", true) ||
+                name.startsWith("POCO", true) ||
+                name.startsWith("Mi ", true)
+            ) {
+                if (name.startsWith("Mi ", true)) "Xiaomi $name" else name
+            } else {
+                "Xiaomi $name"
+            }
+        }
+
+        return raw
     }
 }

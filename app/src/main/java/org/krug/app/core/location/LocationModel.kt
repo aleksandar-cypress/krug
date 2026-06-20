@@ -9,5 +9,7 @@ data class LocationModel(
     val accuracy: Float = 0f,
     val batteryPct: Int = -1,
     val charging: Boolean = false,
+    /** Korisnik je pauzirao deljenje (Privacy → Switch off). Klijent prikazuje "Privatni mod" odmah. */
+    val paused: Boolean = false,
     val updatedAt: Long = 0L,
 )

@@ -36,6 +36,7 @@ data class MemberWithLocation(
     val location: LocationModel?,
     val sos: SosModel?,
     val isSelf: Boolean,
+    val isChild: Boolean = false,
 )
 
 data class CircleBrief(val id: String, val name: String, val colorHex: String, val iconKey: String)
@@ -119,7 +120,12 @@ class MapViewModel @Inject constructor(
             // Mapa pokazuje samo članove aktivnog kruga (+ self).
             val uids = if (active == null) setOf(selfUid).toList()
             else (active.memberIds.toSet() + selfUid).toList()
-            combine(uids.map { memberFlow(it, selfUid) }) { arr ->
+            val childMapFlow = if (active == null) flowOf(emptyMap())
+            else circleRepository.observeMembersChildMap(active.id)
+            combine(
+                combine(uids.map { memberFlow(it, selfUid) }) { it.toList() },
+                childMapFlow,
+            ) { arr, childMap ->
                 val now = System.currentTimeMillis()
                 val activeId = active?.id
                 // Defensive UI filter — SOS stariji od TTL ili koji nije za aktivni krug
@@ -129,7 +135,8 @@ class MapViewModel @Inject constructor(
                     val keep = sos != null &&
                         now - sos.triggeredAt < SOS_TTL_MS &&
                         (sos.circleId == null || sos.circleId == activeId)
-                    if (keep) m else m.copy(sos = null)
+                    val withSos = if (keep) m else m.copy(sos = null)
+                    withSos.copy(isChild = childMap[m.uid] == true)
                 }
                 val self = members.firstOrNull { it.isSelf }
                 // Auto-clear: ako je self SOS prešao TTL, obriši u RTDB.
@@ -165,7 +172,9 @@ class MapViewModel @Inject constructor(
             locationRepository.observe(uid),
             sosRepository.observe(uid),
         ) { user, loc, sos ->
-            val nameFromUser = user?.displayName.orEmpty()
+            // Postojeći user-i imaju raw device kod u displayName (anonimni sign-in pre
+            // friendly mapping-a). Transformišemo i tu da bi sve bilo konzistentno.
+            val nameFromUser = DeviceNames.friendly(user?.displayName.orEmpty())
             val emailPrefix = user?.email.orEmpty().substringBefore('@')
             val rawDevice = user?.deviceModel.orEmpty()
             val device = DeviceNames.friendly(rawDevice)

@@ -46,15 +46,13 @@ import org.krug.app.core.circle.CirclePresets
 @Composable
 fun CreateCircleScreen(
     onBack: () -> Unit,
-    onCreated: (circleId: String, circleName: String, inviteCode: String) -> Unit,
+    onCreated: (circleId: String) -> Unit,
     viewModel: CreateCircleViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    LaunchedEffect(state.createdCircleId, state.inviteCode) {
-        val id = state.createdCircleId
-        val code = state.inviteCode
-        if (id != null && code != null) onCreated(id, state.name.trim(), code)
+    LaunchedEffect(state.createdCircleId) {
+        state.createdCircleId?.let(onCreated)
     }
 
     Scaffold(

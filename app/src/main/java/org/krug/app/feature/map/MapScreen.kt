@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.BatteryFull
+import androidx.compose.material.icons.outlined.ChildCare
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.NearMe
 import androidx.compose.material.icons.outlined.Person
@@ -112,15 +113,11 @@ private const val PRIVATE_MODE_THRESHOLD_MS = 15 * 60_000L
 
 private fun MemberWithLocation.isPrivate(): Boolean {
     if (isSelf) return false // za sebe ne pokazujemo private mode
-    val updatedAt = location?.updatedAt ?: return true
-    return System.currentTimeMillis() - updatedAt > PRIVATE_MODE_THRESHOLD_MS
+    val loc = location ?: return true
+    if (loc.paused) return true // user je eksplicitno pauzirao deljenje
+    return System.currentTimeMillis() - loc.updatedAt > PRIVATE_MODE_THRESHOLD_MS
 }
 
-/** Lokalno vreme — uveče i noću se prebacuje na tamniju varijantu mape. */
-private fun pickMapStyle(): String {
-    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-    return if (hour in 7..18) Style.STANDARD else Style.DARK
-}
 
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -768,10 +765,9 @@ private fun MapboxContainer(
                         .zoom(DEFAULT_ZOOM)
                         .build(),
                 )
-                // Auto light/dark prema vremenu: 7-19h → STANDARD (vibrant day), 19-7h → DARK.
-                // Set once na factory creation; ako user otvori app kasnije, novi map view
-                // se kreira sa drugačijim style-om.
-                mv.mapboxMap.loadStyle(pickMapStyle())
+                // Mapbox Standard sam adaptira light/dark prema system theme-u uređaja.
+                // Ne forsiramo lightPreset — neka korisnik kroz system settings kontroliše.
+                mv.mapboxMap.loadStyle(Style.STANDARD)
             }
         },
         update = { _ ->
@@ -1051,18 +1047,36 @@ private fun MemberRow(
         }
         Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = member.displayName.ifBlank { if (member.isSelf) "Ti" else "Član" },
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = member.displayName.ifBlank { if (member.isSelf) "Ti" else "Član" },
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (member.isChild) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.Outlined.ChildCare,
+                        contentDescription = "Dete",
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
             val priv = member.isPrivate()
             val statusLine = when {
                 member.sos != null -> "SOS — traži pomoć"
                 priv -> "Privatni mod"
                 else -> lastSeenLabel(member.location?.updatedAt)
             }
-            val deviceSuffix = if (member.deviceModel.isNotBlank() && member.sos == null && !priv) {
+            // Ako je displayName već device naziv (anon user bez nicknamea), ne ponavljaj
+            // device u status liniji — bila bi duplikacija.
+            val deviceSuffix = if (
+                member.deviceModel.isNotBlank() &&
+                member.sos == null &&
+                !priv &&
+                !member.displayName.equals(member.deviceModel, ignoreCase = true)
+            ) {
                 " · ${member.deviceModel}"
             } else {
                 ""
@@ -1190,11 +1204,26 @@ private fun MemberDetailSheet(
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = member.displayName.ifBlank { if (member.isSelf) "Ti" else "Član" },
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-                )
-                if (member.deviceModel.isNotBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = member.displayName.ifBlank { if (member.isSelf) "Ti" else "Član" },
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                    )
+                    if (member.isChild) {
+                        Spacer(Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Outlined.ChildCare,
+                            contentDescription = "Dete",
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+                // Subtitle samo ako je displayName SET-OVANO ime (nije isto što i device).
+                if (
+                    member.deviceModel.isNotBlank() &&
+                    !member.displayName.equals(member.deviceModel, ignoreCase = true)
+                ) {
                     Text(
                         text = member.deviceModel,
                         style = MaterialTheme.typography.bodyMedium,

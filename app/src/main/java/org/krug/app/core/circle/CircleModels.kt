@@ -38,6 +38,8 @@ data class InviteModel(
     val inviterUid: String = "",
     val maxUses: Int = 1,
     val usedBy: List<String> = emptyList(),
+    /** Ako je true, novi član se odmah upisuje sa isChild=true (roditeljska kontrola). */
+    val prefillIsChild: Boolean = false,
     @ServerTimestamp val createdAt: Date? = null,
     val expiresAt: Date? = null,
 )

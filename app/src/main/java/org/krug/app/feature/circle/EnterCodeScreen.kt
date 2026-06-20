@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
@@ -70,6 +71,7 @@ fun EnterCodeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .imePadding()
                 .padding(padding)
                 .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.Top,
@@ -97,14 +99,13 @@ fun EnterCodeScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Spacer(Modifier.weight(1f))
-
+            // Pridruži se dugme — odmah ispod inputa (nema weight(1f) na dnu jer ga
+            // tastatura prekriva). imePadding() na Column-u uvlači sve iznad tastature.
+            Spacer(Modifier.size(24.dp))
             Button(
                 onClick = viewModel::submit,
                 enabled = state.code.length == EnterCodeViewModel.CODE_LENGTH && !state.joining,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 if (state.joining) {
                     CircularProgressIndicator(

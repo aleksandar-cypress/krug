@@ -23,7 +23,11 @@ class InviteRepository @Inject constructor(
 ) {
     private fun invites() = firestore.collection("invites")
 
-    suspend fun createInvite(circleId: String, inviterUid: String): String {
+    suspend fun createInvite(
+        circleId: String,
+        inviterUid: String,
+        prefillIsChild: Boolean = false,
+    ): String {
         val expiry = Date(System.currentTimeMillis() + INVITE_TTL_MILLIS)
         repeat(MAX_GEN_ATTEMPTS) {
             val code = generate6Digit()
@@ -44,6 +48,7 @@ class InviteRepository @Inject constructor(
                             "inviterUid" to inviterUid,
                             "maxUses" to 1,
                             "usedBy" to emptyList<String>(),
+                            "prefillIsChild" to prefillIsChild,
                             "createdAt" to FieldValue.serverTimestamp(),
                             "expiresAt" to Timestamp(expiry),
                         ),
@@ -86,7 +91,7 @@ class InviteRepository @Inject constructor(
         if (uid in circle.memberIds) return JoinResult.Failure.AlreadyMember
 
         return try {
-            circleRepository.joinCircle(invite.circleId, uid)
+            circleRepository.joinCircle(invite.circleId, uid, asChild = invite.prefillIsChild)
             invites().document(normalized).update("usedBy", FieldValue.arrayUnion(uid)).await()
             JoinResult.Success(invite.circleId, circle.name)
         } catch (e: Exception) {
