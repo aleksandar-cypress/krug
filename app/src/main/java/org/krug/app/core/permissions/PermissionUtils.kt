@@ -45,6 +45,15 @@ object PermissionUtils {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    /** Activity Recognition — A10+ traži runtime grant, pre-A10 nije bila potrebna. */
+    fun hasActivityRecognition(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACTIVITY_RECOGNITION,
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     fun isIgnoringBatteryOptimizations(context: Context): Boolean {
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         return pm.isIgnoringBatteryOptimizations(context.packageName)

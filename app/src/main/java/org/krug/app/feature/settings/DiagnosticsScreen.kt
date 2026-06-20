@@ -33,10 +33,23 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.google.android.gms.location.DetectedActivity
 import com.google.firebase.auth.FirebaseAuth
 import org.krug.app.core.location.LocationTrackingService
 import org.krug.app.core.permissions.PermissionUtils
 import org.krug.app.core.util.DeviceNames
+
+private fun activityName(type: Int): String = when (type) {
+    DetectedActivity.IN_VEHICLE -> "VEHICLE"
+    DetectedActivity.ON_BICYCLE -> "BICYCLE"
+    DetectedActivity.ON_FOOT -> "ON_FOOT"
+    DetectedActivity.WALKING -> "WALKING"
+    DetectedActivity.RUNNING -> "RUNNING"
+    DetectedActivity.STILL -> "STILL"
+    DetectedActivity.TILTING -> "TILTING"
+    DetectedActivity.UNKNOWN -> "UNKNOWN"
+    else -> "OTHER($type)"
+}
 
 /**
  * Debug-only ekran sa state-om FGS-a, permission-a, identity-a — alat za
@@ -157,6 +170,7 @@ private fun collectSnapshot(context: Context): DiagSnapshot {
                     "isRunning" to LocationTrackingService.isRunning.get().toString(),
                     "lastPublishAt" to (if (lastPublish == 0L) "-" else lastPublish.toString()),
                     "publishAgo" to publishAgo,
+                    "detectedActivity" to activityName(LocationTrackingService.detectedActivity),
                 ),
             ),
             DiagSection(
@@ -165,6 +179,7 @@ private fun collectSnapshot(context: Context): DiagSnapshot {
                     "foregroundLocation" to PermissionUtils.hasForegroundLocation(context).toString(),
                     "backgroundLocation" to PermissionUtils.hasBackgroundLocation(context).toString(),
                     "notifications" to PermissionUtils.hasNotifications(context).toString(),
+                    "activityRecognition" to PermissionUtils.hasActivityRecognition(context).toString(),
                     "batteryExempt" to PermissionUtils.isIgnoringBatteryOptimizations(context).toString(),
                 ),
             ),

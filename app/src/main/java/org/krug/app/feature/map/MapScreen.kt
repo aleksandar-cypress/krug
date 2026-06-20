@@ -170,6 +170,25 @@ fun MapScreen(
         onDispose { }
     }
 
+    // Lazy prompt za Activity Recognition — ako još nije granted, jedanput kad user uđe
+    // u Map. Bez tog grant-a, FGS koristi static LOW profil; sa grant-om, aktivnost-aware
+    // (vožnja = češći fix, mirovanje = ređi → bolja preciznost + manje baterije).
+    val activityRecLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            // Restart FGS da pickup-uje permission i registruje ActivityRecognitionClient.
+            LocationTrackingService.start(context)
+        }
+    }
+    LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q &&
+            !org.krug.app.core.permissions.PermissionUtils.hasActivityRecognition(context)
+        ) {
+            activityRecLauncher.launch(android.Manifest.permission.ACTIVITY_RECOGNITION)
+        }
+    }
+
     // Click handler za pin — fly-to + otvori MemberDetail sheet.
     DisposableEffect(mapViewState, state.members) {
         mapViewState.onPinClick = { uid ->

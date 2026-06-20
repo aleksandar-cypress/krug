@@ -15,6 +15,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import com.google.android.gms.location.ActivityRecognition
+import com.google.android.gms.location.ActivityRecognitionClient
+import com.google.android.gms.location.DetectedActivity
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -70,6 +73,8 @@ class LocationTrackingService : Service() {
     private val knownSosTriggered = mutableMapOf<String, Long>()
 
     private lateinit var fused: FusedLocationProviderClient
+    private var activityClient: ActivityRecognitionClient? = null
+    private var activityPendingIntent: PendingIntent? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Volatile private var currentSettings: UserSettings = UserSettings()
@@ -179,6 +184,47 @@ class LocationTrackingService : Service() {
         observeSettings()
         observeRefreshRequests()
         observeCircleSos()
+        registerActivityRecognition()
+    }
+
+    /**
+     * Activity Recognition setup — Google API koji koristi akcelerometar (low-power senzor)
+     * da detektuje šta korisnik radi (vožnja, hodanje, sedi). FGS koristi to da prilagodi
+     * GPS interval. Ako permission nije granted ili API nedostupan, gracefully skip.
+     */
+    private fun registerActivityRecognition() {
+        if (!PermissionUtils.hasActivityRecognition(this)) {
+            Timber.d("ActivityRecognition permission missing — skipping; falling back to static profile")
+            return
+        }
+        val client = ActivityRecognition.getClient(this)
+        val intent = Intent(this, ActivityRecognitionReceiver::class.java)
+        val pi = PendingIntent.getBroadcast(
+            this,
+            ACTIVITY_RECOGNITION_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+        )
+        // Detection interval 60s — dovoljno brzo da reaguje na promenu (npr. ulazi u auto),
+        // a dovoljno retko da ne troši dodatnu bateriju.
+        runCatching {
+            @Suppress("MissingPermission")
+            client.requestActivityUpdates(60_000L, pi)
+            activityClient = client
+            activityPendingIntent = pi
+            Timber.d("ActivityRecognition registered (interval 60s)")
+        }.onFailure { Timber.w(it, "ActivityRecognition register failed") }
+    }
+
+    private fun unregisterActivityRecognition() {
+        val client = activityClient ?: return
+        val pi = activityPendingIntent ?: return
+        runCatching {
+            client.removeActivityUpdates(pi)
+            pi.cancel()
+        }
+        activityClient = null
+        activityPendingIntent = null
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -196,8 +242,16 @@ class LocationTrackingService : Service() {
             scheduleProfileReconfigOnBoostExpiry(SOS_BOOST_DURATION_MS)
             Timber.d("SOS boost activated until $sosBoostUntilMs")
         }
+        // Activity Recognition poke — receiver kaže "promenila se aktivnost, reconfigure
+        // profile odmah" da ne čekamo sledeći location callback (može biti 15min daleko).
+        val activityChanged = intent?.getBooleanExtra(EXTRA_ACTIVITY_CHANGED, false) == true
         val initial = computeProfile(currentSettings)
         applyProfile(initial)
+        if (activityChanged) {
+            // Samo profile reconfigure (već urađeno gore), bez one-shot fix-a.
+            Timber.d("Profile reconfigured for new activity: ${activityName(detectedActivity)} → $initial")
+            return START_STICKY
+        }
         // User-initiated refresh (dugme u MemberDetailSheet) preskače cooldown.
         // Ostali entry pointovi (Worker, Map start, Boot) idu kroz freshness check.
         val forceRefresh = intent?.getBooleanExtra(EXTRA_FORCE_REFRESH, false) == true
@@ -413,24 +467,49 @@ class LocationTrackingService : Service() {
         }
     }
 
-    // Profile resolution:
-    //  - SOS/refresh boost aktivan → BURST (najbrži interval) bez obzira na settings
-    //  - Battery mode MAX → HIGH
-    //  - Battery < 15% i ne puni se → LOW_THROTTLED (×2 default interval)
-    //  - Default → LOW
+    // Profile resolution (prioritetom):
+    //  1. SOS/refresh boost aktivan → BURST (najbrži interval) bez obzira na sve
+    //  2. Battery mode MAX → HIGH (eksplicitno opt-in)
+    //  3. Battery < 15% i ne puni se → LOW_THROTTLED (×2 default interval)
+    //  4. Activity Recognition daje sigurnu detekciju → per-activity profil
+    //     (VEHICLE/BICYCLE/WALKING/STILL)
+    //  5. Default → LOW
     private fun computeProfile(settings: UserSettings): LocationProfile {
         val now = System.currentTimeMillis()
         if (now < sosBoostUntilMs || now < refreshBoostUntilMs) return LocationProfile.BURST
         if (settings.batteryMode == BatteryMode.MAX) return LocationProfile.HIGH
         val (battery, charging) = readBattery()
-        if (battery in 0..LOW_BATTERY_THRESHOLD && !charging) return LocationProfile.LOW_THROTTLED
-        return LocationProfile.LOW
+        val lowBatt = battery in 0..LOW_BATTERY_THRESHOLD && !charging
+        if (lowBatt) return LocationProfile.LOW_THROTTLED
+        return profileForActivity(detectedActivity) ?: LocationProfile.LOW
+    }
+
+    private fun profileForActivity(act: Int): LocationProfile? = when (act) {
+        DetectedActivity.IN_VEHICLE -> LocationProfile.VEHICLE
+        DetectedActivity.ON_BICYCLE -> LocationProfile.BICYCLE
+        DetectedActivity.RUNNING, DetectedActivity.WALKING, DetectedActivity.ON_FOOT -> LocationProfile.WALKING
+        DetectedActivity.STILL -> LocationProfile.STILL
+        // TILTING, UNKNOWN — ambiguous, fallback na LOW (return null)
+        else -> null
+    }
+
+    private fun activityName(type: Int): String = when (type) {
+        DetectedActivity.IN_VEHICLE -> "VEHICLE"
+        DetectedActivity.ON_BICYCLE -> "BICYCLE"
+        DetectedActivity.ON_FOOT -> "ON_FOOT"
+        DetectedActivity.WALKING -> "WALKING"
+        DetectedActivity.RUNNING -> "RUNNING"
+        DetectedActivity.STILL -> "STILL"
+        DetectedActivity.TILTING -> "TILTING"
+        DetectedActivity.UNKNOWN -> "UNKNOWN"
+        else -> "OTHER($type)"
     }
 
     override fun onDestroy() {
         try {
             fused.removeLocationUpdates(locationCallback)
         } catch (_: Exception) { /* no-op */ }
+        unregisterActivityRecognition()
         scope.cancel()
         isRunning.set(false)
         super.onDestroy()
@@ -477,9 +556,17 @@ class LocationTrackingService : Service() {
         BURST(intervalMs = 60_000L, fastestMs = 30_000L, displacementM = 0f),
         /** Battery mode MAX — eksplicitno opt-in. */
         HIGH(intervalMs = 300_000L, fastestMs = 120_000L, displacementM = 100f),
-        /** Default — battery-friendly. */
+        /** Activity Recognition: VEHICLE — vozi se, treba česti fix (1.5min). */
+        VEHICLE(intervalMs = 90_000L, fastestMs = 45_000L, displacementM = 0f),
+        /** Activity Recognition: BICYCLE — biciklira, srednji interval (2min). */
+        BICYCLE(intervalMs = 120_000L, fastestMs = 60_000L, displacementM = 30f),
+        /** Activity Recognition: WALKING / RUNNING / ON_FOOT — hoda (4min). */
+        WALKING(intervalMs = 240_000L, fastestMs = 120_000L, displacementM = 30f),
+        /** Default — battery-friendly. Activity nepoznata ili TILTING. */
         LOW(intervalMs = 900_000L, fastestMs = 600_000L, displacementM = 300f),
-        /** Battery < 15% i ne puni se — ×2 interval, štedi za vlasnika. */
+        /** Activity Recognition: STILL — stoji/sedi, retko (20min). */
+        STILL(intervalMs = 1_200_000L, fastestMs = 600_000L, displacementM = 500f),
+        /** Battery < 15% i ne puni se — najređi interval (30min), štedi vlasniku. */
         LOW_THROTTLED(intervalMs = 1_800_000L, fastestMs = 900_000L, displacementM = 500f),
     }
 
@@ -505,6 +592,14 @@ class LocationTrackingService : Service() {
         const val LOW_BATTERY_THRESHOLD = 15
         private const val EXTRA_FORCE_REFRESH = "force_refresh"
         private const val EXTRA_SOS_BOOST = "sos_boost"
+        const val EXTRA_ACTIVITY_CHANGED = "activity_changed"
+        private const val ACTIVITY_RECOGNITION_REQUEST_CODE = 4242
+
+        /**
+         * Trenutno detektovana korisnička aktivnost (DetectedActivity constants).
+         * Pisana iz ActivityRecognitionReceiver-a, čitana iz computeProfile.
+         */
+        @Volatile var detectedActivity: Int = DetectedActivity.UNKNOWN
 
         /** Live-process flag. Worker chita ovo da preskoči start ako je FGS već živ. */
         val isRunning = AtomicBoolean(false)

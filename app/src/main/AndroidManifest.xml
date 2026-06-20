@@ -21,6 +21,12 @@
     <!-- Vibracija za SOS notifikaciju -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Activity Recognition — Google's API koristi senzore (akcelerometar) da detektuje
+         hodanje/vožnju/mirovanje. FGS koristi to da prilagodi interval GPS-a (čuva bateriju
+         kad se ne kreće, češći fix kad vozi). A10+ traži runtime permission. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" />
+
     <!-- SOS full-screen notifikacija — budi ekran kad telefon zaključan. -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
@@ -50,6 +56,11 @@
             android:name=".core.location.LocationTrackingService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <!-- Activity Recognition receiver — Google detect transition broadcasts. -->
+        <receiver
+            android:name=".core.location.ActivityRecognitionReceiver"
+            android:exported="false" />
 
         <!-- Boot + package replaced receiver — restart FGS automatski. -->
         <receiver
