@@ -62,6 +62,8 @@ fun KrugNavHost() {
                 onOpenCircles = { nav.navigate(CircleList) },
                 onOpenSettings = { nav.navigate(Settings) },
                 onOpenCircleDetail = { circleId -> nav.navigate(CircleDetail(circleId)) },
+                onCreateCircle = { nav.navigate(CreateCircle) },
+                onJoinByCode = { nav.navigate(EnterCode()) },
             )
         }
         composable<Settings> {

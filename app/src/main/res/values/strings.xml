@@ -67,6 +67,7 @@
     <string name="create_circle_icon_label">Ikonica</string>
     <string name="create_circle_create_cta">Napravi</string>
     <string name="create_circle_error_empty">Ime kruga ne može biti prazno</string>
+    <string name="create_circle_error_duplicate">Već imaš krug sa tim imenom</string>
     <string name="create_circle_error_generic">Greška pri kreiranju kruga. Pokušaj ponovo</string>
 
     <!-- Show invite -->

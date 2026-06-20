@@ -48,6 +48,8 @@ data class MapUiState(
     val selfSosActive: Boolean = false,
     val myCircles: List<CircleBrief> = emptyList(),
     val activeCircleId: String? = null,
+    /** True nakon prvog Firestore snapshot-a — sprečava flicker empty-state CTA dok se ne učita. */
+    val circlesLoaded: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -156,6 +158,7 @@ class MapViewModel @Inject constructor(
                     selfSosActive = self?.sos != null,
                     myCircles = briefs,
                     activeCircleId = active?.id,
+                    circlesLoaded = true,
                 )
             }
         }

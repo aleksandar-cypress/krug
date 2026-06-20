@@ -83,15 +83,18 @@ fun CreateCircleScreen(
                 onValueChange = viewModel::setName,
                 label = { Text(stringResource(R.string.create_circle_name_label)) },
                 placeholder = { Text(stringResource(R.string.create_circle_name_placeholder)) },
-                isError = state.nameError,
+                isError = state.nameError || state.duplicateError,
                 supportingText = {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text(
-                            if (state.nameError) stringResource(R.string.create_circle_error_empty)
-                            else "",
+                            text = when {
+                                state.duplicateError -> stringResource(R.string.create_circle_error_duplicate)
+                                state.nameError -> stringResource(R.string.create_circle_error_empty)
+                                else -> ""
+                            },
                         )
                         Text("${state.name.length}/${CreateCircleViewModel.NAME_MAX_LENGTH}")
                     }

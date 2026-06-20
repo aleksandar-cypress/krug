@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.AccessTime
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.ChildCare
 import androidx.compose.material.icons.outlined.Group
@@ -79,6 +80,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.MapView
@@ -126,6 +128,8 @@ fun MapScreen(
     onOpenCircles: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenCircleDetail: (circleId: String) -> Unit = {},
+    onCreateCircle: () -> Unit = {},
+    onJoinByCode: () -> Unit = {},
     viewModel: MapViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -211,6 +215,23 @@ fun MapScreen(
         mapViewState.updateSosRipples(activeSosMembers, sosPhase)
     }
 
+    // Update pulse — kratak vizuelni "tap" oko markera kad mu se ažurira lokacija.
+    // Tracking last observed updatedAt per uid; kad se uid-ova vrednost poveća, pokreni
+    // one-shot animaciju (suptilan scale + fade). Bez pulse na inicijalnu vrednost.
+    val lastObservedUpdate = remember { mutableStateMapOf<String, Long>() }
+    LaunchedEffect(state.members.map { "${it.uid}:${it.location?.updatedAt ?: 0L}" }) {
+        val scope = this
+        state.members.forEach { member ->
+            val loc = member.location ?: return@forEach
+            val prev = lastObservedUpdate[member.uid]
+            lastObservedUpdate[member.uid] = loc.updatedAt
+            // Inicijalna observacija — nema pulse-a (samo zapamtimo baseline).
+            if (prev != null && loc.updatedAt > prev && member.sos == null) {
+                scope.launch { mapViewState.runUpdatePulse(loc.lng, loc.lat) }
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         MapboxContainer(members = state.members, photoCache = photoCache, holder = mapViewState)
 
@@ -224,9 +245,12 @@ fun MapScreen(
             TopFloatingBar(
                 circles = state.myCircles,
                 activeCircleId = state.activeCircleId,
+                circlesLoaded = state.circlesLoaded,
                 onOpenCircles = onOpenCircles,
                 onOpenPicker = { circlePickerVisible = true },
                 onOpenSettings = onOpenSettings,
+                onCreateCircle = onCreateCircle,
+                onJoinByCode = onJoinByCode,
             )
             if (activeSosMembers.isNotEmpty()) {
                 Spacer(Modifier.size(12.dp))
@@ -256,15 +280,19 @@ fun MapScreen(
                 .padding(end = 16.dp, bottom = 44.dp),
         )
 
-        MembersPill(
-            members = state.members,
-            photoCache = photoCache,
-            onClick = { sheetVisible = true },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 36.dp),
-        )
+        // Bez krugova MembersPill nema šta da prikaže — sakriti dok user ne napravi prvi krug.
+        // Plus dok se ne učita state, ne renderujemo (sprečava flicker).
+        if (state.circlesLoaded && state.myCircles.isNotEmpty()) {
+            MembersPill(
+                members = state.members,
+                photoCache = photoCache,
+                onClick = { sheetVisible = true },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 36.dp),
+            )
+        }
 
         if (sheetVisible) {
             ModalBottomSheet(
@@ -308,7 +336,12 @@ fun MapScreen(
                     },
                     onRefresh = {
                         haptic()
-                        pendingRefocus = detailMember.uid to System.currentTimeMillis()
+                        // Baseline = CURRENT updatedAt (server timestamp) u trenutku tap-a.
+                        // Kasnije poređenje `loc.updatedAt > baseline` uvek koristi server
+                        // vreme (ne device clock koje može biti skewed); kad stigne sveži
+                        // fix sa novim server timestamp-om, automatski flyTo.
+                        val baseline = detailMember.location?.updatedAt ?: 0L
+                        pendingRefocus = detailMember.uid to baseline
                         if (detailMember.isSelf) {
                             LocationTrackingService.refreshSelf(context)
                         } else {
@@ -410,14 +443,88 @@ private fun Modifier.krugGlass(shape: Shape): Modifier = this
 private fun TopFloatingBar(
     circles: List<CircleBrief>,
     activeCircleId: String?,
+    circlesLoaded: Boolean,
     onOpenCircles: () -> Unit,
     onOpenPicker: () -> Unit,
     onOpenSettings: () -> Unit,
+    onCreateCircle: () -> Unit,
+    onJoinByCode: () -> Unit,
 ) {
     val active = circles.firstOrNull { it.id == activeCircleId } ?: circles.firstOrNull()
     val pillLabel = active?.name ?: stringResource(R.string.map_title)
-    val onPillClick: () -> Unit = if (circles.isEmpty()) onOpenCircles else onOpenPicker
     val pillShape = RoundedCornerShape(28.dp)
+
+    // Empty state CTA samo kada smo SIGURNI da nema krugova (Firestore snapshot stigao).
+    if (circlesLoaded && circles.isEmpty()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .shadow(elevation = 16.dp, shape = pillShape, clip = false)
+                        .clip(pillShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(Color(0xFF6366F1), Color(0xFF818CF8)),
+                            ),
+                        )
+                        .clickable(onClick = onCreateCircle)
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.22f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Add,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = "Napravi prvi krug",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = Color.White,
+                    )
+                }
+                CircleIconButton(
+                    icon = Icons.Outlined.Settings,
+                    description = stringResource(R.string.settings_title),
+                    onClick = onOpenSettings,
+                )
+            }
+            // Secondary path — user koji je dobio kod ide direktno na EnterCode.
+            Spacer(Modifier.height(10.dp))
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Color.White.copy(alpha = 0.85f),
+                shadowElevation = 6.dp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable(onClick = onJoinByCode),
+            ) {
+                Text(
+                    text = "Imam pozivnicu →",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
+        }
+        return
+    }
+
+    val onPillClick: () -> Unit = onOpenPicker
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -846,6 +953,38 @@ private class MapViewHolder {
                 .build(),
             MapAnimationOptions.mapAnimationOptions { duration(1200L) },
         )
+    }
+
+    /**
+     * Kratak "tap" pulse oko markera kad mu lokacija osveži — suptilan vizuelni signal
+     * "kreće se / svež update". One-shot, traje ~800ms. Pokreće se iz MapScreen-a kad
+     * detektuje povećan updatedAt za uid (LaunchedEffect-om). Self-uid pulse-uje takođe.
+     */
+    suspend fun runUpdatePulse(lng: Double, lat: Double) {
+        val mgr = circleManager ?: return
+        val ann = mgr.create(
+            CircleAnnotationOptions()
+                .withPoint(Point.fromLngLat(lng, lat))
+                .withCircleRadius(10.0)
+                .withCircleColor("#818CF8") // indigo accent
+                .withCircleOpacity(0.55)
+                .withCircleStrokeWidth(1.5)
+                .withCircleStrokeColor("#6366F1")
+                .withCircleStrokeOpacity(0.65),
+        )
+        val totalMs = 800L
+        val steps = 24
+        val stepMs = totalMs / steps
+        for (i in 1..steps) {
+            val phase = i.toFloat() / steps
+            ann.circleRadius = 10.0 + 32.0 * phase
+            val alpha = 0.55 * (1.0 - phase).coerceAtLeast(0.0)
+            ann.circleOpacity = alpha
+            ann.circleStrokeOpacity = alpha
+            runCatching { mgr.update(ann) }
+            kotlinx.coroutines.delay(stepMs)
+        }
+        runCatching { mgr.delete(ann) }
     }
 
     /**

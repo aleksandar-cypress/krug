@@ -21,6 +21,9 @@
     <!-- Vibracija za SOS notifikaciju -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- SOS full-screen notifikacija — budi ekran kad telefon zaključan. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
     <!-- Battery exemption (optional, but FGS reliability) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -63,6 +66,8 @@
             android:name=".MainActivity"
             android:exported="true"
             android:screenOrientation="portrait"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:theme="@style/Theme.Krug">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

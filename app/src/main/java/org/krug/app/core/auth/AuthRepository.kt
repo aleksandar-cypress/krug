@@ -124,11 +124,19 @@ class AuthRepository @Inject constructor(
     }
 
     suspend fun signOut(activityContext: Context) {
+        // Bounce RTDB konekciju PRE signOut-a — drops aktivne ValueEventListenere koji
+        // su zakačeni sa starim auth token-om. Bez ovog, listeneri mogu da prožive
+        // tranziciju (Firebase ih ne raskida automatski na auth change) i pokušaju
+        // read sa stale token-om što vraća "Permission denied".
+        runCatching { FirebaseDatabase.getInstance().goOffline() }
+            .onFailure { Timber.w(it, "RTDB goOffline before signOut failed") }
         firebaseAuth.signOut()
         runCatching {
             CredentialManager.create(activityContext)
                 .clearCredentialState(androidx.credentials.ClearCredentialStateRequest())
         }.onFailure { Timber.w(it, "clearCredentialState failed") }
+        // Ostavljamo RTDB offline; kad korisnik ponovo signIn, refreshDatabaseAuth()
+        // poziva goOnline() pa konekcija oživi sa novim token-om.
     }
 
     /**

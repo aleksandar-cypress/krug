@@ -78,6 +78,19 @@ class CircleRepository @Inject constructor(
         return uid in circle.memberIds
     }
 
+    /** True ako user već poseduje krug sa tim imenom (case-insensitive, trim). */
+    suspend fun hasOwnedCircleNamed(ownerUid: String, name: String): Boolean {
+        val target = name.trim().lowercase()
+        if (target.isEmpty()) return false
+        val snap = runCatching {
+            circles().whereEqualTo("ownerId", ownerUid).get().await()
+        }.getOrNull() ?: return false
+        return snap.documents.any { doc ->
+            val docName = doc.getString("name")?.trim()?.lowercase()
+            docName == target
+        }
+    }
+
     /** Add user to circle.memberIds + create members subdoc. Used by InviteRepository on accept. */
     suspend fun joinCircle(circleId: String, uid: String, asChild: Boolean = false) {
         firestore.runTransaction { tx ->

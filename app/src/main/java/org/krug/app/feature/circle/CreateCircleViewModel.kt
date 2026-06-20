@@ -20,6 +20,8 @@ data class CreateCircleUiState(
     val selectedIcon: String = CirclePresets.icons.first(),
     val creating: Boolean = false,
     val nameError: Boolean = false,
+    /** True ako user već ima krug sa istim imenom — UI prikazuje "Već imaš krug sa tim imenom". */
+    val duplicateError: Boolean = false,
     val genericError: String? = null,
     val createdCircleId: String? = null,
 )
@@ -34,7 +36,9 @@ class CreateCircleViewModel @Inject constructor(
     val state: StateFlow<CreateCircleUiState> = _state.asStateFlow()
 
     fun setName(value: String) = _state.update {
-        it.copy(name = value.take(NAME_MAX_LENGTH), nameError = false)
+        // Bilo kakva izmena imena resetuje nameError i duplicateError — user dobija
+        // čisto polje dok kuca.
+        it.copy(name = value.take(NAME_MAX_LENGTH), nameError = false, duplicateError = false)
     }
     fun setColor(value: String) = _state.update { it.copy(selectedColor = value) }
     fun setIcon(value: String) = _state.update { it.copy(selectedIcon = value) }
@@ -48,8 +52,16 @@ class CreateCircleViewModel @Inject constructor(
         }
         val uid = authRepository.currentUser?.uid ?: return
         if (_state.value.creating) return
-        _state.update { it.copy(creating = true) }
+        _state.update { it.copy(creating = true, duplicateError = false) }
         viewModelScope.launch {
+            // Spreči duplikat — user već poseduje krug sa istim imenom.
+            val isDuplicate = runCatching {
+                circleRepository.hasOwnedCircleNamed(uid, trimmed)
+            }.getOrDefault(false)
+            if (isDuplicate) {
+                _state.update { it.copy(creating = false, duplicateError = true) }
+                return@launch
+            }
             runCatching {
                 circleRepository.createCircle(
                     ownerUid = uid,

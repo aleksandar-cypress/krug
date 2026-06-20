@@ -75,6 +75,10 @@ class SosNotifier @Inject constructor(
             .setColorized(true)
             .setAutoCancel(true)
             .setContentIntent(pi)
+            // FullScreenIntent budi ekran kada je telefon zaključan — kritično za SOS.
+            // Kombinacija sa MainActivity android:showWhenLocked + android:turnScreenOn.
+            // CATEGORY_ALARM nam daje USE_FULL_SCREEN_INTENT permission auto-grant na A14+.
+            .setFullScreenIntent(pi, true)
             .setOngoing(false)
             // Belt-and-suspenders za pre-O — na O+ channel je autoritativan, ali ne škodi.
             // Na O+ Samsung One UI ipak može da silence-uje sve, pa imamo i direktan

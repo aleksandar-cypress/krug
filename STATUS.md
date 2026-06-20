@@ -2,7 +2,184 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-20, šesta sesija — UX polish + circle identity)
+## Gde smo stali (2026-06-20, sedma sesija — child mode + onboarding 3 koraka)
+
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `8a1c003`.
+Firebase rules: Firestore + RTDB **deployovane** sa novim child mode + paused field validatorima.
+A37 + Xiaomi Mi 11 oba sa najnovijim build-om. Beta grupa nepromenjena (aleksandarr + jelenavasilic84), **nije** ponovo distribuirano.
+
+## Sedma sesija (2026-06-20 popodne) — child mode, onboarding 3 koraka, paused sharing
+
+### Child mode v1 (per-circle, client-side enforce)
+- **`MemberModel +isChild: Boolean = false`** (Firestore subcollection circles/{cid}/members/{uid}).
+- **`CircleRepository.setChildStatus(cid, uid, isChild)`** — owner-only operacija.
+- **`CircleRepository.observeMembersChildMap(cid)`** — live `uid → isChild` map, koristi se u CircleDetail i MapViewModel.
+- **`CircleRepository.observeUserIsChildAnywhere(uid)`** — vraća true ako self ima isChild=true u BAR JEDNOM krugu (aggregacija kroz sve krugove).
+- **Firestore rules update** (deployed): owner sme da menja SAMO `isChild` field na `circles/{cid}/members/{uid}` — nikad role, shareLocation, itd.
+- **UI:**
+  - **CircleDetailScreen MemberRow** — owner vidi 3-dot menu na ostalim članovima (ne self) sa opcijom "Označi kao dete" / "Ukloni oznaku deteta". `ChildCare` ikona pored imena + "Dete" label za markirane članove.
+  - **PrivacyScreen** — ako `observeUserIsChildAnywhere == true`, banner "Roditeljska kontrola aktivna" + Switch disabled (ne može da pauzira deljenje). Defensive: `setShareGlobal` early-return ako je child.
+  - **AccountScreen** — "Obriši nalog" dugme sakriveno ako je child anywhere. Defensive: `deleteAccount()` viewmodel-side `if (isChildAnywhere) return`.
+  - **CircleDetailScreen** — "Izađi iz kruga" sakriveno + child banner ako je self označen kao dete u tom krugu.
+  - **MembersSheet / MemberDetailSheet (mapa)** — ChildCare ikona pored imena (16dp u listi, 20dp u detail header-u).
+- **`MemberWithLocation +isChild`** — `MapViewModel.combineForUser` observ-uje active circle's childMap i prosleđuje.
+
+### Child invite flow (no race)
+- **`InviteModel +prefillIsChild: Boolean = false`** — owner pri kreiranju invite-a bira da li je za dete.
+- **`InviteRepository.createInvite(cid, uid, prefillIsChild=false)`** — piše flag u Firestore.
+- **`CircleRepository.joinCircle(cid, uid, asChild=false)`** — pri accept-u, ako je invite prefillIsChild=true, member doc se kreira sa `isChild=true` ODMAH.
+- **CircleDetailScreen — owner vidi DVA dugmeta:**
+  - Primary "Pozovi članove" (filled)
+  - Outlined "Pozovi dete (roditeljska kontrola)" sa ChildCare ikonom
+- Eliminisan prozor između accept-a i ručnog markiranja gde bi dete moglo da isključi sharing ili obriše nalog.
+
+### CreateCircle flow refactor
+- **Pre:** `submit()` → kreira krug + invite atomarno → ide direktno na ShowInvite sa kodom.
+- **Sada:** `submit()` samo kreira krug → `onCreated(circleId)` → navigate na **CircleDetail** → user tamo bira tip invite-a.
+- `CreateCircleViewModel`: uklonjen `inviteRepository` dependency.
+- `CreateCircleScreen.onCreated` callback signature: `(circleId: String) -> Unit`.
+- KrugNavHost reroute: `CreateCircle → CircleDetail` (umesto ShowInvite).
+- Razlog: bez ovog, prvi invite kod nakon "Napravi krug" je uvek non-child — vlasnik nije imao priliku da označi prvi invite kao dečji.
+
+### Paused sharing visible to peers
+- **Problem:** kad Xiaomi user isključi Privacy → shareLocationGlobal toggle, peers su i dalje videli njegov stari pin do isteka 15min staleness threshold-a. Plus Samsung tap-a "Osveži lokaciju" i ništa se ne događa (Xiaomi FGS `if (!shareGlobal) return`).
+- **Fix:**
+  - `LocationModel +paused: Boolean = false`
+  - `LocationRepository.setPaused(uid, paused)` — piše SAMO `paused` child field u RTDB (ne dira lat/lng — peers zadržavaju last-known za "Otvori u Google Maps"). Kad un-pause, ažurira i `updatedAt = now`.
+  - `PrivacyViewModel.setShareGlobal()` poziva i `locationRepository.setPaused(uid, !value)` paralelno sa Firestore settings update.
+  - `MemberWithLocation.isPrivate()` PROVERAVA `location.paused` PRE 15min staleness check-a — peers vide "Privatni mod" odmah.
+  - **`database.rules.json`** update (deployed): `paused` field validator `newData.isBoolean()`.
+
+### Onboarding 6 → 3 koraka
+- **Pre:** INTRO → LOCATION → BACKGROUND_LOCATION → NOTIFICATIONS → BATTERY → DONE
+- **Sada:** **INTRO → LOCATION (combined fg+bg) → NOTIFICATIONS** (auto-complete)
+- **Drop:**
+  - `BATTERY` page — defer u Settings → Baterija (već postoji).
+  - `DONE` page (AllSetPage) — auto-navigate u Map čim notifications grant-uje (`goNext()` u poslednjem step-u poziva `viewModel.complete()` direktno).
+- **Combined LOCATION page (state machine):**
+  - Faza 1: foreground location (sistemski dialog za ACCESS_FINE/COARSE_LOCATION).
+  - Faza 2: background location — koristi `ACCESS_BACKGROUND_LOCATION` permission launcher (Android A11+ automatski redirektuje u app Settings → Location). Polling + ON_RESUME pokupe rezultat.
+  - **"Preskoči" dugme** se prikazuje POSLE prvog tap-a na background grant (`bgAttempted = true`) — sprečava da user ostane zaglavljen ako ne ume da promeni "While in use" → "Allow all the time" u system settings-u (česti UX problem na MIUI).
+- **IntroPage duplikacija fix:** prvi feature row je ponavljao welcome title+body (već u hero bloku iznad). Uklonjen — ostaju samo "Kako Krug radi" + "Privatnost" row-ovi.
+
+### Notifications mandatory (peta sesija fix completed)
+- Već bilo započeto, ali sad je čisto: `NotificationsPermissionPage` nema više "Preskoči" secondary. Posle dva odbijanja sistema (`shouldShowRequestPermissionRationale=false`), primary CTA se prebacuje na "Otvori sistemska podešavanja".
+
+### Friendly device names (Samsung + Xiaomi)
+- `core/util/DeviceNames.kt` — mapira `Build.MODEL` (cryptic kod) na ljudski naziv.
+- **Samsung Galaxy:** S20 → S24 Ultra, A37 → A54, Z Fold/Flip, Note 20.
+- **Xiaomi/Redmi/POCO:** Mi 11/12/13/14, Redmi Note 11/12, POCO F3/X3. Bez "Lite/NE/5G" suffixa (user feedback — nepotrebno).
+- **Live transform u MapViewModel.memberFlow** — radi i za postojeće user-e bez re-sign-in.
+- **`UserRepository.upsertOnSignIn`** fallback name koristi friendly oblik (novi sign-in piše friendly u Firestore direktno).
+- **UI dedup:** MemberRow + MemberDetailSheet skip device subtitle ako je `displayName == deviceModel` (anon user bez nicknamea — top + bottom bi bili isti).
+
+### SOS ripple animation
+- **`MapViewHolder +circleManager: CircleAnnotationManager`** — kreiran PRE point annotation manager-a (renderuje se ispod pinova).
+- `updateSosRipples(sosMembers, phase)` — kreira/update-uje/briše CircleAnnotation per uid.
+- Compose `rememberInfiniteTransition` driver-uje `phase` 0..1 u 2s ciklusu.
+- Radius: 20px → 80px, opacity: 0.5 → 0 kroz fazu. Boja `#DC2626` (SOS red).
+- `LaunchedEffect(activeSosMembers, sosPhase)` triggera `mapViewState.updateSosRipples`.
+
+### Haptics
+- `LocalView.current.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)` — kratak lagani tick.
+- Aplicirano na: pin tap, MembersSheet member row tap, SosFab, "Osveži lokaciju", Circle picker pick.
+
+### Map style follows system theme
+- Pre: `pickMapStyle()` hour-based (7-19h STANDARD, inače DARK) — konflikt sa Mapbox Standard auto-adaptacijom.
+- Sada: uvek `Style.STANDARD` koji **prati system theme** (system Dark mode → tamna mapa). User kontroliše kroz Display settings na uređaju.
+
+### Zoom 14 → 16.5 na klik
+- `MapViewHolder.flyTo` koristi zoom 16.5 (umesto 14) na klik člana ili SOS banner — bliža auto-fokus na inspekciju.
+
+### Landscape lock
+- `AndroidManifest.xml` MainActivity `android:screenOrientation="portrait"` — nema rotacije, smatra se mobile-only app.
+
+### Battery icon + color
+- `BatteryBadge` composable: ikona (BatteryFull / BatteryChargingFull ako se puni) + procenat sa color tier:
+  - ≥50% zelena `#10B981`
+  - 20-49% žuta `#F59E0B`
+  - <20% crvena `#EF4444`
+- Aplicirano u MemberRow (MembersSheet) i StatChip "Baterija" u MemberDetailSheet.
+
+### MemberDetail chip polish
+- **Pre:** "Poslednje" chip imao value "pre 5 min" / "poslednji put viđen pre više od dana" — drugi se lomio u dva reda.
+- **Sada:** `compactLastSeen()` helper vraća **"sad" / "5m" / "2h" / "1d+"** (uvek single-line). `lastSeenLabel()` (full) ostaje za MembersSheet gde ima prostora.
+- StatChip composable: `maxLines = 1`, `overflow = Ellipsis` na label i value. Padding 14dp → 10dp horizontal.
+- "Udaljenost" → "Udaljen" (kraće za chip).
+
+### Photo u MembersSheet rowovima
+- `MemberRow` prima `photo: Bitmap?` iz photoCache (postojeći Coil-loaded photo za markere).
+- Ako photo postoji, render Image u avatar krug; inače inicijal.
+
+### Refresh auto-refocus
+- Kad user tapne "Osveži lokaciju" za drugog člana, `pendingRefocus = (uid, since)` se postavi.
+- `LaunchedEffect(pendingRefocus, state.members)` watcher-uje za novi `updatedAt > since` na tom uid-u → flyTo automatski → clear pending.
+- 30s timeout — ako fresh fix ne stigne, drop pending (target FGS ubijen, sharing paused, itd.).
+
+### Diagnostics screen (debug-only)
+- `Settings → Dijagnostika (debug)` — vidljiv samo u `BuildConfig.DEBUG`.
+- 4 sekcije: FGS state (isRunning, lastPublishAt, publishAgo), Permissions, Identity (uid truncated, providerId, isAnonymous, email), Uređaj (rawModel, friendlyName, androidVersion).
+- "Osveži" dugme (live re-read) + "Kopiraj sve" (ClipboardManager) — beta testeri mogu jednim paste-om da pošalju dijagnostiku.
+
+### AuthScreen redesign
+- Indigo gradient backdrop UKLONJEN → **bela pozadina**.
+- Logo 180dp → **220dp**, bez Surface wrapper-a.
+- "Krug" naslov sad u **indigo** umesto belo.
+- Google dugme: bela bg + indigo text → **indigo bg + bela text** (jasniji kontrast na beloj pozadini).
+- Email dugme: indigo outlined.
+
+### Splash icon veći
+- `drawable/ic_splash_icon.xml` inset **28dp → 10dp** (~60% veći logo na splash-u).
+
+### Novi logo
+- `logo.png` u root-u, 1254×1254 PNG, 4 vibrant figure (umesto starih 6) raspoređene u krug — čistiji dizajn.
+- Kopiran u `drawable-nodpi/krug_logo.png` i `logo-krug.png` (root reference).
+
+### "+ Napravi krug" gradient FAB
+- `CircleListScreen` ExtendedFAB → custom `CreateCircleFab` (indigo gradient pill, 36dp + ikon u beloj prozirnoj kapsuli, jak shadow).
+- EmptyState button → `CreateCircleButton` (full-width gradient varijanta).
+
+### CircleList + CircleDetail render iconKey
+- `CircleListScreen.CircleRow` — color disc povećan 40dp → 44dp, ikona kruga unutar (CircleIconAssets.forKey).
+- `CircleDetailScreen.CircleHeader` — hardcoded `Icons.Outlined.Group` zamenjen sa `CircleIconAssets.forKey(state.iconKey)`.
+- `CircleBrief +iconKey` + propagacija kroz MapViewModel.combineForUser.
+- `CircleDetailUiState +iconKey` + load iz CircleModel.
+
+### CreateCircle: 6 boja + 4 ikone u jednom redu (edge-to-edge)
+- **`CirclePresets.colors`** suženo 8 → **6** (uklonjen cyan i orange — vizuelno bliski drugima).
+- **`CirclePresets.icons`** suženo 6 → **4**: Porodica, Drustvo, Putovanje, Događaj.
+- ColorPicker i IconPicker: **`Row(fillMaxWidth) + Arrangement.SpaceBetween`** umesto FlowRow + spacedBy. Stavke se ravnomerno raspoređu ivica-do-ivice.
+- Icon picker circles 48dp → **60dp** sa color preview kad selected.
+
+### EnterCode button visibility
+- **Bug:** "Pridruži se" dugme imao `Spacer(Modifier.weight(1f))` koji ga gurao na dno → tastatura ga prekrivala → user vidi "white screen" iznad keyboard-a.
+- **Fix:** uklonjen weight(1f), dodat `Modifier.imePadding()` na Column, dugme odmah ispod input polja.
+
+### Notifications text
+- `onb_notif_body`: "Obaveštenja su obavezna — bez njih nećete dobiti SOS od člana kruga koji traži hitnu pomoć" (jasnije zašto je obavezno).
+
+### Trailing tačke uklonjene iz UI stringova
+- 27 stringova u `strings.xml` + 6 hardcoded u Kotlin fajlovima — iOS-style čistije etikete.
+
+### Log noise → Crashlytics fixes
+- **BootReceiver** skip `MY_PACKAGE_REPLACED` na Android 14+ (FGS sa type=location iz background broadcast-a baca SecurityException).
+- **publishLocation + locationCallback**: `CancellationException` → debug nivo (ne warn) — FGS shutdown nije non-fatal za Crashlytics.
+- **LocationTrackingService.onCreate** SecurityException catch: warn → debug.
+
+### Sledeće sesije — preostalo
+- Sign-out cleanup (cancel RTDB listeners)
+- LocalLifecycleOwner deprecation (Compose 1.7)
+- Pin update pulse animation
+- Map empty state — inline "Napravi krug" CTA
+- About screen polish (verzija, copyright, logo)
+- Member nickname per circle ("Mama" u family, "Mira" u prijateljskom)
+- Release signing + Play Store internal testing
+- Google reauth flow za delete-account
+- "Podrži razvoj" link (čekamo više korisnika)
+- FCM SOS push (treba Blaze plan)
+- History trail / Places-Geofencing (postv1 feature-i)
+
+## Šesta sesija (2026-06-20, jutarnja) — UX polish + circle identity
 
 Repo public: **https://github.com/aleksandar-cypress/krug**
 GitHub Pages live: **https://aleksandar-cypress.github.io/krug/** (Privacy Policy + Terms)
