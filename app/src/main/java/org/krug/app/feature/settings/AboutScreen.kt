@@ -69,7 +69,7 @@ fun AboutScreen(onBack: () -> Unit) {
             Image(
                 painter = painterResource(R.drawable.krug_logo),
                 contentDescription = null,
-                modifier = Modifier.size(140.dp),
+                modifier = Modifier.size(190.dp),
             )
             Spacer(Modifier.size(16.dp))
             Text(
