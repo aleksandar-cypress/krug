@@ -78,14 +78,33 @@ class CircleRepository @Inject constructor(
         return uid in circle.memberIds
     }
 
-    /** True ako user već poseduje krug sa tim imenom (case-insensitive, trim). */
-    suspend fun hasOwnedCircleNamed(ownerUid: String, name: String): Boolean {
+    /** Owner-only update — ime, boja, ikona postojećeg kruga. Rules enforce-uju ownership. */
+    suspend fun updateCircleDetails(circleId: String, name: String, colorHex: String, iconKey: String) {
+        circle(circleId).update(
+            mapOf(
+                "name" to name.take(20),
+                "colorHex" to colorHex,
+                "iconKey" to iconKey,
+            ),
+        ).await()
+    }
+
+    /**
+     * True ako user već poseduje krug sa tim imenom (case-insensitive, trim).
+     * `excludeCircleId` se koristi pri edit-u — preskoči sam taj krug u check-u.
+     */
+    suspend fun hasOwnedCircleNamed(
+        ownerUid: String,
+        name: String,
+        excludeCircleId: String? = null,
+    ): Boolean {
         val target = name.trim().lowercase()
         if (target.isEmpty()) return false
         val snap = runCatching {
             circles().whereEqualTo("ownerId", ownerUid).get().await()
         }.getOrNull() ?: return false
         return snap.documents.any { doc ->
+            if (doc.id == excludeCircleId) return@any false
             val docName = doc.getString("name")?.trim()?.lowercase()
             docName == target
         }

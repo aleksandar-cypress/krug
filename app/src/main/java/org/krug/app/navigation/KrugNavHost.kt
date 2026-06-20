@@ -33,8 +33,10 @@ fun KrugNavHost() {
                 onSignedOut = {
                     nav.navigate(Auth) { popUpTo(Splash) { inclusive = true } }
                 },
-                onOnboardingPending = {
-                    nav.navigate(Onboarding) { popUpTo(Splash) { inclusive = true } }
+                onOnboardingPending = { skipIntro ->
+                    nav.navigate(Onboarding(skipIntro = skipIntro)) {
+                        popUpTo(Splash) { inclusive = true }
+                    }
                 },
                 onReady = {
                     nav.navigate(Map) { popUpTo(Splash) { inclusive = true } }
@@ -50,10 +52,14 @@ fun KrugNavHost() {
                 },
             )
         }
-        composable<Onboarding> {
+        composable<Onboarding> { entry ->
+            val args = entry.toRoute<Onboarding>()
             OnboardingScreen(
+                skipIntro = args.skipIntro,
                 onDone = {
-                    nav.navigate(Map) { popUpTo(Onboarding) { inclusive = true } }
+                    nav.navigate(Map) {
+                        popUpTo<Onboarding> { inclusive = true }
+                    }
                 },
             )
         }

@@ -15,5 +15,7 @@ enum class OnboardingPage {
     }
 }
 
-fun buildOnboardingPages(context: Context): List<OnboardingPage> =
-    OnboardingPage.entries.filter { it.isApplicable(context) }
+fun buildOnboardingPages(context: Context, skipIntro: Boolean = false): List<OnboardingPage> =
+    OnboardingPage.entries.filter {
+        it.isApplicable(context) && !(skipIntro && it == OnboardingPage.INTRO)
+    }

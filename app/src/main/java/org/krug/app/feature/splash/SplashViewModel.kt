@@ -22,7 +22,12 @@ import timber.log.Timber
 sealed interface SplashDecision {
     data object Loading : SplashDecision
     data object SignedOut : SplashDecision
-    data object OnboardingPending : SplashDecision
+    /**
+     * `skipIntro` = true ako je user već završio onboarding ranije (Firestore flag) ali su
+     * permission-i izgubljeni (reinstall, OEM revoke). Onboarding tada počinje direktno
+     * od LOCATION ekrana, bez INTRO welcome-a.
+     */
+    data class OnboardingPending(val skipIntro: Boolean) : SplashDecision
     data object Ready : SplashDecision
 }
 
@@ -62,19 +67,10 @@ class SplashViewModel @Inject constructor(
         // optional (onboarding ima "Preskoči" dugme) pa ih ne smemo tražiti ovde —
         // inače user koji je svesno odbio notifikacije završi u beskonačnoj onboarding
         // petlji.
-        if (!PermissionUtils.hasForegroundLocation(context)) {
-            Timber.d("Splash: foreground location missing — routing to onboarding")
-            _decision.value = SplashDecision.OnboardingPending
-            return
-        }
-        // Local flag short-circuits the Firestore round-trip so onboarding is not re-shown
-        // after sign-out/sign-in on the same device (esp. relevant for anonymous test users
-        // whose UID changes each session).
-        if (localPrefs.onboardingCompleted) {
-            _decision.value = SplashDecision.Ready
-            return
-        }
-        val onboardingDone = withTimeoutOrNull(SPLASH_TIMEOUT_MS) {
+        // Lazy: ako lokalni flag kaže "već prošao", verujemo (sprečava Firestore round-trip
+        // kod svakog sign-in-a u sesiji). Firestore se proverava samo ako lokalni nije set.
+        val onboardingDoneLocal = localPrefs.onboardingCompleted
+        val onboardingDone = if (onboardingDoneLocal) true else withTimeoutOrNull(SPLASH_TIMEOUT_MS) {
             try {
                 firestore.collection("users").document(user.uid).get().await()
                     .getBoolean("onboardingCompleted") == true
@@ -87,6 +83,18 @@ class SplashViewModel @Inject constructor(
             false
         }
         if (onboardingDone) localPrefs.onboardingCompleted = true
-        _decision.value = if (onboardingDone) SplashDecision.Ready else SplashDecision.OnboardingPending
+
+        // OS permissions se brišu uninstall-om dok Firestore i lokalni flag i dalje pamte
+        // da je onboarding završen. Ako nema permission-a → idemo u onboarding, ali ako je
+        // user već prošao onboarding ranije (returning user posle reinstall-a), skip INTRO
+        // welcome ekran — počinjemo odmah od LOCATION grant-a.
+        // Samo foreground location je obavezan; notifikacije su optional (mogu kasnije).
+        if (!PermissionUtils.hasForegroundLocation(context)) {
+            Timber.d("Splash: foreground location missing — onboarding (skipIntro=$onboardingDone)")
+            _decision.value = SplashDecision.OnboardingPending(skipIntro = onboardingDone)
+            return
+        }
+        _decision.value = if (onboardingDone) SplashDecision.Ready
+        else SplashDecision.OnboardingPending(skipIntro = false)
     }
 }

@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 // Top-level graph entries.
 @Serializable object Splash
 @Serializable object Auth
-@Serializable object Onboarding
+@Serializable data class Onboarding(val skipIntro: Boolean = false)
 @Serializable object Main
 
 // Main destinations.

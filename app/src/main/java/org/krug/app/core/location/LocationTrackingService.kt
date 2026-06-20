@@ -304,9 +304,21 @@ class LocationTrackingService : Service() {
             // re-fire, end of loop sa ~80ms petljom HIGH_ACCURACY GPS-a.
             locationRepository.observeRefreshRequests(uid).collect { requesters ->
                 if (requesters.isEmpty()) return@collect
-                Timber.d("Refresh request from ${requesters.size} member(s) — pulling fresh fix")
-                requestOneShotFix()
-                runCatching { locationRepository.clearRefreshRequests(uid, requesters) }
+                val now = System.currentTimeMillis()
+                // Razdvoji fresh (< 5min) od stale ping-ova. Stari se odbacuju (drop)
+                // bez triggering-a one-shot fix — sprečava reakciju na zaboravljene
+                // ping-ove kad je FGS bio ubijen pa se vratio sat kasnije.
+                val fresh = requesters.filter { (_, ts) -> now - ts < REFRESH_REQUEST_TTL_MS }
+                val stale = requesters.keys - fresh.keys
+                if (stale.isNotEmpty()) {
+                    Timber.d("Discarding ${stale.size} stale refresh request(s) older than ${REFRESH_REQUEST_TTL_MS / 60_000}min")
+                }
+                if (fresh.isNotEmpty()) {
+                    Timber.d("Refresh request from ${fresh.size} member(s) — pulling fresh fix")
+                    requestOneShotFix()
+                }
+                // Uvek čisti SVE entrije (fresh + stale) da ne ostaje smeća u RTDB.
+                runCatching { locationRepository.clearRefreshRequests(uid, requesters.keys) }
                     .onFailure { Timber.w(it, "Failed to clear refresh requests") }
             }
         }
@@ -398,6 +410,8 @@ class LocationTrackingService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ONE_SHOT_COOLDOWN_MS = 3 * 60_000L
         const val PUBLISH_FRESHNESS_MS = 12 * 60_000L
+        /** Refresh ping-ovi stariji od ovog se ignorišu (verovatno zaboravljeni od dead FGS-a). */
+        const val REFRESH_REQUEST_TTL_MS = 5 * 60_000L
         const val SOS_TTL_MS = 30 * 60_000L
         private const val EXTRA_FORCE_REFRESH = "force_refresh"
 

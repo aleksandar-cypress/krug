@@ -122,6 +122,22 @@ class CircleDetailViewModel @Inject constructor(
         }
     }
 
+    /** Owner-only edit. Vraća true ako je uspešno; false ako je duplikat ili greška. */
+    suspend fun updateDetails(name: String, colorHex: String, iconKey: String): Boolean {
+        val s = _state.value
+        if (!s.isOwner) return false
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return false
+        val uid = authRepository.currentUser?.uid ?: return false
+        val isDuplicate = runCatching {
+            circleRepository.hasOwnedCircleNamed(uid, trimmed, excludeCircleId = circleId)
+        }.getOrDefault(false)
+        if (isDuplicate) return false
+        return runCatching {
+            circleRepository.updateCircleDetails(circleId, trimmed, colorHex, iconKey)
+        }.onFailure { Timber.w(it, "updateCircleDetails failed for $circleId") }.isSuccess
+    }
+
     fun generateInvite(forChild: Boolean = false) {
         val uid = authRepository.currentUser?.uid ?: return
         if (_state.value.generatingInvite) return

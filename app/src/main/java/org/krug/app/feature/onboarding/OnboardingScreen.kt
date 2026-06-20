@@ -36,10 +36,11 @@ import org.krug.app.feature.onboarding.pages.NotificationsPermissionPage
 @Composable
 fun OnboardingScreen(
     onDone: () -> Unit,
+    skipIntro: Boolean = false,
     viewModel: OnboardingViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
-    val pages = remember { buildOnboardingPages(context) }
+    val pages = remember(skipIntro) { buildOnboardingPages(context, skipIntro = skipIntro) }
     val pagerState = rememberPagerState(pageCount = { pages.size })
     val scope = rememberCoroutineScope()
     val uiState by viewModel.state.collectAsStateWithLifecycle()

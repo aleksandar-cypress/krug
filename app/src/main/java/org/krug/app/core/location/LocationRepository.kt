@@ -73,13 +73,17 @@ class LocationRepository @Inject constructor(
         requestEntry(targetUid, requesterUid).setValue(ServerValue.TIMESTAMP).await()
     }
 
-    /** Sluša ping-ove poslate ovom user-u. Vraća set requesterUid-ova. */
-    fun observeRefreshRequests(ownUid: String): Flow<Set<String>> = callbackFlow {
+    /** Sluša ping-ove poslate ovom user-u. Vraća mapu requesterUid → timestamp. */
+    fun observeRefreshRequests(ownUid: String): Flow<Map<String, Long>> = callbackFlow {
         val ref = requestsRef(ownUid)
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val ids = snapshot.children.mapNotNull { it.key }.toSet()
-                trySend(ids)
+                val map = snapshot.children.mapNotNull { child ->
+                    val uid = child.key ?: return@mapNotNull null
+                    val ts = (child.value as? Long) ?: return@mapNotNull null
+                    uid to ts
+                }.toMap()
+                trySend(map)
             }
             override fun onCancelled(error: DatabaseError) = Unit
         }

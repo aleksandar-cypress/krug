@@ -14,17 +14,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @Composable
 fun SplashScreen(
     onSignedOut: () -> Unit,
-    onOnboardingPending: () -> Unit,
+    onOnboardingPending: (skipIntro: Boolean) -> Unit,
     onReady: () -> Unit,
     viewModel: SplashViewModel = hiltViewModel(),
 ) {
     val decision by viewModel.decision.collectAsStateWithLifecycle()
 
     LaunchedEffect(decision) {
-        when (decision) {
+        when (val d = decision) {
             SplashDecision.Loading -> Unit
             SplashDecision.SignedOut -> onSignedOut()
-            SplashDecision.OnboardingPending -> onOnboardingPending()
+            is SplashDecision.OnboardingPending -> onOnboardingPending(d.skipIntro)
             SplashDecision.Ready -> onReady()
         }
     }

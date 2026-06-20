@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.ChildCare
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material3.AlertDialog
@@ -42,7 +43,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,6 +68,9 @@ fun CircleDetailScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showLeaveConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showEditSheet by remember { mutableStateOf(false) }
+    val editSheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(state.leftOrDeleted) {
         if (state.leftOrDeleted) onLeftOrDeleted()
@@ -84,6 +90,13 @@ fun CircleDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
+                },
+                actions = {
+                    if (state.isOwner) {
+                        IconButton(onClick = { showEditSheet = true }) {
+                            Icon(Icons.Outlined.Edit, contentDescription = "Izmeni krug")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -266,6 +279,35 @@ fun CircleDetailScreen(
                 }
             },
         )
+    }
+
+    if (showEditSheet) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { showEditSheet = false },
+            sheetState = editSheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+        ) {
+            var saving by remember { mutableStateOf(false) }
+            var duplicateError by remember { mutableStateOf(false) }
+            EditCircleSheet(
+                initialName = state.circleName,
+                initialColor = state.colorHex,
+                initialIcon = state.iconKey,
+                saving = saving,
+                duplicateError = duplicateError,
+                onSave = { name, color, icon ->
+                    saving = true
+                    duplicateError = false
+                    coroutineScope.launch {
+                        val ok = viewModel.updateDetails(name, color, icon)
+                        saving = false
+                        if (ok) showEditSheet = false
+                        else duplicateError = true
+                    }
+                },
+                onCancel = { showEditSheet = false },
+            )
+        }
     }
 }
 
