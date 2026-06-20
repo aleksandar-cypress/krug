@@ -25,7 +25,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,8 +33,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -68,14 +65,10 @@ fun AuthScreen(
         }
     }
 
-    val backdrop = Brush.verticalGradient(
-        colors = listOf(BrandIndigo600, BrandIndigo500, Color(0xFF6366F1)),
-    )
-
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(backdrop),
+            .background(Color.White),
     ) {
         Column(
             modifier = Modifier
@@ -86,36 +79,25 @@ fun AuthScreen(
         ) {
             Spacer(Modifier.weight(0.8f))
 
-            Surface(
-                shape = RoundedCornerShape(48.dp),
-                color = Color.White,
-                shadowElevation = 16.dp,
-                modifier = Modifier.size(180.dp),
-            ) {
-                Box(
-                    modifier = Modifier.padding(12.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Image(
-                        painter = painterResource(R.drawable.krug_logo),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            }
+            // Bela pozadina → logo direktno (bez Surface wrapper-a), veći za WOW.
+            Image(
+                painter = painterResource(R.drawable.krug_logo),
+                contentDescription = null,
+                modifier = Modifier.size(220.dp),
+            )
 
             Spacer(Modifier.height(28.dp))
 
             Text(
                 text = "Krug",
                 style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-                color = Color.White,
+                color = BrandIndigo600,
             )
             Spacer(Modifier.height(6.dp))
             Text(
                 text = stringResource(R.string.auth_welcome_subtitle),
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.White.copy(alpha = 0.85f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Spacer(Modifier.weight(1f))
@@ -128,15 +110,15 @@ fun AuthScreen(
                     .heightIn(min = 56.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White,
-                    contentColor = BrandIndigo600,
+                    containerColor = BrandIndigo600,
+                    contentColor = Color.White,
                 ),
             ) {
                 if (state.isSigningIn) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
                         strokeWidth = 2.dp,
-                        color = BrandIndigo600,
+                        color = Color.White,
                     )
                     Spacer(Modifier.width(12.dp))
                 }
@@ -156,7 +138,7 @@ fun AuthScreen(
                     .heightIn(min = 56.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Color.White,
+                    contentColor = BrandIndigo600,
                 ),
             ) {
                 Text(
@@ -173,7 +155,7 @@ fun AuthScreen(
                 ) {
                     Text(
                         text = "Debug: anonimna prijava",
-                        color = Color.White.copy(alpha = 0.75f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelLarge,
                     )
                 }
@@ -182,9 +164,9 @@ fun AuthScreen(
             Spacer(Modifier.height(16.dp))
 
             Text(
-                text = "Tvoj krug, tvoja pravila.",
+                text = "Tvoj krug, tvoja pravila",
                 style = MaterialTheme.typography.labelMedium,
-                color = Color.White.copy(alpha = 0.55f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Spacer(Modifier.height(8.dp))

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,11 +20,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Group
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,8 +36,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -73,10 +75,9 @@ fun CircleListScreen(
         },
         floatingActionButton = {
             if (state.circles.isNotEmpty()) {
-                ExtendedFloatingActionButton(
+                CreateCircleFab(
+                    text = stringResource(R.string.circles_create_cta),
                     onClick = onCreate,
-                    icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
-                    text = { Text(stringResource(R.string.circles_create_cta)) },
                 )
             }
         },
@@ -129,19 +130,101 @@ private fun EmptyState(onCreate: () -> Unit, onJoin: () -> Unit) {
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.size(32.dp))
-        Button(
+        CreateCircleButton(
+            text = stringResource(R.string.circles_create_cta),
             onClick = onCreate,
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.circles_create_cta))
-        }
-        Spacer(Modifier.size(8.dp))
+        )
+        Spacer(Modifier.size(12.dp))
         OutlinedButton(
             onClick = onJoin,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(16.dp),
         ) {
             Text(stringResource(R.string.circles_join_cta))
         }
+    }
+}
+
+/**
+ * Premium FAB za "Napravi krug" — gradient pill sa belim "+" badge-om.
+ * Veći touch target (60dp) i jači shadow nego stock Material FAB.
+ */
+@Composable
+private fun CreateCircleFab(text: String, onClick: () -> Unit) {
+    val gradient = Brush.linearGradient(
+        colors = listOf(Color(0xFF6366F1), Color(0xFF818CF8)),
+    )
+    Row(
+        modifier = Modifier
+            .shadow(
+                elevation = 16.dp,
+                shape = RoundedCornerShape(30.dp),
+                ambientColor = Color(0xFF6366F1),
+                spotColor = Color(0xFF6366F1),
+            )
+            .clip(RoundedCornerShape(30.dp))
+            .background(gradient)
+            .clickable(onClick = onClick)
+            .padding(start = 12.dp, end = 22.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.22f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Add,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Spacer(Modifier.size(10.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = Color.White,
+        )
+    }
+}
+
+/**
+ * Full-width verzija za empty state — isti gradient, bez shadow halo-a.
+ */
+@Composable
+private fun CreateCircleButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val gradient = Brush.linearGradient(
+        colors = listOf(Color(0xFF6366F1), Color(0xFF818CF8)),
+    )
+    Row(
+        modifier = modifier
+            .shadow(elevation = 10.dp, shape = RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .background(gradient)
+            .clickable(onClick = onClick)
+            .height(56.dp)
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Add,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.size(10.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = Color.White,
+        )
     }
 }
 
@@ -189,10 +272,18 @@ private fun CircleRow(circle: CircleModel, onClick: () -> Unit) {
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
                     .background(parseColor(circle.colorHex)),
-            )
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = CircleIconAssets.forKey(circle.iconKey),
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
             Spacer(Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(circle.name, style = MaterialTheme.typography.titleLarge)

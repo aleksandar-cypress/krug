@@ -25,6 +25,7 @@ import org.krug.app.core.prefs.LocalPrefs
 import org.krug.app.core.sos.SosModel
 import org.krug.app.core.sos.SosRepository
 import org.krug.app.core.user.UserModel
+import org.krug.app.core.util.DeviceNames
 import timber.log.Timber
 
 data class MemberWithLocation(
@@ -37,7 +38,7 @@ data class MemberWithLocation(
     val isSelf: Boolean,
 )
 
-data class CircleBrief(val id: String, val name: String, val colorHex: String)
+data class CircleBrief(val id: String, val name: String, val colorHex: String, val iconKey: String)
 
 data class MapUiState(
     val members: List<MemberWithLocation> = emptyList(),
@@ -112,7 +113,7 @@ class MapViewModel @Inject constructor(
         return combine(circlesFlow, localPrefs.activeCircleIdFlow) { circles, stored ->
             circles to stored
         }.flatMapLatest { (circles, storedActive) ->
-            val briefs = circles.map { CircleBrief(it.id, it.name, it.colorHex) }
+            val briefs = circles.map { CircleBrief(it.id, it.name, it.colorHex, it.iconKey) }
             // Aktivni krug = ono što je user izabrao (ako i dalje postoji), inače prvi.
             val active = circles.firstOrNull { it.id == storedActive } ?: circles.firstOrNull()
             // Mapa pokazuje samo članove aktivnog kruga (+ self).
@@ -166,7 +167,8 @@ class MapViewModel @Inject constructor(
         ) { user, loc, sos ->
             val nameFromUser = user?.displayName.orEmpty()
             val emailPrefix = user?.email.orEmpty().substringBefore('@')
-            val device = user?.deviceModel.orEmpty()
+            val rawDevice = user?.deviceModel.orEmpty()
+            val device = DeviceNames.friendly(rawDevice)
             MemberWithLocation(
                 uid = uid,
                 displayName = nameFromUser.ifBlank { emailPrefix.ifBlank { device } },

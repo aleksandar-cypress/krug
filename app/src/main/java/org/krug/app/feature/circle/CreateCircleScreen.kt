@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -34,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -105,10 +107,23 @@ fun CreateCircleScreen(
                 text = stringResource(R.string.create_circle_color_label),
                 style = MaterialTheme.typography.titleMedium,
             )
-            Spacer(Modifier.size(8.dp))
+            Spacer(Modifier.size(12.dp))
             ColorPicker(
                 selected = state.selectedColor,
                 onSelect = viewModel::setColor,
+            )
+
+            Spacer(Modifier.size(24.dp))
+
+            Text(
+                text = stringResource(R.string.create_circle_icon_label),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.size(12.dp))
+            IconPicker(
+                selected = state.selectedIcon,
+                accentColor = Color(android.graphics.Color.parseColor(state.selectedColor)),
+                onSelect = viewModel::setIcon,
             )
 
             Spacer(Modifier.weight(1f))
@@ -139,7 +154,13 @@ private fun ColorPicker(
     selected: String,
     onSelect: (String) -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    // Row + SpaceBetween — krugovi se ravnomerno raspoređu ivica-do-ivice, nema viška
+    // praznog prostora ni overflow-a na užim ekranima.
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         CirclePresets.colors.forEach { hex ->
             val isSelected = hex == selected
             val color = Color(android.graphics.Color.parseColor(hex))
@@ -156,6 +177,63 @@ private fun ColorPicker(
                     .clickable { onSelect(hex) },
                 contentAlignment = Alignment.Center,
             ) { /* selection ring is the border */ }
+        }
+    }
+}
+
+@Composable
+private fun IconPicker(
+    selected: String,
+    accentColor: Color,
+    onSelect: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        CirclePresets.icons.forEach { key ->
+            val isSelected = key == selected
+            val icon = CircleIconAssets.forKey(key)
+            val label = CircleIconAssets.labelForKey(key)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onSelect(key) }
+                    .padding(vertical = 4.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSelected) accentColor
+                            else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        )
+                        .then(
+                            if (isSelected) Modifier.border(2.dp, accentColor, CircleShape)
+                            else Modifier,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = if (isSelected) Color.White
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(30.dp),
+                    )
+                }
+                Spacer(Modifier.size(6.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    ),
+                    color = if (isSelected) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

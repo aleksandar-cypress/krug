@@ -37,6 +37,7 @@ data class InviteModel(
 )
 
 object CirclePresets {
+    /** 6 boja koje stanu u jedan red u Color picker-u (FlowRow 40dp + 12dp gap ≈ 300dp). */
     val colors: List<String> = listOf(
         "#4F46E5", // indigo
         "#10B981", // emerald
@@ -44,9 +45,16 @@ object CirclePresets {
         "#EF4444", // red
         "#EC4899", // pink
         "#8B5CF6", // violet
-        "#06B6D4", // cyan
-        "#F97316", // orange
     )
 
-    val icons: List<String> = listOf("family", "friends", "work", "school")
+    /**
+     * Ključevi ikona — render mapping je u CircleIconAssets (feature/circle UI).
+     * Držimo na 4 najuniverzalnija — staju u jedan red sa većim krugovima.
+     */
+    val icons: List<String> = listOf(
+        "family",
+        "friends",
+        "travel",
+        "event",
+    )
 }

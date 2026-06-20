@@ -39,7 +39,7 @@ class AuthViewModel @Inject constructor(
             is AuthEvent.GoogleSignInClicked -> signIn { authRepository.signInWithGoogle(event.activityContext) }
             AuthEvent.AnonymousSignInClicked -> signIn { authRepository.signInAnonymously() }
             AuthEvent.EmailSignInClicked -> _state.update {
-                it.copy(errorMessage = "Email sign-in dolazi uskoro.")
+                it.copy(errorMessage = "Email sign-in dolazi uskoro")
             }
             AuthEvent.ErrorShown -> _state.update { it.copy(errorMessage = null) }
         }
@@ -61,10 +61,10 @@ class AuthViewModel @Inject constructor(
     }
 
     private fun SignInResult.Reason.toMessage(): String = when (this) {
-        SignInResult.Reason.Cancelled -> "Prijava otkazana."
-        SignInResult.Reason.NoGoogleAccount -> "Nije pronađen Google nalog na uređaju."
-        SignInResult.Reason.Network -> "Mrežna greška, pokušaj ponovo."
-        SignInResult.Reason.ProviderDisabled -> "Anonimna prijava nije omogućena u Firebase Console-u."
-        SignInResult.Reason.Unknown -> "Nešto je pošlo po zlu. Pokušaj ponovo."
+        SignInResult.Reason.Cancelled -> "Prijava otkazana"
+        SignInResult.Reason.NoGoogleAccount -> "Nije pronađen Google nalog na uređaju"
+        SignInResult.Reason.Network -> "Mrežna greška, pokušaj ponovo"
+        SignInResult.Reason.ProviderDisabled -> "Anonimna prijava nije omogućena u Firebase Console-u"
+        SignInResult.Reason.Unknown -> "Nešto je pošlo po zlu. Pokušaj ponovo"
     }
 }

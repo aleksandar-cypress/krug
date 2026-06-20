@@ -26,6 +26,7 @@ import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -95,7 +96,12 @@ class LocationTrackingService : Service() {
                         isCharging = charging,
                     )
                     lastPublishAtMs = System.currentTimeMillis()
-                }.onFailure { Timber.w(it, "publish location failed") }
+                }.onFailure { ex ->
+                    // FGS shutdown / scope cancel je normalan lifecycle event — ne loguj kao W
+                    // (CrashlyticsTree bi to forward-ovao u dashboard kao false-positive).
+                    if (ex is CancellationException) Timber.d("publish location cancelled (scope dying)")
+                    else Timber.w(ex, "publish location failed")
+                }
             }
         }
     }
@@ -119,7 +125,10 @@ class LocationTrackingService : Service() {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
             )
         } catch (e: SecurityException) {
-            Timber.w(e, "startForeground threw SecurityException; stopping self")
+            // Expected na Android 14+ kad nas zovne background entry (BootReceiver na
+            // MY_PACKAGE_REPLACED, Worker iz Doze) — FGS sa type=location ne sme bez
+            // user-visible context-a. Debug-only log da ne puni Crashlytics.
+            Timber.d("startForeground SecurityException (background entry): %s", e.message)
             stopSelf()
             return
         }
@@ -208,7 +217,10 @@ class LocationTrackingService : Service() {
                 )
                 lastPublishAtMs = System.currentTimeMillis()
                 Timber.d("Published $source fix (lat=${loc.latitude}, lng=${loc.longitude}, acc=${loc.accuracy})")
-            }.onFailure { Timber.w(it, "publish $source failed") }
+            }.onFailure { ex ->
+                if (ex is CancellationException) Timber.d("publish $source cancelled (scope dying)")
+                else Timber.w(ex, "publish $source failed")
+            }
         }
     }
 

@@ -128,12 +128,17 @@ fun BackgroundLocationPage(onContinue: () -> Unit) {
 fun NotificationsPermissionPage(onContinueOrSkip: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val activity = context as? Activity
     var granted by remember { mutableStateOf(PermissionUtils.hasNotifications(context)) }
+    // Posle prvog tap-a, ako sistem više ne prikazuje dijalog (double-deny ili
+    // "Don't ask again"), prebacujemo primary CTA na link ka sistemskim podešavanjima.
+    var attempted by remember { mutableStateOf(false) }
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { _ ->
         granted = PermissionUtils.hasNotifications(context)
+        attempted = true
         if (granted) onContinueOrSkip()
     }
 
@@ -158,24 +163,28 @@ fun NotificationsPermissionPage(onContinueOrSkip: () -> Unit) {
         if (granted) onContinueOrSkip()
     }
 
+    val showSettingsCta = attempted && !granted && activity != null &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        !activity.shouldShowRequestPermissionRationale(android.Manifest.permission.POST_NOTIFICATIONS)
+
     OnboardingPageScaffold(
         icon = Icons.Outlined.Notifications,
         title = stringResource(R.string.onb_notif_title),
         body = stringResource(R.string.onb_notif_body),
-        primaryButtonText = stringResource(R.string.onb_notif_grant),
+        primaryButtonText = if (showSettingsCta) stringResource(R.string.onb_notif_open_settings)
+        else stringResource(R.string.onb_notif_grant),
         onPrimary = {
-            // Već granted? Launcher ne pokazuje dijalog i LaunchedEffect(granted)
-            // ne re-fire-uje. Pozovi onContinueOrSkip ručno.
             if (PermissionUtils.hasNotifications(context)) {
                 onContinueOrSkip()
+            } else if (showSettingsCta) {
+                activity?.let { PermissionUtils.openAppSettings(it) }
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             } else {
+                // Pre Tiramisu-a notifikacije su default-no enabled, samo nastavi.
                 onContinueOrSkip()
             }
         },
-        secondaryButtonText = stringResource(R.string.action_skip),
-        onSecondary = onContinueOrSkip,
     )
 }
 

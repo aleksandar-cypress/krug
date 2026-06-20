@@ -28,8 +28,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.AccessTime
+import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.NearMe
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
@@ -87,12 +91,23 @@ import com.mapbox.maps.plugin.scalebar.scalebar
 import android.view.Gravity
 import org.krug.app.R
 import org.krug.app.core.location.LocationTrackingService
+import org.krug.app.feature.circle.CircleIconAssets
 
 private const val DEFAULT_LAT = 44.7866 // Belgrade
 private const val DEFAULT_LNG = 20.4489
 private const val DEFAULT_ZOOM = 12.0
 private val SosRed = Color(0xFFDC2626)
 private val SosRedDark = Color(0xFFB91C1C)
+private val PrivateGray = Color(0xFF9CA3AF)
+
+/** Granica nakon koje smatramo da je član u "privatnom modu" — FGS ubijen, sharing off, ili offline. */
+private const val PRIVATE_MODE_THRESHOLD_MS = 15 * 60_000L
+
+private fun MemberWithLocation.isPrivate(): Boolean {
+    if (isSelf) return false // za sebe ne pokazujemo private mode
+    val updatedAt = location?.updatedAt ?: return true
+    return System.currentTimeMillis() - updatedAt > PRIVATE_MODE_THRESHOLD_MS
+}
 
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -108,6 +123,25 @@ fun MapScreen(
     val mapViewState = remember { MapViewHolder() }
     val photoCache = remember { mutableStateMapOf<String, Bitmap>() }
     var detailUid by remember { mutableStateOf<String?>(null) }
+    // Pending refocus: kad user tapne Osveži, pamtimo (uid, since). Kad stigne
+    // sveži location.updatedAt > since za taj uid, automatski flyTo na novu poziciju.
+    var pendingRefocus by remember { mutableStateOf<Pair<String, Long>?>(null) }
+
+    LaunchedEffect(pendingRefocus, state.members) {
+        val pending = pendingRefocus ?: return@LaunchedEffect
+        val (uid, since) = pending
+        val loc = state.members.firstOrNull { it.uid == uid }?.location
+        if (loc != null && loc.updatedAt > since) {
+            mapViewState.flyTo(loc.lng, loc.lat)
+            pendingRefocus = null
+        }
+    }
+    // Timeout — ako member nije publish-ovao u 30s (FGS ubijen, no permission), drop.
+    LaunchedEffect(pendingRefocus) {
+        val pending = pendingRefocus ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(30_000)
+        if (pendingRefocus == pending) pendingRefocus = null
+    }
 
     DisposableEffect(Unit) {
         LocationTrackingService.start(context)
@@ -205,13 +239,17 @@ fun MapScreen(
                 sheetState = sheetState,
                 containerColor = MaterialTheme.colorScheme.surface,
             ) {
-                MembersSheet(state.members, onMemberClick = { uid ->
-                    sheetVisible = false
-                    state.members.firstOrNull { it.uid == uid }?.location?.let { loc ->
-                        mapViewState.flyTo(loc.lng, loc.lat)
-                    }
-                    detailUid = uid
-                })
+                MembersSheet(
+                    members = state.members,
+                    photoCache = photoCache,
+                    onMemberClick = { uid ->
+                        sheetVisible = false
+                        state.members.firstOrNull { it.uid == uid }?.location?.let { loc ->
+                            mapViewState.flyTo(loc.lng, loc.lat)
+                        }
+                        detailUid = uid
+                    },
+                )
             }
         }
 
@@ -223,6 +261,7 @@ fun MapScreen(
             ) {
                 MemberDetailSheet(
                     member = detailMember,
+                    selfLocation = state.selfLocation,
                     photo = detailMember.photoUrl?.let { photoCache[it] },
                     onOpenInMaps = {
                         detailMember.location?.let { loc ->
@@ -234,6 +273,7 @@ fun MapScreen(
                         }
                     },
                     onRefresh = {
+                        pendingRefocus = detailMember.uid to System.currentTimeMillis()
                         if (detailMember.isSelf) {
                             LocationTrackingService.refreshSelf(context)
                         } else {
@@ -282,7 +322,7 @@ fun MapScreen(
                 text = {
                     Text(
                         "Svi članovi tvojih krugova će dobiti hitno obaveštenje sa tvojom " +
-                            "trenutnom lokacijom. Koristi samo u stvarnoj opasnosti.",
+                            "trenutnom lokacijom. Koristi samo u stvarnoj opasnosti",
                     )
                 },
                 confirmButton = {
@@ -352,16 +392,25 @@ private fun TopFloatingBar(
             modifier = Modifier
                 .krugGlass(pillShape)
                 .clickable(onClick = onPillClick)
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
-            // Boja aktivnog kruga kao mala tačka levo od imena. Padne ako nema krugova.
-            active?.colorHex?.let { hex ->
+            // Aktivni krug — boja + ikonica u krugu (avatar-stil chip) levo od imena.
+            if (active != null) {
+                val accent = Color(android.graphics.Color.parseColor(active.colorHex))
                 Box(
                     modifier = Modifier
-                        .size(10.dp)
+                        .size(28.dp)
                         .clip(CircleShape)
-                        .background(Color(android.graphics.Color.parseColor(hex))),
-                )
+                        .background(accent),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = CircleIconAssets.forKey(active.iconKey),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
                 Spacer(Modifier.width(10.dp))
             }
             Text(
@@ -695,8 +744,10 @@ private fun MapboxContainer(
             holder.annotationToUid.clear()
             members.forEach { member ->
                 val loc = member.location ?: return@forEach
+                val priv = member.isPrivate()
                 val color = when {
                     member.sos != null -> "#DC2626" // red for SOS
+                    priv -> "#9CA3AF" // gray — stara lokacija, privatni mod
                     member.isSelf -> "#818CF8"
                     else -> MapMarkers.colorForUid(member.uid)
                 }
@@ -746,7 +797,7 @@ private class MapViewHolder {
         mapView?.mapboxMap?.flyTo(
             CameraOptions.Builder()
                 .center(Point.fromLngLat(lng, lat))
-                .zoom(15.0)
+                .zoom(16.5)
                 .build(),
             MapAnimationOptions.mapAnimationOptions { duration(1200L) },
         )
@@ -817,6 +868,7 @@ private fun CirclePickerSheet(
 @Composable
 private fun MembersSheet(
     members: List<MemberWithLocation>,
+    photoCache: Map<String, Bitmap>,
     onMemberClick: (String) -> Unit,
 ) {
     Column(
@@ -843,7 +895,11 @@ private fun MembersSheet(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(members, key = { it.uid }) { m ->
-                    MemberRow(m, onClick = { onMemberClick(m.uid) })
+                    MemberRow(
+                        member = m,
+                        photo = m.photoUrl?.let { photoCache[it] },
+                        onClick = { onMemberClick(m.uid) },
+                    )
                 }
             }
         }
@@ -851,7 +907,11 @@ private fun MembersSheet(
 }
 
 @Composable
-private fun MemberRow(member: MemberWithLocation, onClick: () -> Unit = {}) {
+private fun MemberRow(
+    member: MemberWithLocation,
+    photo: Bitmap?,
+    onClick: () -> Unit = {},
+) {
     val markerColor = when {
         member.sos != null -> SosRed
         member.isSelf -> MaterialTheme.colorScheme.primary
@@ -873,19 +933,28 @@ private fun MemberRow(member: MemberWithLocation, onClick: () -> Unit = {}) {
                 .background(markerColor),
             contentAlignment = Alignment.Center,
         ) {
-            val initial = member.displayName.firstOrNull()?.uppercaseChar()?.toString()
-            if (initial != null) {
-                Text(
-                    text = initial,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White,
+            if (photo != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = photo.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape),
                 )
             } else {
-                Icon(
-                    imageVector = Icons.Outlined.Person,
-                    contentDescription = null,
-                    tint = Color.White,
-                )
+                val initials = MapMarkers.computeInitials(member.displayName)
+                if (initials.isNotBlank()) {
+                    Text(
+                        text = initials,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Person,
+                        contentDescription = null,
+                        tint = Color.White,
+                    )
+                }
             }
         }
         Spacer(Modifier.width(14.dp))
@@ -895,11 +964,13 @@ private fun MemberRow(member: MemberWithLocation, onClick: () -> Unit = {}) {
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.onSurface,
             )
+            val priv = member.isPrivate()
             val statusLine = when {
                 member.sos != null -> "SOS — traži pomoć"
+                priv -> "Privatni mod"
                 else -> lastSeenLabel(member.location?.updatedAt)
             }
-            val deviceSuffix = if (member.deviceModel.isNotBlank() && member.sos == null) {
+            val deviceSuffix = if (member.deviceModel.isNotBlank() && member.sos == null && !priv) {
                 " · ${member.deviceModel}"
             } else {
                 ""
@@ -907,30 +978,79 @@ private fun MemberRow(member: MemberWithLocation, onClick: () -> Unit = {}) {
             Text(
                 text = statusLine + deviceSuffix,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (member.sos != null) SosRed
-                else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = when {
+                    member.sos != null -> SosRed
+                    priv -> PrivateGray
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
                 fontWeight = if (member.sos != null) FontWeight.Bold else FontWeight.Normal,
             )
         }
-        if (member.location?.batteryPct != null && member.location.batteryPct >= 0) {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-            ) {
-                Text(
-                    text = "${member.location.batteryPct}%",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                )
-            }
+        // Privatni mod — bez baterije (podaci su stari/nepouzdani).
+        if (!member.isPrivate() && member.location?.batteryPct != null && member.location.batteryPct >= 0) {
+            BatteryBadge(pct = member.location.batteryPct, charging = member.location.charging)
         }
     }
 }
 
 @Composable
+private fun BatteryBadge(pct: Int, charging: Boolean) {
+    val color = batteryColor(pct)
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = color.copy(alpha = 0.14f),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        ) {
+            Icon(
+                imageVector = if (charging) Icons.Filled.BatteryChargingFull
+                else Icons.Outlined.BatteryFull,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = "$pct%",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = color,
+            )
+        }
+    }
+}
+
+private fun batteryColor(pct: Int): Color = when {
+    pct >= 50 -> Color(0xFF10B981)
+    pct >= 20 -> Color(0xFFF59E0B)
+    else -> Color(0xFFEF4444)
+}
+
+private fun haversineMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+    val r = 6371000.0
+    val phi1 = Math.toRadians(lat1)
+    val phi2 = Math.toRadians(lat2)
+    val dphi = Math.toRadians(lat2 - lat1)
+    val dlambda = Math.toRadians(lng2 - lng1)
+    val a = kotlin.math.sin(dphi / 2).let { it * it } +
+        kotlin.math.cos(phi1) * kotlin.math.cos(phi2) *
+        kotlin.math.sin(dlambda / 2).let { it * it }
+    val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
+    return r * c
+}
+
+private fun formatDistance(meters: Double): String = when {
+    meters < 50 -> "blizu"
+    meters < 1000 -> "${meters.toInt()} m"
+    meters < 10_000 -> String.format("%.1f km", meters / 1000.0)
+    else -> "${(meters / 1000.0).toInt()} km"
+}
+
+@Composable
 private fun MemberDetailSheet(
     member: MemberWithLocation,
+    selfLocation: org.krug.app.core.location.LocationModel?,
     photo: Bitmap?,
     onOpenInMaps: () -> Unit,
     onRefresh: () -> Unit,
@@ -992,6 +1112,8 @@ private fun MemberDetailSheet(
             }
         }
 
+        val isPrivate = member.isPrivate()
+
         if (member.sos != null) {
             Spacer(Modifier.height(16.dp))
             Surface(
@@ -1012,28 +1134,65 @@ private fun MemberDetailSheet(
                     )
                 }
             }
+        } else if (isPrivate) {
+            Spacer(Modifier.height(16.dp))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = PrivateGray.copy(alpha = 0.12f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "Privatni mod",
+                        color = PrivateGray,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Član trenutno ne deli lokaciju ili je offline. " +
+                            "Prikazana je poslednja poznata pozicija",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
         }
 
         Spacer(Modifier.height(20.dp))
-        // Stats row: battery + last seen.
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             val batt = member.location?.batteryPct
-            if (batt != null && batt in 0..100) {
+            // Sakrijemo bateriju u privatnom modu — vrednost je stara/zabludljiva.
+            if (!isPrivate && batt != null && batt in 0..100) {
+                val charging = member.location.charging
                 StatChip(
-                    label = "Baterija",
+                    label = if (charging) "Puni se" else "Baterija",
                     value = "$batt%",
-                    accentColor = when {
-                        batt >= 50 -> Color(0xFF10B981)
-                        batt >= 20 -> Color(0xFFF59E0B)
-                        else -> Color(0xFFEF4444)
-                    },
+                    accentColor = batteryColor(batt),
+                    icon = if (charging) Icons.Filled.BatteryChargingFull
+                    else Icons.Outlined.BatteryFull,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            // Udaljenost — samo za druge, kad imamo obe lokacije i nije privatan.
+            if (!member.isSelf && !isPrivate && selfLocation != null && member.location != null) {
+                StatChip(
+                    label = "Udaljenost",
+                    value = formatDistance(
+                        haversineMeters(
+                            selfLocation.lat, selfLocation.lng,
+                            member.location.lat, member.location.lng,
+                        ),
+                    ),
+                    accentColor = MaterialTheme.colorScheme.primary,
+                    icon = Icons.Outlined.NearMe,
                     modifier = Modifier.weight(1f),
                 )
             }
             StatChip(
                 label = "Poslednje",
                 value = lastSeenLabel(member.location?.updatedAt).ifBlank { "—" },
-                accentColor = MaterialTheme.colorScheme.primary,
+                accentColor = if (isPrivate) PrivateGray else MaterialTheme.colorScheme.primary,
+                icon = Icons.Outlined.AccessTime,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -1060,17 +1219,19 @@ private fun MemberDetailSheet(
                 }
             }
         } else if (member.location != null) {
-            androidx.compose.material3.Button(
-                onClick = {
-                    onRefresh()
-                    refreshTriggered = true
-                },
-                enabled = !refreshTriggered,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (refreshTriggered) "Zahtev poslat…" else "Osveži lokaciju")
+            if (!isPrivate) {
+                androidx.compose.material3.Button(
+                    onClick = {
+                        onRefresh()
+                        refreshTriggered = true
+                    },
+                    enabled = !refreshTriggered,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (refreshTriggered) "Zahtev poslat…" else "Osveži lokaciju")
+                }
+                Spacer(Modifier.height(8.dp))
             }
-            Spacer(Modifier.height(8.dp))
             androidx.compose.material3.OutlinedButton(
                 onClick = onOpenInMaps,
                 modifier = Modifier.fillMaxWidth(),
@@ -1087,6 +1248,7 @@ private fun StatChip(
     value: String,
     accentColor: Color,
     modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
 ) {
     Column(
         modifier = modifier
@@ -1100,11 +1262,22 @@ private fun StatChip(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(4.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = accentColor,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = accentColor,
+            )
+        }
     }
 }
 

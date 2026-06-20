@@ -5,45 +5,46 @@
 
     <!-- Auth -->
     <string name="auth_welcome_title">Dobrodošli u Krug</string>
-    <string name="auth_welcome_subtitle">Budite uvek blizu onih do kojih vam je stalo.</string>
+    <string name="auth_welcome_subtitle">Budite uvek blizu onih do kojih vam je stalo</string>
     <string name="auth_continue_google">Nastavi sa Google nalogom</string>
     <string name="auth_continue_email">Email</string>
 
     <!-- Onboarding: info slides -->
     <string name="onb_welcome_title">Dobrodošli u Krug</string>
-    <string name="onb_welcome_body">Aplikacija koja vas povezuje sa onima do kojih vam je stalo. Bez reklama, bez plaćanja.</string>
+    <string name="onb_welcome_body">Aplikacija koja vas povezuje sa onima do kojih vam je stalo. Bez reklama, bez plaćanja</string>
 
     <string name="onb_how_title">Kako Krug radi</string>
-    <string name="onb_how_body">Napravite krug, pozovite porodicu ili prijatelje kodom, i vidite gde su svi na mapi u realnom vremenu.</string>
+    <string name="onb_how_body">Napravite krug, pozovite porodicu ili prijatelje kodom, i vidite gde su svi na mapi u realnom vremenu</string>
 
     <string name="onb_privacy_title">Vi kontrolišete šta delite</string>
-    <string name="onb_privacy_body">Lokaciju vidite samo članovi vaših krugova. U svakom trenutku možete pauzirati deljenje ili napustiti krug.</string>
+    <string name="onb_privacy_body">Lokaciju vidite samo članovi vaših krugova. U svakom trenutku možete pauzirati deljenje ili napustiti krug</string>
 
     <!-- Onboarding: permissions -->
     <string name="onb_loc_title">Pristup lokaciji</string>
-    <string name="onb_loc_body">Krug treba vašu lokaciju da bi je delio sa članovima vaših krugova. Ovo je centralna funkcija aplikacije.</string>
+    <string name="onb_loc_body">Krug treba vašu lokaciju da bi je delio sa članovima vaših krugova. Ovo je centralna funkcija aplikacije</string>
     <string name="onb_loc_grant">Dozvoli pristup lokaciji</string>
     <string name="onb_loc_open_settings">Otvori podešavanja</string>
 
     <string name="onb_bg_title">Stalan pristup lokaciji</string>
-    <string name="onb_bg_body">Da biste bili vidljivi i kada je aplikacija zatvorena, izaberite \"Uvek dozvoli\" u sistemskim podešavanjima.</string>
+    <string name="onb_bg_body">Da biste bili vidljivi i kada je aplikacija zatvorena, izaberite \"Uvek dozvoli\" u sistemskim podešavanjima</string>
     <string name="onb_bg_open_settings">Otvori sistemska podešavanja</string>
 
     <string name="onb_notif_title">Obaveštenja</string>
-    <string name="onb_notif_body">Dobijte obaveštenje kada član kruga stigne kući, na posao ili u školu.</string>
+    <string name="onb_notif_body">Obaveštenja su obavezna — bez njih nećete dobiti SOS od člana kruga koji traži hitnu pomoć</string>
     <string name="onb_notif_grant">Dozvoli obaveštenja</string>
+    <string name="onb_notif_open_settings">Otvori sistemska podešavanja</string>
 
     <string name="onb_bat_title">Optimizacija baterije</string>
-    <string name="onb_bat_body">Isključite optimizaciju baterije za Krug da deljenje lokacije ne bi prestajalo dok telefon spava.</string>
+    <string name="onb_bat_body">Isključite optimizaciju baterije za Krug da deljenje lokacije ne bi prestajalo dok telefon spava</string>
     <string name="onb_bat_open">Otvori podešavanja baterije</string>
 
     <string name="onb_done_title">Sve je spremno</string>
-    <string name="onb_done_body">Napravite prvi krug ili se pridružite postojećem.</string>
+    <string name="onb_done_body">Napravite prvi krug ili se pridružite postojećem</string>
     <string name="onb_done_cta">Završi i otvori Krug</string>
 
     <!-- Map -->
     <string name="map_title">Krug</string>
-    <string name="map_members_empty">Pozovite nekoga da se pridruži krugu.</string>
+    <string name="map_members_empty">Pozovite nekoga da se pridruži krugu</string>
     <string name="map_action_circles">Krugovi</string>
     <string name="map_pill_multi_circles">%1$d krugova</string>
     <string name="map_circle_picker_title">Prebaci se u krug</string>
@@ -53,7 +54,7 @@
     <!-- Circles -->
     <string name="circles_title">Vaši krugovi</string>
     <string name="circles_empty_title">Još nemate nijedan krug</string>
-    <string name="circles_empty_body">Napravite svoj prvi krug ili se pridružite postojećem.</string>
+    <string name="circles_empty_body">Napravite svoj prvi krug ili se pridružite postojećem</string>
     <string name="circles_create_cta">Napravi krug</string>
     <string name="circles_join_cta">Pridruži se kodom</string>
     <string name="circles_members_count">%1$d članova</string>
@@ -65,35 +66,35 @@
     <string name="create_circle_color_label">Boja</string>
     <string name="create_circle_icon_label">Ikonica</string>
     <string name="create_circle_create_cta">Napravi</string>
-    <string name="create_circle_error_empty">Ime kruga ne može biti prazno.</string>
-    <string name="create_circle_error_generic">Greška pri kreiranju kruga. Pokušaj ponovo.</string>
+    <string name="create_circle_error_empty">Ime kruga ne može biti prazno</string>
+    <string name="create_circle_error_generic">Greška pri kreiranju kruga. Pokušaj ponovo</string>
 
     <!-- Show invite -->
     <string name="invite_title">Pozovite članove</string>
-    <string name="invite_body">Podelite ovaj kod sa onima koje želite u krugu \"%1$s\". Kod važi 24 sata.</string>
+    <string name="invite_body">Podelite ovaj kod sa onima koje želite u krugu \"%1$s\". Kod važi 24 sata</string>
     <string name="invite_share_cta">Podeli kod</string>
     <string name="invite_done_cta">Gotovo</string>
     <string name="invite_share_template">Pridruži mi se u krugu \"%1$s\" na Krug aplikaciji. Kod: %2$s</string>
 
     <!-- Enter code -->
     <string name="enter_code_title">Pridruži se krugu</string>
-    <string name="enter_code_body">Unesite 6-cifreni kod koji ste dobili.</string>
+    <string name="enter_code_body">Unesite 6-cifreni kod koji ste dobili</string>
     <string name="enter_code_input_label">Kod</string>
     <string name="enter_code_join_cta">Pridruži se</string>
-    <string name="enter_code_error_invalid">Kod nije validan ili je istekao.</string>
-    <string name="enter_code_error_already_member">Već ste član ovog kruga.</string>
-    <string name="enter_code_error_generic">Greška, pokušaj ponovo.</string>
+    <string name="enter_code_error_invalid">Kod nije validan ili je istekao</string>
+    <string name="enter_code_error_already_member">Već ste član ovog kruga</string>
+    <string name="enter_code_error_generic">Greška, pokušaj ponovo</string>
 
     <!-- Location tracking notification -->
     <string name="loc_notif_channel">Deljenje lokacije</string>
     <string name="loc_notif_title">Krug aktivan</string>
-    <string name="loc_notif_text">Vaša lokacija se deli sa članovima vaših krugova.</string>
+    <string name="loc_notif_text">Vaša lokacija se deli sa članovima vaših krugova</string>
 
     <!-- SOS notification -->
     <string name="sos_notif_channel">SOS obaveštenja</string>
-    <string name="sos_notif_channel_desc">Hitna obaveštenja kada član kruga pokrene SOS.</string>
+    <string name="sos_notif_channel_desc">Hitna obaveštenja kada član kruga pokrene SOS</string>
     <string name="sos_notif_title">Hitno — %1$s traži pomoć</string>
-    <string name="sos_notif_body">Otvori Krug da vidiš lokaciju i pošalješ pomoć.</string>
+    <string name="sos_notif_body">Otvori Krug da vidiš lokaciju i pošalješ pomoć</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Članovi</string>
@@ -115,12 +116,12 @@
     <string name="circle_detail_leave_cta">Izađi iz kruga</string>
     <string name="circle_detail_delete_cta">Obriši krug</string>
     <string name="circle_detail_leave_confirm_title">Izaći iz kruga?</string>
-    <string name="circle_detail_leave_confirm_body">Više nećeš videti članove ovog kruga, niti će oni videti tebe.</string>
+    <string name="circle_detail_leave_confirm_body">Više nećeš videti članove ovog kruga, niti će oni videti tebe</string>
     <string name="circle_detail_delete_confirm_title">Obriši krug?</string>
-    <string name="circle_detail_delete_confirm_body">Krug i svi članovi će biti uklonjeni. Ova akcija se ne može poništiti.</string>
+    <string name="circle_detail_delete_confirm_body">Krug i svi članovi će biti uklonjeni. Ova akcija se ne može poništiti</string>
     <string name="circle_detail_role_owner">Vlasnik</string>
     <string name="circle_detail_role_member">Član</string>
-    <string name="circle_detail_owner_cannot_leave">Vlasnik ne može da napusti svoj krug. Obriši ga ili prebaci na drugog člana.</string>
+    <string name="circle_detail_owner_cannot_leave">Vlasnik ne može da napusti svoj krug. Obriši ga ili prebaci na drugog člana</string>
 
     <!-- Account -->
     <string name="account_title">Nalog</string>
@@ -133,27 +134,27 @@
     <string name="account_sign_out_confirm_body">Sigurno hoćeš da se odjaviš?</string>
     <string name="account_delete">Obriši nalog</string>
     <string name="account_delete_confirm_title">Obriši nalog</string>
-    <string name="account_delete_confirm_body">Ovo trajno briše tvoj nalog i sve podatke. Ova akcija se ne može poništiti.</string>
-    <string name="account_delete_not_available">Brisanje naloga dolazi uskoro.</string>
+    <string name="account_delete_confirm_body">Ovo trajno briše tvoj nalog i sve podatke. Ova akcija se ne može poništiti</string>
+    <string name="account_delete_not_available">Brisanje naloga dolazi uskoro</string>
     <string name="account_delete_confirm_cta">Obriši trajno</string>
     <string name="account_delete_progress">Brisanje…</string>
     <string name="account_delete_reauth_title">Potrebna ponovna prijava</string>
-    <string name="account_delete_reauth_body">Iz bezbednosnih razloga, Google traži skoriju prijavu pre brisanja naloga. Odjavi se, prijavi ponovo, pa pokušaj brisanje opet.</string>
+    <string name="account_delete_reauth_body">Iz bezbednosnih razloga, Google traži skoriju prijavu pre brisanja naloga. Odjavi se, prijavi ponovo, pa pokušaj brisanje opet</string>
 
     <!-- Privacy -->
     <string name="privacy_title">Privatnost</string>
     <string name="privacy_share_label">Deljenje lokacije</string>
-    <string name="privacy_share_on">Vaša lokacija se deli sa članovima vaših krugova.</string>
-    <string name="privacy_share_off">Deljenje lokacije je pauzirano. Niko vas ne vidi na mapi.</string>
+    <string name="privacy_share_on">Vaša lokacija se deli sa članovima vaših krugova</string>
+    <string name="privacy_share_off">Deljenje lokacije je pauzirano. Niko vas ne vidi na mapi</string>
 
     <!-- Battery mode -->
     <string name="battery_title">Mod baterije</string>
     <string name="battery_balanced">Balans (preporučeno)</string>
-    <string name="battery_balanced_desc">Lokacija se osvežava ređe da telefon ne bi grejao. Kad neko zatraži tvoju lokaciju ili pokreneš SOS, šalje se sveži fix odmah.</string>
+    <string name="battery_balanced_desc">Lokacija se osvežava ređe da telefon ne bi grejao. Kad neko zatraži tvoju lokaciju ili pokreneš SOS, šalje se sveži fix odmah</string>
     <string name="battery_saver">Štedi bateriju</string>
-    <string name="battery_saver_desc">Najsporiji updates, najmanji uticaj na bateriju i temperaturu. Koristi kad ne moraš da budeš praćen u realnom vremenu.</string>
+    <string name="battery_saver_desc">Najsporiji updates, najmanji uticaj na bateriju i temperaturu. Koristi kad ne moraš da budeš praćen u realnom vremenu</string>
     <string name="battery_max">Maksimalna tačnost</string>
-    <string name="battery_max_desc">Najčešći updates — najtačnija lokacija. Telefon će se primetno grejati i trošiti bateriju.</string>
+    <string name="battery_max_desc">Najčešći updates — najtačnija lokacija. Telefon će se primetno grejati i trošiti bateriju</string>
 
     <!-- About -->
     <string name="about_title">O aplikaciji</string>

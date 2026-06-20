@@ -95,7 +95,12 @@ fun CircleDetailScreen(
                 .padding(horizontal = 24.dp),
         ) {
             Spacer(Modifier.size(8.dp))
-            CircleHeader(name = state.circleName, colorHex = state.colorHex, memberCount = state.members.size)
+            CircleHeader(
+                name = state.circleName,
+                colorHex = state.colorHex,
+                iconKey = state.iconKey,
+                memberCount = state.members.size,
+            )
             Spacer(Modifier.size(24.dp))
 
             Button(
@@ -197,7 +202,7 @@ fun CircleDetailScreen(
 }
 
 @Composable
-private fun CircleHeader(name: String, colorHex: String, memberCount: Int) {
+private fun CircleHeader(name: String, colorHex: String, iconKey: String, memberCount: Int) {
     val color = runCatching { Color(android.graphics.Color.parseColor(colorHex)) }
         .getOrDefault(MaterialTheme.colorScheme.primary)
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -209,9 +214,10 @@ private fun CircleHeader(name: String, colorHex: String, memberCount: Int) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.Outlined.Group,
+                imageVector = CircleIconAssets.forKey(iconKey),
                 contentDescription = null,
                 tint = Color.White,
+                modifier = Modifier.size(28.dp),
             )
         }
         Spacer(Modifier.size(16.dp))

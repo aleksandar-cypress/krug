@@ -3,6 +3,7 @@ package org.krug.app.core.location
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import com.google.firebase.auth.FirebaseAuth
 import timber.log.Timber
 
@@ -17,6 +18,17 @@ class BootReceiver : BroadcastReceiver() {
             action != Intent.ACTION_LOCKED_BOOT_COMPLETED &&
             action != Intent.ACTION_MY_PACKAGE_REPLACED
         ) {
+            return
+        }
+        // Android 14+ ne dozvoljava startovanje FGS-a sa type=location iz background
+        // broadcast-a (osim BOOT_COMPLETED koji ima exemption). MY_PACKAGE_REPLACED na
+        // A14+ ulazi u "background" zonu — startForeground baca SecurityException.
+        // Preskoči ga; user će otvoriti app posle update-a, ili WorkManager keepalive
+        // (15 min) probaće kad app dobije eligibility.
+        if (action == Intent.ACTION_MY_PACKAGE_REPLACED &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+        ) {
+            Timber.d("BootReceiver: skip MY_PACKAGE_REPLACED on A14+ (FGS-location not allowed from background)")
             return
         }
         val user = runCatching { FirebaseAuth.getInstance().currentUser }.getOrNull()

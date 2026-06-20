@@ -37,6 +37,7 @@ data class CircleDetailUiState(
     val circleId: String = "",
     val circleName: String = "",
     val colorHex: String = "#4F46E5",
+    val iconKey: String = "family",
     val isOwner: Boolean = false,
     val members: List<CircleDetailMember> = emptyList(),
     val pendingInviteCode: String? = null,
@@ -90,6 +91,7 @@ class CircleDetailViewModel @Inject constructor(
                     loading = false,
                     circleName = circle.name,
                     colorHex = circle.colorHex,
+                    iconKey = circle.iconKey,
                     isOwner = (uid != null && uid == circle.ownerId),
                     members = memberProfiles.map { profile ->
                         val name = profile.displayName
