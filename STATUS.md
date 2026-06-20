@@ -2,9 +2,88 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-06-20, deveta sesija — logo brand identity + location quality v1)
+
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `2382cce`.
+Firebase rules: Firestore + RTDB deployovane sa child mode + paused field validatorima.
+A37 + Xiaomi Mi 11 oba sa najnovijim build-om. Beta grupa nepromenjena (aleksandarr + jelenavasilic84), nije ponovo distribuirano.
+APK za testiranje: `~/Downloads/krug-0.1.0-debug-2026-06-20.zip` (50MB, ZIP).
+
+## Deveta sesija (2026-06-20 noć) — logo brand palette + location quality (Phase 1+2) + orphan circle cleanup
+
+### Logo-derived brand palette
+- **Color.kt**: 4 nove konstante izvučene direktno iz `krug_logo.png` (sampled pixel boje):
+  - `LogoBlue = #3A86C8` (gornja figura, primarni brand)
+  - `LogoBlueLight = #5BA0DC` (gradient pair)
+  - `LogoBlue50 = #E5F0FA` (svetla container varijanta)
+  - `LogoPink = #E56B8F` (leva figura, sekundarni)
+  - `LogoPink50 = #FCE7EE`
+  - `LogoTeal = #48B09B` (desna figura)
+  - `LogoOrange = #F3B250` (donja figura)
+- **Theme.kt**: `colorScheme.primary = LogoBlue`, `colorScheme.secondary = LogoPink`, `primaryContainer = LogoBlue50`, `secondaryContainer = LogoPink50`. Sve Material Buttons, primary tints, secondary container elementi automatski koriste brand.
+- **AuthScreen + AboutScreen**: "Krug" naslov i Google sign-in dugme eksplicitno LogoBlue.
+- **CircleListScreen + MapScreen gradient pillovi**: hardcoded indigo zamenjen sa LogoBlue/LogoBlueLight.
+- **MapScreen self pin**: `#818CF8` → `#3A86C8` (logo blue).
+- **batteryColor (MapScreen + MapMarkers)**: ≥50% → LogoTeal, 20-49% → LogoOrange, <20% → crvena (kritična).
+- **MapMarkers paleta**: logo pink/teal/orange na prva 3 mesta da najčešći hash-evi padaju na brand boje; ostatak (violet/hot pink/cyan/orange/blue) za diversity preko 3-4 člana.
+- **AboutScreen logo**: 140dp → **230dp** (isti kao AuthScreen, brand dominira).
+- **AuthScreen**: uklonjen "Email" outlined button (placeholder za nepostojeću funkciju, samo zbunjivao). Ostalo Google + (debug) anonimna.
+
+### Em-dash uklonjen iz production UI
+- 8 mesta u app stringovima + Kotlin hardcoded text (notif body, SOS naslovi/baneri, battery desc, status linije, child banner, Diagnostics placeholders).
+- 16 mesta u docs/ (privacy.html, terms.html, index.html) — page titles koriste `·` middle dot, inline definicije koriste `:` colon.
+- Em-dash ostaje samo u code komentarima (dev-only).
+- Welcome subtitle: "Budite uvek blizu onih do kojih vam je stalo" → **"Sigurnost i bliskost u jednom dodiru"**.
+
+### Anonymous signOut cleanup (sprečava orphan circles)
+- **Root cause:** anonimni Firebase Auth daje nov uid pri svakom sign-in cycle. Ako anonimni vlasnik kruga signOut-uje, krug ostaje sa starim uid-om kao `ownerId`. Pri sledećem signIn-u user dobija drugi uid → "novi user" ne vidi krug, ostali članovi vide orfan krug sa nepostojećim vlasnikom. Plus dete označeno od starog uid-a je zaglavljeno (UI sakriva "Izađi iz kruga").
+- **Manual cleanup (today):** preko `firebase firestore:delete circles --recursive --force` obrisana cela kolekcija da Xiaomi izađe iz stuck-in-child stanja.
+- **Code fix:** `AccountViewModel.signOut()` detektuje `FirebaseUser.isAnonymous` i pre auth signOut-a poziva isti cleanup kao `deleteAccount`:
+  - `circleRepository.cleanupForDeletedUser(uid)` — owner krugovi se brišu, member krugovi se napuste
+  - `locationRepository.deleteForUser(uid)`
+  - `sosRepository.clear(uid)`
+  - `userRepository.deleteUser(uid)`
+- **Google sign-in user-i nemaju problem** — uid je stabilan, cleanup ne treba.
+- **Edge case ostavljen:** uninstall bez signOut + Google user koji promeni nalog → orfan i dalje moguć (app ne može cleanup ako nije instaliran). Pravi fix tek sa Cloud Function user inactivity TTL (Blaze plan).
+
+### Location quality Phase 1 (battery-neutral / pozitivan)
+- **Movement filter:** publish samo ako se pomerio > 15m od poslednje published lokacije, ili ako je prošlo > 90s (force publish za freshness signal). Eliminiše redundantne publish-eve kad korisnik miruje.
+- **Accuracy filter:** drop fixevi sa accuracy > 100m. Indoor/tunnel GPS spike-evi se ne publish-uju.
+- **SOS boost:** `MapViewModel.triggerSos` paralelno zove `LocationTrackingService.triggerSosBoost(context)` → FGS prelazi na BURST profil 30min za frequent peer updates tokom hitne. Posle isteka, scheduleProfileReconfigOnBoostExpiry vraća profil na default.
+- **Refresh boost:** kad peer pošalje fresh refresh ping, FGS prelazi na BURST 5min. Ako se ta osoba kreće, peer je prati uživo, ne dobija samo jedan fix.
+- **Low-battery throttle:** ispod 15% baterije i ne puni se → LOW_THROTTLED profil (30min interval) umesto LOW (15min).
+- **BURST profil:** 60s interval, 30s fastest, 0m displacement (konzervativni, ne 30s aggressive — battery drain podnošljiv tokom kratkih burst-eva).
+
+### Location quality Phase 2 (Activity Recognition)
+- **`ActivityRecognitionClient`** (Google Play Services) koristi akcelerometar (low-power, uvek-on senzor) da detektuje šta korisnik radi.
+- **Permission:** `android.permission.ACTIVITY_RECOGNITION` (A10+ runtime). Lazy prompt u MapScreen kad user prvi put uđe u Map. Granted → FGS registruje client; skipped → graceful fallback na LOW.
+- **`ActivityRecognitionReceiver`** (novi BroadcastReceiver) prima detection broadcast-e, filtrira confidence < 60, update-uje `LocationTrackingService.detectedActivity` companion var. "Poke-uje" FGS sa `EXTRA_ACTIVITY_CHANGED` da odmah reconfiguriše profile (ne čeka sledeći location callback).
+- **Per-activity profili u `LocationProfile` enum-u:**
+  - `VEHICLE` — 1.5min/45s/0m (voziš se, treba česti fix)
+  - `BICYCLE` — 2min/60s/30m (biciklira)
+  - `WALKING` — 4min/2min/30m (hoda/trči)
+  - `STILL` — 20min/10min/500m (stoji/sedi, retko)
+- **`computeProfile` prioritet:** SOS/refresh boost → MAX (opt-in) → low-battery → per-activity (VEHICLE/BICYCLE/WALKING/STILL) → LOW default.
+- **DiagnosticsScreen:** dodato `detectedActivity` u FGS sekciju + `activityRecognition` permission status. Beta testeri mogu da vide šta profil radi uživo.
+
+### Što i dalje treba (preostalo posle ove sesije)
+- Distribuirati novi APK beta grupi kroz Firebase App Distribution (čekamo test feedback od user-a)
+- Member nickname per circle ("Mama" u family, "Mira" u prijateljskom)
+- Empty members CTA — "Niko se nije pridružio — pošalji pozivnicu" u MembersSheet kad si jedini
+- Battery saver banner na Map kad user u SAVER modu
+- Crashlytics breadcrumbs za key akcije
+- Improved offline banner — "Offline — poslednje ažuriranje pre X min"
+- Release signing + Play Store internal testing track (production korak)
+- Google reauth flow za delete-account (one-step umesto sign-out/sign-in/retry)
+- FCM SOS push za ubijeni app scenario (treba Blaze plan ~$1-3/mesec)
+- Places/Geofencing v1 (per-place "Obavesti članove" toggle, child mode tie-in)
+- Sound test za SOS u Settings (verifikacija pre stvarne hitnoće)
+- History trail (24h breadcrumbs po članu)
+- Refresh boost spam cap (zaštita ako peer spamuje "Osveži lokaciju")
+- "Podrži razvoj" link kad budemo imali više korisnika (Buy Me a Coffee/PayPal)
+
 ## Gde smo stali (2026-06-20, osma sesija — UI polish + child mode invite + circle edit + onboarding skip)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `7921ee4`.
 Firebase rules: Firestore + RTDB **deployovane** sa child mode + paused field validatorima.
 A37 + Xiaomi Mi 11 oba sa najnovijim build-om. Beta grupa nepromenjena (aleksandarr + jelenavasilic84), **nije** ponovo distribuirano.
 
