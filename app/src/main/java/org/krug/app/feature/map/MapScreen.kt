@@ -650,7 +650,7 @@ private fun SosBanner(
                 )
                 Spacer(Modifier.size(10.dp))
                 Text(
-                    text = "Hitno — neko traži pomoć",
+                    text = "Hitno: neko traži pomoć",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = Color.White,
                 )
@@ -1204,7 +1204,7 @@ private fun MemberRow(
             }
             val priv = member.isPrivate()
             val statusLine = when {
-                member.sos != null -> "SOS — traži pomoć"
+                member.sos != null -> "SOS: traži pomoć"
                 priv -> "Privatni mod"
                 else -> lastSeenLabel(member.location?.updatedAt)
             }
@@ -1388,7 +1388,7 @@ private fun MemberDetailSheet(
                     Icon(Icons.Filled.Warning, contentDescription = null, tint = Color.White)
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        text = "Aktivan SOS — traži pomoć",
+                        text = "Aktivan SOS: traži pomoć",
                         color = Color.White,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     )
@@ -1560,7 +1560,7 @@ private fun lastSeenLabel(updatedAt: Long?): String {
 
 /** Kompaktna verzija za StatChip — "sad", "5m", "2h", "1d+" (uvek single-line). */
 private fun compactLastSeen(updatedAt: Long?): String {
-    if (updatedAt == null || updatedAt == 0L) return "—"
+    if (updatedAt == null || updatedAt == 0L) return "-"
     val diffMs = System.currentTimeMillis() - updatedAt
     val mins = diffMs / 60_000
     return when {

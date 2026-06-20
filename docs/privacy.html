@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Politika privatnosti — Krug</title>
+<title>Politika privatnosti · Krug</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -83,7 +83,7 @@
     <li>Ime za prikaz (iz Google naloga ili koje vi unesete)</li>
     <li>Email adresa (samo ako se prijavite preko Google naloga)</li>
     <li>URL profilne fotografije (samo ako koristite Google nalog)</li>
-    <li>Model uređaja (npr. „Samsung SM-A376B") — za identifikaciju u listi članova</li>
+    <li>Model uređaja (npr. „Samsung SM-A376B") za identifikaciju u listi članova</li>
     <li>Jedinstveni Firebase UID (interni identifikator)</li>
   </ul>
 
@@ -120,15 +120,15 @@
 
   <h3>Tehnički saradnici (sub-procesori)</h3>
   <ul>
-    <li><strong>Google Firebase</strong> (Google LLC / Google Ireland Ltd) — autentifikacija, baza podataka, push obaveštenja, dijagnostika. Podaci se čuvaju u EU regionu (multi-region <span class="pill">eur3</span> za Firestore, <span class="pill">europe-west1</span> za Realtime Database).</li>
-    <li><strong>Mapbox</strong> (Mapbox, Inc.) — renderovanje mape. Vaša lokacija se NE šalje Mapbox-u — aplikacija samo preuzima slojeve mape sa njihovih servera.</li>
+    <li><strong>Google Firebase</strong> (Google LLC / Google Ireland Ltd): autentifikacija, baza podataka, push obaveštenja, dijagnostika. Podaci se čuvaju u EU regionu (multi-region <span class="pill">eur3</span> za Firestore, <span class="pill">europe-west1</span> za Realtime Database).</li>
+    <li><strong>Mapbox</strong> (Mapbox, Inc.): renderovanje mape. Vaša lokacija se NE šalje Mapbox-u, aplikacija samo preuzima slojeve mape sa njihovih servera.</li>
   </ul>
 
   <h2>5. Bezbednost</h2>
   <ul>
     <li>Sva komunikacija ide preko HTTPS/TLS-a.</li>
     <li>Firebase App Check štiti od neautorizovanih API poziva van naše aplikacije.</li>
-    <li>Pristup vašoj lokaciji i SOS podacima je ograničen Firebase security rules-ima — niko izvan vaših krugova ne može da ih čita.</li>
+    <li>Pristup vašoj lokaciji i SOS podacima je ograničen Firebase security rules-ima. Niko izvan vaših krugova ne može da ih čita.</li>
     <li>Vaša lozinka se ne čuva u našoj aplikaciji (autentifikacija je preko Google naloga ili anonimno).</li>
   </ul>
 

@@ -5,7 +5,7 @@
 
     <!-- Auth -->
     <string name="auth_welcome_title">Dobrodošli u Krug</string>
-    <string name="auth_welcome_subtitle">Budite uvek blizu onih do kojih vam je stalo</string>
+    <string name="auth_welcome_subtitle">Sigurnost i bliskost u jednom dodiru</string>
     <string name="auth_continue_google">Nastavi sa Google nalogom</string>
     <string name="auth_continue_email">Email</string>
 
@@ -30,7 +30,7 @@
     <string name="onb_bg_open_settings">Otvori sistemska podešavanja</string>
 
     <string name="onb_notif_title">Obaveštenja</string>
-    <string name="onb_notif_body">Obaveštenja su obavezna — bez njih nećete dobiti SOS od člana kruga koji traži hitnu pomoć</string>
+    <string name="onb_notif_body">Obaveštenja su obavezna. Bez njih nećete dobiti SOS od člana kruga koji traži hitnu pomoć</string>
     <string name="onb_notif_grant">Dozvoli obaveštenja</string>
     <string name="onb_notif_open_settings">Otvori sistemska podešavanja</string>
 
@@ -94,7 +94,7 @@
     <!-- SOS notification -->
     <string name="sos_notif_channel">SOS obaveštenja</string>
     <string name="sos_notif_channel_desc">Hitna obaveštenja kada član kruga pokrene SOS</string>
-    <string name="sos_notif_title">Hitno — %1$s traži pomoć</string>
+    <string name="sos_notif_title">Hitno: %1$s traži pomoć</string>
     <string name="sos_notif_body">Otvori Krug da vidiš lokaciju i pošalješ pomoć</string>
 
     <!-- Map UI -->
@@ -155,7 +155,7 @@
     <string name="battery_saver">Štedi bateriju</string>
     <string name="battery_saver_desc">Najsporiji updates, najmanji uticaj na bateriju i temperaturu. Koristi kad ne moraš da budeš praćen u realnom vremenu</string>
     <string name="battery_max">Maksimalna tačnost</string>
-    <string name="battery_max_desc">Najčešći updates — najtačnija lokacija. Telefon će se primetno grejati i trošiti bateriju</string>
+    <string name="battery_max_desc">Najčešći updates, najtačnija lokacija. Telefon će se primetno grejati i trošiti bateriju</string>
 
     <!-- About -->
     <string name="about_title">O aplikaciji</string>

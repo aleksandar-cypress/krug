@@ -155,7 +155,7 @@ private fun collectSnapshot(context: Context): DiagSnapshot {
                 title = "FGS (Location Tracking Service)",
                 rows = listOf(
                     "isRunning" to LocationTrackingService.isRunning.get().toString(),
-                    "lastPublishAt" to (if (lastPublish == 0L) "—" else lastPublish.toString()),
+                    "lastPublishAt" to (if (lastPublish == 0L) "-" else lastPublish.toString()),
                     "publishAgo" to publishAgo,
                 ),
             ),
@@ -171,10 +171,10 @@ private fun collectSnapshot(context: Context): DiagSnapshot {
             DiagSection(
                 title = "Identity",
                 rows = listOf(
-                    "uid" to (user?.uid?.take(12)?.plus("…") ?: "—"),
-                    "providerId" to (user?.providerId ?: "—"),
-                    "isAnonymous" to (user?.isAnonymous?.toString() ?: "—"),
-                    "email" to (user?.email ?: "—"),
+                    "uid" to (user?.uid?.take(12)?.plus("…") ?: "-"),
+                    "providerId" to (user?.providerId ?: "-"),
+                    "isAnonymous" to (user?.isAnonymous?.toString() ?: "-"),
+                    "email" to (user?.email ?: "-"),
                 ),
             ),
             DiagSection(

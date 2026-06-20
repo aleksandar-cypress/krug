@@ -197,7 +197,7 @@ fun CircleDetailScreen(
                         )
                         Spacer(Modifier.size(10.dp))
                         Text(
-                            text = "Roditeljska kontrola — vlasnik kruga je označio tvoj nalog kao dete. Kontaktiraj ga ako želiš da izađeš iz kruga.",
+                            text = "Roditeljska kontrola: vlasnik kruga je označio tvoj nalog kao dete. Kontaktiraj ga ako želiš da izađeš iz kruga.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                         )
