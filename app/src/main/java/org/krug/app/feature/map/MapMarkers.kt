@@ -26,15 +26,17 @@ object MapMarkers {
         }
 
     // Stabilna paleta — svaki član dobija svoju boju na osnovu hash-a uid-a.
+    // Logo boje (pink/teal/orange) prve da bi najčešći hash-evi padali na brand boje;
+    // ostatak ostaje za diversity preko 3-4 člana.
     val palette = listOf(
-        "#FB7185", // rose
-        "#F59E0B", // amber
-        "#10B981", // emerald
-        "#06B6D4", // cyan
-        "#8B5CF6", // violet
-        "#EC4899", // pink
-        "#F97316", // orange
-        "#3B82F6", // blue
+        "#E56B8F", // logo pink
+        "#48B09B", // logo teal
+        "#F3B250", // logo orange
+        "#8B5CF6", // violet (akcent)
+        "#EC4899", // hot pink (akcent)
+        "#06B6D4", // cyan (akcent)
+        "#F97316", // orange (akcent)
+        "#3B82F6", // blue (akcent)
     )
 
     fun colorForUid(uid: String): String =
@@ -166,11 +168,11 @@ object MapMarkers {
             strokeCap = Cap.ROUND
         }
         canvas.drawArc(rect, 0f, 360f, false, trackPaint)
-        // Battery fill — zelena/žuta/crvena.
+        // Battery fill — logo teal / logo orange / kritično crvena.
         val batteryColor = when {
-            pct >= 50 -> "#10B981".toColorInt() // emerald
-            pct >= 20 -> "#F59E0B".toColorInt() // amber
-            else -> "#EF4444".toColorInt()      // red
+            pct >= 50 -> "#48B09B".toColorInt() // logo teal
+            pct >= 20 -> "#F3B250".toColorInt() // logo orange
+            else -> "#EF4444".toColorInt()      // kritično crvena
         }
         val sweep = (pct / 100f) * 360f
         val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

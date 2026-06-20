@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import java.util.Calendar
 import org.krug.app.BuildConfig
 import org.krug.app.R
+import org.krug.app.ui.theme.LogoBlue
 
 private const val PRIVACY_URL = "https://aleksandar-cypress.github.io/krug/privacy.html"
 private const val TERMS_URL = "https://aleksandar-cypress.github.io/krug/terms.html"
@@ -69,13 +70,13 @@ fun AboutScreen(onBack: () -> Unit) {
             Image(
                 painter = painterResource(R.drawable.krug_logo),
                 contentDescription = null,
-                modifier = Modifier.size(190.dp),
+                modifier = Modifier.size(230.dp),
             )
             Spacer(Modifier.size(16.dp))
             Text(
                 text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary,
+                color = LogoBlue,
             )
             Spacer(Modifier.size(4.dp))
             Text(

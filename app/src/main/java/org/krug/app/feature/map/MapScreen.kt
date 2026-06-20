@@ -102,6 +102,10 @@ import android.view.Gravity
 import org.krug.app.R
 import org.krug.app.core.location.LocationTrackingService
 import org.krug.app.feature.circle.CircleIconAssets
+import org.krug.app.ui.theme.LogoBlue
+import org.krug.app.ui.theme.LogoBlueLight
+import org.krug.app.ui.theme.LogoOrange
+import org.krug.app.ui.theme.LogoTeal
 
 private const val DEFAULT_LAT = 44.7866 // Belgrade
 private const val DEFAULT_LNG = 20.4489
@@ -469,7 +473,7 @@ private fun TopFloatingBar(
                         .clip(pillShape)
                         .background(
                             Brush.linearGradient(
-                                colors = listOf(Color(0xFF6366F1), Color(0xFF818CF8)),
+                                colors = listOf(LogoBlue, LogoBlueLight),
                             ),
                         )
                         .clickable(onClick = onCreateCircle)
@@ -897,7 +901,7 @@ private fun MapboxContainer(
                 val color = when {
                     member.sos != null -> "#DC2626" // red for SOS
                     priv -> "#9CA3AF" // gray — stara lokacija, privatni mod
-                    member.isSelf -> "#818CF8"
+                    member.isSelf -> "#3A86C8" // logo blue
                     else -> MapMarkers.colorForUid(member.uid)
                 }
                 val photo = member.photoUrl?.let { photoCache[it] }
@@ -1267,9 +1271,9 @@ private fun BatteryBadge(pct: Int, charging: Boolean) {
 }
 
 private fun batteryColor(pct: Int): Color = when {
-    pct >= 50 -> Color(0xFF10B981)
-    pct >= 20 -> Color(0xFFF59E0B)
-    else -> Color(0xFFEF4444)
+    pct >= 50 -> LogoTeal // logo teal (zdrava baterija)
+    pct >= 20 -> LogoOrange // logo orange (srednja)
+    else -> Color(0xFFEF4444) // kritično crvena
 }
 
 private fun haversineMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {

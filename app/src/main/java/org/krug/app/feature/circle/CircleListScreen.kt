@@ -47,6 +47,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.krug.app.R
 import org.krug.app.core.circle.CircleModel
+import org.krug.app.ui.theme.LogoBlue
+import org.krug.app.ui.theme.LogoBlueLight
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -155,15 +157,15 @@ private fun EmptyState(onCreate: () -> Unit, onJoin: () -> Unit) {
 @Composable
 private fun CreateCircleFab(text: String, onClick: () -> Unit) {
     val gradient = Brush.linearGradient(
-        colors = listOf(Color(0xFF6366F1), Color(0xFF818CF8)),
+        colors = listOf(LogoBlue, LogoBlueLight),
     )
     Row(
         modifier = Modifier
             .shadow(
                 elevation = 16.dp,
                 shape = RoundedCornerShape(30.dp),
-                ambientColor = Color(0xFF6366F1),
-                spotColor = Color(0xFF6366F1),
+                ambientColor = LogoBlue,
+                spotColor = LogoBlue,
             )
             .clip(RoundedCornerShape(30.dp))
             .background(gradient)
@@ -200,7 +202,7 @@ private fun CreateCircleFab(text: String, onClick: () -> Unit) {
 @Composable
 private fun CreateCircleButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val gradient = Brush.linearGradient(
-        colors = listOf(Color(0xFF6366F1), Color(0xFF818CF8)),
+        colors = listOf(LogoBlue, LogoBlueLight),
     )
     Row(
         modifier = modifier

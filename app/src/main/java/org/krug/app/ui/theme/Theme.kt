@@ -5,14 +5,18 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
 private val LightColors = lightColorScheme(
-    primary = BrandIndigo500,
+    // Primary = LogoBlue (gornja figura logoa) — sve Material Button-i,
+    // primary text-ovi, icon tint-ovi sad slede brand identity logoa.
+    primary = LogoBlue,
     onPrimary = NeutralWhite,
-    primaryContainer = BrandIndigo50,
-    onPrimaryContainer = BrandIndigo600,
-    secondary = BrandCoral500,
+    primaryContainer = LogoBlue50,
+    onPrimaryContainer = LogoBlue,
+    // Secondary = LogoPink (leva figura logoa) — child mode banner, peer markers,
+    // theme-driven secondary container i akcenti.
+    secondary = LogoPink,
     onSecondary = NeutralWhite,
-    secondaryContainer = BrandCoral50,
-    onSecondaryContainer = BrandCoral500,
+    secondaryContainer = LogoPink50,
+    onSecondaryContainer = LogoPink,
     background = NeutralBg,
     onBackground = NeutralText,
     surface = NeutralSurface,

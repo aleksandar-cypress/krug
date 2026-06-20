@@ -43,8 +43,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.krug.app.BuildConfig
 import org.krug.app.R
-import org.krug.app.ui.theme.BrandIndigo500
-import org.krug.app.ui.theme.BrandIndigo600
+import org.krug.app.ui.theme.LogoBlue
 
 @Composable
 fun AuthScreen(
@@ -83,7 +82,7 @@ fun AuthScreen(
             Image(
                 painter = painterResource(R.drawable.krug_logo),
                 contentDescription = null,
-                modifier = Modifier.size(220.dp),
+                modifier = Modifier.size(230.dp),
             )
 
             Spacer(Modifier.height(28.dp))
@@ -91,7 +90,7 @@ fun AuthScreen(
             Text(
                 text = "Krug",
                 style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-                color = BrandIndigo600,
+                color = LogoBlue,
             )
             Spacer(Modifier.height(6.dp))
             Text(
@@ -110,7 +109,7 @@ fun AuthScreen(
                     .heightIn(min = 56.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = BrandIndigo600,
+                    containerColor = LogoBlue,
                     contentColor = Color.White,
                 ),
             ) {
@@ -138,7 +137,7 @@ fun AuthScreen(
                     .heightIn(min = 56.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = BrandIndigo600,
+                    contentColor = LogoBlue,
                 ),
             ) {
                 Text(
