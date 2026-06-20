@@ -5,15 +5,11 @@ import org.krug.app.core.permissions.PermissionUtils
 
 enum class OnboardingPage {
     INTRO,
-    LOCATION,
-    BACKGROUND_LOCATION,
+    LOCATION, // foreground + background combinovano (state machine u istom ekranu)
     NOTIFICATIONS,
-    BATTERY,
-    DONE,
     ;
 
     fun isApplicable(context: Context): Boolean = when (this) {
-        BACKGROUND_LOCATION -> PermissionUtils.needsBackgroundLocationPermission
         NOTIFICATIONS -> PermissionUtils.needsNotificationsPermission
         else -> true
     }

@@ -28,100 +28,78 @@ import kotlinx.coroutines.delay
 import org.krug.app.R
 import org.krug.app.core.permissions.PermissionUtils
 
+/**
+ * Combined foreground + background location prompt — state machine na istom ekranu.
+ * Faza 1 (foreground not granted): standardni system dialog za ACCESS_FINE/COARSE_LOCATION.
+ * Faza 2 (foreground granted, background not): otvara app settings da user prebaci na "Uvek dozvoli".
+ * Kad oboje granted → onGranted(). Na Android < 10 nema posebnog background-a, foreground = sve.
+ */
 @Composable
 fun LocationPermissionPage(onGranted: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var granted by remember { mutableStateOf(PermissionUtils.hasForegroundLocation(context)) }
+    var foregroundGranted by remember { mutableStateOf(PermissionUtils.hasForegroundLocation(context)) }
+    var backgroundGranted by remember { mutableStateOf(PermissionUtils.hasBackgroundLocation(context)) }
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { _ ->
-        // Uvek čitaj autoritativno stanje iz sistema — `result.values` može biti
-        // prazno ili nedosledno na nekim OEM-ima.
-        granted = PermissionUtils.hasForegroundLocation(context)
-        if (granted) onGranted()
+        foregroundGranted = PermissionUtils.hasForegroundLocation(context)
+        backgroundGranted = PermissionUtils.hasBackgroundLocation(context)
     }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                granted = PermissionUtils.hasForegroundLocation(context)
+                foregroundGranted = PermissionUtils.hasForegroundLocation(context)
+                backgroundGranted = PermissionUtils.hasBackgroundLocation(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Poll fallback — neke MIUI verzije ne propagiraju ON_RESUME pouzdano kad user
-    // grant-uje permission iz system settings-a.
+    // Poll fallback — MIUI / OEM-i ne propagiraju ON_RESUME pouzdano kad user grant-uje
+    // permission iz system settings-a; polling-om pokupimo state.
     LaunchedEffect(Unit) {
-        while (!granted) {
+        while (!foregroundGranted || !backgroundGranted) {
             delay(500)
-            if (PermissionUtils.hasForegroundLocation(context)) granted = true
+            if (!foregroundGranted) foregroundGranted = PermissionUtils.hasForegroundLocation(context)
+            if (!backgroundGranted) backgroundGranted = PermissionUtils.hasBackgroundLocation(context)
         }
     }
 
-    LaunchedEffect(granted) {
-        if (granted) onGranted()
+    LaunchedEffect(foregroundGranted, backgroundGranted) {
+        if (foregroundGranted && backgroundGranted) onGranted()
     }
 
-    OnboardingPageScaffold(
-        icon = Icons.Outlined.LocationOn,
-        title = stringResource(R.string.onb_loc_title),
-        body = stringResource(R.string.onb_loc_body),
-        primaryButtonText = stringResource(R.string.onb_loc_grant),
-        onPrimary = {
-            // Ako je permission već granted (npr. user ga dao u prethodnoj sesiji), launcher
-            // ne pokazuje dijalog i `LaunchedEffect(granted)` ne re-fire-uje jer se vrednost
-            // ne menja. Pozovi onGranted ručno.
-            if (PermissionUtils.hasForegroundLocation(context)) {
-                onGranted()
-            } else {
-                launcher.launch(PermissionUtils.foregroundLocationPermissions.toTypedArray())
-            }
-        },
-        secondaryButtonText = stringResource(R.string.onb_loc_open_settings),
-        onSecondary = { (context as? Activity)?.let { PermissionUtils.openAppSettings(it) } },
-    )
-}
-
-@Composable
-fun BackgroundLocationPage(onContinue: () -> Unit) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var granted by remember { mutableStateOf(PermissionUtils.hasBackgroundLocation(context)) }
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                granted = PermissionUtils.hasBackgroundLocation(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    if (!foregroundGranted) {
+        // Faza 1 — sistem dialog za foreground location.
+        OnboardingPageScaffold(
+            icon = Icons.Outlined.LocationOn,
+            title = stringResource(R.string.onb_loc_title),
+            body = stringResource(R.string.onb_loc_body),
+            primaryButtonText = stringResource(R.string.onb_loc_grant),
+            onPrimary = {
+                if (PermissionUtils.hasForegroundLocation(context)) {
+                    foregroundGranted = true
+                } else {
+                    launcher.launch(PermissionUtils.foregroundLocationPermissions.toTypedArray())
+                }
+            },
+            secondaryButtonText = stringResource(R.string.onb_loc_open_settings),
+            onSecondary = { (context as? Activity)?.let { PermissionUtils.openAppSettings(it) } },
+        )
+    } else {
+        // Faza 2 — "Uvek dozvoli" kroz sistemska podešavanja.
+        OnboardingPageScaffold(
+            icon = Icons.Outlined.MyLocation,
+            title = stringResource(R.string.onb_bg_title),
+            body = stringResource(R.string.onb_bg_body),
+            primaryButtonText = stringResource(R.string.onb_bg_open_settings),
+            onPrimary = { (context as? Activity)?.let { PermissionUtils.openAppSettings(it) } },
+        )
     }
-
-    LaunchedEffect(Unit) {
-        while (!granted) {
-            delay(500)
-            if (PermissionUtils.hasBackgroundLocation(context)) granted = true
-        }
-    }
-
-    LaunchedEffect(granted) {
-        if (granted) onContinue()
-    }
-
-    OnboardingPageScaffold(
-        icon = Icons.Outlined.MyLocation,
-        title = stringResource(R.string.onb_bg_title),
-        body = stringResource(R.string.onb_bg_body),
-        primaryButtonText = stringResource(R.string.onb_bg_open_settings),
-        onPrimary = { (context as? Activity)?.let { PermissionUtils.openAppSettings(it) } },
-        secondaryButtonText = stringResource(R.string.action_skip),
-        onSecondary = onContinue,
-    )
 }
 
 @Composable

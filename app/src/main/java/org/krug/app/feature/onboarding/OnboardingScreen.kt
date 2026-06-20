@@ -29,9 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
-import org.krug.app.feature.onboarding.pages.AllSetPage
-import org.krug.app.feature.onboarding.pages.BackgroundLocationPage
-import org.krug.app.feature.onboarding.pages.BatteryOptimizationPage
 import org.krug.app.feature.onboarding.pages.IntroPage
 import org.krug.app.feature.onboarding.pages.LocationPermissionPage
 import org.krug.app.feature.onboarding.pages.NotificationsPermissionPage
@@ -50,6 +47,9 @@ fun OnboardingScreen(
     fun goNext() = scope.launch {
         if (pagerState.currentPage < pages.lastIndex) {
             pagerState.animateScrollToPage(pagerState.currentPage + 1)
+        } else {
+            // Poslednji ekran je završen → kompletiraj onboarding (auto-navigate u Map).
+            viewModel.complete()
         }
     }
 
@@ -74,13 +74,7 @@ fun OnboardingScreen(
             when (pages[pageIndex]) {
                 OnboardingPage.INTRO -> IntroPage(onContinue = { goNext() })
                 OnboardingPage.LOCATION -> LocationPermissionPage(onGranted = { goNext() })
-                OnboardingPage.BACKGROUND_LOCATION -> BackgroundLocationPage(onContinue = { goNext() })
                 OnboardingPage.NOTIFICATIONS -> NotificationsPermissionPage(onContinueOrSkip = { goNext() })
-                OnboardingPage.BATTERY -> BatteryOptimizationPage(onContinueOrSkip = { goNext() })
-                OnboardingPage.DONE -> AllSetPage(
-                    completing = uiState.completing,
-                    onDone = { viewModel.complete() },
-                )
             }
         }
 

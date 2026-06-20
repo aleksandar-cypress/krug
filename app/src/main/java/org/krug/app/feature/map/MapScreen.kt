@@ -1280,7 +1280,7 @@ private fun MemberDetailSheet(
         }
 
         Spacer(Modifier.height(20.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             val batt = member.location?.batteryPct
             // Sakrijemo bateriju u privatnom modu — vrednost je stara/zabludljiva.
             if (!isPrivate && batt != null && batt in 0..100) {
@@ -1297,7 +1297,7 @@ private fun MemberDetailSheet(
             // Udaljenost — samo za druge, kad imamo obe lokacije i nije privatan.
             if (!member.isSelf && !isPrivate && selfLocation != null && member.location != null) {
                 StatChip(
-                    label = "Udaljenost",
+                    label = "Udaljen",
                     value = formatDistance(
                         haversineMeters(
                             selfLocation.lat, selfLocation.lng,
@@ -1311,7 +1311,7 @@ private fun MemberDetailSheet(
             }
             StatChip(
                 label = "Poslednje",
-                value = lastSeenLabel(member.location?.updatedAt).ifBlank { "—" },
+                value = compactLastSeen(member.location?.updatedAt),
                 accentColor = if (isPrivate) PrivateGray else MaterialTheme.colorScheme.primary,
                 icon = Icons.Outlined.AccessTime,
                 modifier = Modifier.weight(1f),
@@ -1375,12 +1375,14 @@ private fun StatChip(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(14.dp),
+            .padding(horizontal = 10.dp, vertical = 12.dp),
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1389,14 +1391,16 @@ private fun StatChip(
                     imageVector = icon,
                     contentDescription = null,
                     tint = accentColor,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(16.dp),
                 )
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(4.dp))
             }
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = accentColor,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }
     }
@@ -1412,5 +1416,18 @@ private fun lastSeenLabel(updatedAt: Long?): String {
         mins < 60 -> stringResource(R.string.map_member_last_seen_min, mins.toInt())
         mins < 60 * 24 -> stringResource(R.string.map_member_last_seen_h, (mins / 60).toInt())
         else -> stringResource(R.string.map_member_last_seen_old)
+    }
+}
+
+/** Kompaktna verzija za StatChip — "sad", "5m", "2h", "1d+" (uvek single-line). */
+private fun compactLastSeen(updatedAt: Long?): String {
+    if (updatedAt == null || updatedAt == 0L) return "—"
+    val diffMs = System.currentTimeMillis() - updatedAt
+    val mins = diffMs / 60_000
+    return when {
+        mins < 1 -> "sad"
+        mins < 60 -> "${mins}m"
+        mins < 60 * 24 -> "${mins / 60}h"
+        else -> "1d+"
     }
 }
