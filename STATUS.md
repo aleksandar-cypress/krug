@@ -2,9 +2,105 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-06-20, osma sesija — UI polish + child mode invite + circle edit + onboarding skip)
+
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `7921ee4`.
+Firebase rules: Firestore + RTDB **deployovane** sa child mode + paused field validatorima.
+A37 + Xiaomi Mi 11 oba sa najnovijim build-om. Beta grupa nepromenjena (aleksandarr + jelenavasilic84), **nije** ponovo distribuirano.
+
+## Osma sesija (2026-06-20 veče) — polish, refinement, returning user UX
+
+### Onboarding skip INTRO za returning users
+- **`SplashDecision.OnboardingPending(skipIntro: Boolean)`** — sealed class postala data class sa parametrom.
+- `SplashViewModel.decide()` — ako Firestore user doc kaže `onboardingCompleted=true` (ili LocalPrefs flag), ali su permission-i izgubljeni (reinstall, OEM revoke), onboarding počinje **direktno od LOCATION ekrana** — INTRO welcome je preskačen.
+- `Routes.Onboarding(skipIntro: Boolean = false)` — flag propaguje kroz nav.
+- `buildOnboardingPages(context, skipIntro)` filtrira `INTRO` kad je true.
+- Razlog: returning user koji reinstall-uje app je već video Welcome ranije; nema potrebe da ga opet vodimo kroz iste poruke. Idemo direktno na permission grant.
+
+### Circle edit (ime, boja, ikona)
+- **`CircleRepository.updateCircleDetails(cid, name, color, icon)`** — owner-only update (rules već enforce).
+- **`hasOwnedCircleNamed +excludeCircleId`** — duplicate check ignoriše sam taj krug pri edit-u (ne smatra "kept the same name" za duplikat).
+- **`CircleDetailViewModel.updateDetails()`** orchestrira validaciju + repo poziv. Vraća Boolean — false ako duplikat ili greška.
+- **CircleDetailScreen TopAppBar Edit ikona** (samo za owner-a) → `ModalBottomSheet` sa novim `EditCircleSheet` composable-om.
+- **`feature/circle/EditCircleSheet.kt`** — OutlinedTextField (20 char limit, duplikat error) + ColorPicker (6 boja edge-to-edge) + IconPicker (4 ikone, accent preview) + Sačuvaj/Otkaži.
+
+### Auto-clear stale /locationRequests TTL
+- **`LocationRepository.observeRefreshRequests`** signature change: `Flow<Set<String>>` → **`Flow<Map<String, Long>>`** (uid → timestamp).
+- **`LocationTrackingService.observeRefreshRequests`** — separuje fresh (< 5min) od stale ping-ova. Stari se brišu **bez triggering-a one-shot fix-a** (sprečava reakciju na zaboravljene ping-ove kad FGS oživi sat kasnije).
+- `REFRESH_REQUEST_TTL_MS = 5 * 60_000L` konstanta.
+
+### SOS budi zaključan ekran
+- **`AndroidManifest.xml`**: `USE_FULL_SCREEN_INTENT` permission + MainActivity `android:showWhenLocked="true"` + `android:turnScreenOn="true"`.
+- **`SosNotifier`**: `setFullScreenIntent(pi, true)` na notification builder-u — kombinacija sa channel `IMPORTANCE_HIGH` + `CATEGORY_ALARM` budi screen čak i kad je telefon zaključan i u Doze.
+- `CATEGORY_ALARM` daje auto-grant za `USE_FULL_SCREEN_INTENT` na Android 14+ (specijalna kategorija).
+
+### Refresh refocus baseline fix
+- **Bug:** `pendingRefocus = uid to System.currentTimeMillis()` koristio device clock kao baseline. Server timestamp (`updatedAt`) može biti ahead/behind device clock — poređenje `loc.updatedAt > since` nije pogađalo, kamera nije pratila novu lokaciju.
+- **Fix:** baseline je sad **current `location.updatedAt`** u trenutku tap-a (server timestamp). Poređenje uvek koristi server vreme — pouzdano čak ako je device clock skewed.
+
+### Duplicate circle name block
+- **`CircleRepository.hasOwnedCircleNamed(uid, name, excludeCircleId)`** — query user-ovih krugova, lowercase + trim compare.
+- **`CreateCircleViewModel.submit()`** — proverava pre `createCircle`. Ako duplikat, postavi `state.duplicateError=true`.
+- **UI:** OutlinedTextField sa `isError = nameError || duplicateError`, supportingText prikazuje "Već imaš krug sa tim imenom". Reset-uje se čim user kuca novo.
+- `create_circle_error_duplicate` string dodat.
+
+### Map empty state — direktni shortcuts + flicker fix
+- **Pre:** pill "Napravi prvi krug" → vodio na CircleList → još jedan "Napravi krug" dugme. Suvišan klik.
+- **Sada:** pill ide **direktno na CreateCircle**. Plus ispod pill-a **"Imam pozivnicu →"** mali link → direktno na EnterCode.
+- `MapScreen +onCreateCircle, +onJoinByCode` callback param-i; KrugNavHost wire-uje na CreateCircle / EnterCode route.
+- **Flicker fix:** `MapUiState +circlesLoaded: Boolean = false`. Inicijalna `MapUiState()` ima false; `combineForUser` postavlja na true unutar konstruktora MapUiState-a. Empty state CTA + sakriven MembersPill renderuju se SAMO kad `circlesLoaded=true` — nema više bljeskanja "Napravi krug" CTA-a pre nego što Firestore vrati postojeći krug.
+
+### Pin update pulse animacija
+- **`MapViewHolder.runUpdatePulse(lng, lat)`** — one-shot CircleAnnotation 10dp → 42dp širi se kroz 800ms (24 steps), fade-out alpha 0.55 → 0. Boja indigo `#818CF8`.
+- **`MapScreen`** drži `lastObservedUpdate: Map<uid, Long>` state; detektuje kad poraste `location.updatedAt` za uid → pokrene pulse (osim SOS pinova koji već imaju radar ripple).
+- Inicijalna observacija ne pulse-uje (samo zapamti baseline) — sprečava bljeskanje za sve članove pri prvom load-u.
+
+### Sign-out cleanup
+- **`AuthRepository.signOut()`** sad zove `FirebaseDatabase.getInstance().goOffline()` **PRE** `firebaseAuth.signOut()`. Drops aktivne ValueEventListener-e sa starim auth token-om (Firebase ih ne raskida automatski na auth change).
+- Na sledeći signIn, postojeća `refreshDatabaseAuth().goOnline()` oživljava konekciju sa novim token-om.
+
+### LocalLifecycleOwner deprecation
+- Migracija sa `androidx.compose.ui.platform.LocalLifecycleOwner` na `androidx.lifecycle.compose.LocalLifecycleOwner` u `PermissionPages.kt`. Compose 1.7+ deprecation warning eliminisan.
+
+### LocationPermissionPage Phase 2 escape hatch
+- **Bug:** user koji ne ume da promeni "While in use" → "Allow all the time" u MIUI/OEM system settings-u ostao zaglavljen na "Otvori postavke" ekranu.
+- **Fix:**
+  - Faza 2 koristi **`ACCESS_BACKGROUND_LOCATION` permission launcher** umesto direktnog `openAppSettings()` — Android A11+ automatski redirektuje na app Location settings.
+  - **"Preskoči" secondary CTA** se pojavljuje **POSLE prvog tap-a** (`bgAttempted = true`). User koji ne uspe da grant-uje može da pređe dalje sa degraded experience (foreground-only tracking).
+- Polling + ON_RESUME nastavljaju da pokupe state ako user uspešno promeni u settings-u.
+
+### IntroPage duplicate fix
+- **Bug:** prvi feature row je ponavljao `onb_welcome_title + onb_welcome_body` (već u hero bloku iznad). User je primetio "Aplikacija koja vas povezuje..." dva puta.
+- **Fix:** uklonjen Welcome feature row; ostaju samo "Kako Krug radi" + "Privatnost".
+
+### About screen polish
+- 160dp logo → **140dp**; "Krug" naslov u **`displaySmall`** + indigo + Bold.
+- Dodat **tagline** "Family Circle" (`app_tagline`) ispod.
+- **Verzija** u `labelMedium` ispod tagline-a.
+- Privacy + Terms link-ovi pretvoreni u **kartice** (`Surface + RoundedCornerShape(14.dp)` + ikona + OpenInNew indikator) umesto TextButton-a.
+- **Copyright** "© 2026 Krug · Sva prava zadržana" na dnu.
+- Scrollable Column za male ekrane.
+
+### Notifications app open + auth-restore
+- (Već postojalo, samo verifikovano) — SOS notifikacija click otvara `MainActivity` sa SINGLE_TOP + CLEAR_TOP. Nakon unlock-a, app je na Map screen-u sa SOS banner-om.
+
+### Sledeće sesije — preostalo
+- Member nickname per circle ("Mama" u family, "Mira" u prijateljskom)
+- Empty members CTA — "Niko se nije pridružio — pošalji pozivnicu" u MembersSheet kad si jedini
+- Battery saver banner na Map kad u SAVER modu
+- Crashlytics breadcrumbs za key akcije
+- Improved offline banner — "Offline — poslednje ažuriranje pre X min"
+- Release signing + Play Store internal testing track
+- Google reauth flow za delete-account
+- FCM SOS push (treba Blaze plan ~$1-3/mesec)
+- Places/Geofencing (per-place "Obavesti članove" toggle, default = on za isChild)
+- Sound test za SOS u Settings
+- History trail (last 24h breadcrumbs)
+- Member trail / Places — uz Blaze ($)
+- "Podrži razvoj" link (čekamo više korisnika)
+
 ## Gde smo stali (2026-06-20, sedma sesija — child mode + onboarding 3 koraka)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `8a1c003`.
 Firebase rules: Firestore + RTDB **deployovane** sa novim child mode + paused field validatorima.
 A37 + Xiaomi Mi 11 oba sa najnovijim build-om. Beta grupa nepromenjena (aleksandarr + jelenavasilic84), **nije** ponovo distribuirano.
 
