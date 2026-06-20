@@ -32,6 +32,8 @@ data class AccountUiState(
     val deleting: Boolean = false,
     /** Set kad Firebase Auth.delete() traži recent re-login (nije implementiran reauth flow). */
     val deleteNeedsReauth: Boolean = false,
+    /** Roditeljska kontrola — bilo koji krug me je markirao kao dete → sakrij "Obriši nalog". */
+    val isChildAnywhere: Boolean = false,
 )
 
 @HiltViewModel
@@ -72,6 +74,12 @@ class AccountViewModel @Inject constructor(
                     }
                 }
                 .launchIn(viewModelScope)
+            // Child status — bilo koji krug me je markirao kao dete → sakrij delete.
+            circleRepository.observeUserIsChildAnywhere(uid)
+                .onEach { isChild ->
+                    _state.update { it.copy(isChildAnywhere = isChild) }
+                }
+                .launchIn(viewModelScope)
         }
     }
 
@@ -110,6 +118,8 @@ class AccountViewModel @Inject constructor(
     fun deleteAccount(context: Context) {
         val uid = authRepository.currentUser?.uid ?: return
         if (_state.value.deleting) return
+        // Defensive: dete ne sme da obriše nalog. UI je već sakrio dugme, ovo je extra layer.
+        if (_state.value.isChildAnywhere) return
         _state.update { it.copy(deleting = true, deleteNeedsReauth = false) }
         viewModelScope.launch {
             // 1. Zaustavi FGS odmah — više ne sme da publish-uje.

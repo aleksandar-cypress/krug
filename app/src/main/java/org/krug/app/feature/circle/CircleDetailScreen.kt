@@ -18,16 +18,21 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.ChildCare
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -124,7 +129,43 @@ fun CircleDetailScreen(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(state.members, key = { it.uid }) { m -> MemberRow(m) }
+                items(state.members, key = { it.uid }) { m ->
+                    MemberRow(
+                        m = m,
+                        canManage = state.isOwner && !m.isSelf,
+                        onToggleChild = { makeChild ->
+                            viewModel.toggleChildStatus(m.uid, makeChild)
+                        },
+                    )
+                }
+            }
+
+            // Self je dete u OVOM krugu — sakrij "Izađi iz kruga", pokaži banner.
+            val selfIsChildHere = state.members.firstOrNull { it.isSelf }?.isChild == true
+            if (selfIsChildHere && !state.isOwner) {
+                Spacer(Modifier.size(12.dp))
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.ChildCare,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        Spacer(Modifier.size(10.dp))
+                        Text(
+                            text = "Roditeljska kontrola — vlasnik kruga je označio tvoj nalog kao dete. Kontaktiraj ga ako želiš da izađeš iz kruga.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.size(12.dp))
@@ -142,17 +183,20 @@ fun CircleDetailScreen(
                     Text(stringResource(R.string.circle_detail_delete_cta))
                 }
             } else {
-                OutlinedButton(
-                    onClick = { showLeaveConfirm = true },
-                    enabled = !state.leaving,
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                ) {
-                    Icon(Icons.Outlined.ExitToApp, contentDescription = null)
-                    Spacer(Modifier.size(8.dp))
-                    Text(stringResource(R.string.circle_detail_leave_cta))
+                val selfIsChildHere = state.members.firstOrNull { it.isSelf }?.isChild == true
+                if (!selfIsChildHere) {
+                    OutlinedButton(
+                        onClick = { showLeaveConfirm = true },
+                        enabled = !state.leaving,
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    ) {
+                        Icon(Icons.Outlined.ExitToApp, contentDescription = null)
+                        Spacer(Modifier.size(8.dp))
+                        Text(stringResource(R.string.circle_detail_leave_cta))
+                    }
                 }
             }
         }
@@ -237,7 +281,12 @@ private fun CircleHeader(name: String, colorHex: String, iconKey: String, member
 }
 
 @Composable
-private fun MemberRow(m: CircleDetailMember) {
+private fun MemberRow(
+    m: CircleDetailMember,
+    canManage: Boolean = false,
+    onToggleChild: (Boolean) -> Unit = {},
+) {
+    var menuOpen by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -262,21 +311,61 @@ private fun MemberRow(m: CircleDetailMember) {
         }
         Spacer(Modifier.size(12.dp))
         Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = m.displayName.ifBlank {
+                        if (m.isSelf) "Ti" else stringResource(R.string.circle_detail_role_member)
+                    },
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (m.isChild) {
+                    Spacer(Modifier.size(6.dp))
+                    Icon(
+                        imageVector = Icons.Outlined.ChildCare,
+                        contentDescription = "Dete",
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
             Text(
-                text = m.displayName.ifBlank {
-                    if (m.isSelf) "Ti" else stringResource(R.string.circle_detail_role_member)
+                text = when {
+                    m.isOwner -> stringResource(R.string.circle_detail_role_owner)
+                    m.isChild -> "Dete"
+                    else -> stringResource(R.string.circle_detail_role_member)
                 },
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = stringResource(
-                    if (m.isOwner) R.string.circle_detail_role_owner
-                    else R.string.circle_detail_role_member,
-                ),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (m.isChild) MaterialTheme.colorScheme.secondary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (canManage) {
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = "Opcije člana")
+                }
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (m.isChild) "Ukloni oznaku deteta"
+                                else "Označi kao dete",
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Outlined.ChildCare, contentDescription = null)
+                        },
+                        onClick = {
+                            menuOpen = false
+                            onToggleChild(!m.isChild)
+                        },
+                    )
+                }
+            }
         }
     }
 }

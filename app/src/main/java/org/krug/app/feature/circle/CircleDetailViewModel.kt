@@ -30,6 +30,7 @@ data class CircleDetailMember(
     val displayName: String,
     val isOwner: Boolean,
     val isSelf: Boolean,
+    val isChild: Boolean,
 )
 
 data class CircleDetailUiState(
@@ -68,10 +69,11 @@ class CircleDetailViewModel @Inject constructor(
         var hadCircle = false
         combine(
             observeCircle(circleId),
+            observeMembersSubcollection(circleId),
             authRepository.observeAuthState(),
-        ) { circle, user ->
-            circle to user?.uid
-        }.onEach { (circle, uid) ->
+        ) { circle, memberDocs, user ->
+            Triple(circle, memberDocs, user?.uid)
+        }.onEach { (circle, memberDocs, uid) ->
             if (circle == null) {
                 // Krug obrisan dok je user gledao detail — auto-back.
                 if (hadCircle) {
@@ -102,6 +104,7 @@ class CircleDetailViewModel @Inject constructor(
                             displayName = name,
                             isOwner = profile.uid == circle.ownerId,
                             isSelf = profile.uid == uid,
+                            isChild = memberDocs[profile.uid] == true,
                         )
                     },
                 )
@@ -109,6 +112,14 @@ class CircleDetailViewModel @Inject constructor(
         }.launchIn(viewModelScope)
         // Snapshot init so empty UID doesn't break.
         if (selfUid == null) _state.value = _state.value.copy(loading = false)
+    }
+
+    fun toggleChildStatus(memberUid: String, makeChild: Boolean) {
+        if (!_state.value.isOwner) return
+        viewModelScope.launch {
+            runCatching { circleRepository.setChildStatus(circleId, memberUid, makeChild) }
+                .onFailure { Timber.w(it, "setChildStatus failed for $circleId/$memberUid") }
+        }
     }
 
     fun generateInvite() {
@@ -160,6 +171,23 @@ class CircleDetailViewModel @Inject constructor(
                 }
                 val model = snap?.toObject(CircleModel::class.java)?.copy(id = snap.id)
                 trySend(model)
+            }
+        awaitClose { reg.remove() }
+    }
+
+    /** Member subcollection → mapa uid → isChild za sve članove ovog kruga. */
+    private fun observeMembersSubcollection(cid: String): Flow<Map<String, Boolean>> = callbackFlow {
+        val reg = firestore.collection("circles").document(cid).collection("members")
+            .addSnapshotListener { snap, error ->
+                if (error != null) {
+                    Timber.w(error, "observeMembersSubcollection error for $cid")
+                    trySend(emptyMap())
+                    return@addSnapshotListener
+                }
+                val map = snap?.documents.orEmpty().associate { d ->
+                    d.id to (d.getBoolean("isChild") == true)
+                }
+                trySend(map)
             }
         awaitClose { reg.remove() }
     }

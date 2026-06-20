@@ -18,6 +18,12 @@ data class MemberModel(
     val role: String = ROLE_MEMBER,
     val nickname: String? = null,
     val shareLocation: Boolean = true,
+    /**
+     * Roditeljska kontrola — vlasnik kruga može označiti člana kao "dete".
+     * Klijent enforce: skriva pause-share toggle, hide leave/delete-account dugmad.
+     * Server enforce nije implementiran u v1 — može se zaobići dekompajliranjem.
+     */
+    val isChild: Boolean = false,
     @ServerTimestamp val joinedAt: Date? = null,
 ) {
     companion object {

@@ -2,6 +2,105 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-06-20, šesta sesija — UX polish + circle identity)
+
+Repo public: **https://github.com/aleksandar-cypress/krug**
+GitHub Pages live: **https://aleksandar-cypress.github.io/krug/** (Privacy Policy + Terms)
+Firebase App Distribution **enabled**, beta grupa: aleksandarr@gmail.com, jelenavasilic84@gmail.com (+ maslacjana@gmail.com bez grupe).
+Današnji commit: `4c38feb` Member detail polish + circle icon picker + UI cleanup. **NIJE jos distribuiran** beta grupi.
+
+Testirano na A37 (S24 nije konektovan ovu sesiju). A37 trenutno offline u trenutku snimanja — ne radi Firebase Auth sign-in dok ne dobije network.
+
+## Šesta sesija (2026-06-20) — UX polish, circle identity, log noise
+
+### Member detail polish
+- **Refresh auto-refocus** — kad user tapne "Osveži lokaciju" za drugog člana, `pendingRefocus = (uid, since)` se postavi. Kad stigne novi `location.updatedAt > since`, kamera automatski flyTo na novu poziciju. 30s timeout drop pending ako ne stigne fresh fix.
+- **Private mode detekcija** — `MemberWithLocation.isPrivate()` ekstenzija: `updatedAt > 15min` ili `location == null` (za druge, ne self). U privatnom modu:
+  - MembersSheet: status "Privatni mod" u sivom umesto "pre X min", baterija sakrivena
+  - MemberDetailSheet: info banner objašnjava, "Osveži lokaciju" dugme sakriveno (poštedi user-a frustracije sa pingom koji ne radi), "Otvori u Google Maps" ostaje (last-known pozicija)
+  - Mapbox pin: gray (`#9CA3AF`) umesto member boje
+- **Charging + Distance chips** u MemberDetailSheet stats redu:
+  - Baterija chip: ako `charging=true`, label postaje "Puni se" + `BatteryChargingFull` ikona; inače "Baterija" + `BatteryFull`. Boja zelena/žuta/crvena po nivou
+  - Udaljenost chip: haversine od selfLocation, format "blizu" / "X m" / "X.X km" / "X km"
+- **Friendly device names** (`core/util/DeviceNames.kt`) — mapira `Build.MODEL` (SM-S928B, SM-A376B) na "Galaxy S24 Ultra", "Galaxy A37 5G". Pokriva Galaxy S/A/Z linije unazad do S20. Primenjeno u MapViewModel.memberFlow — radi i za već signed-in user-e bez re-sign-in (live transform u UI sloju).
+- **Battery ikona + boja u MembersSheet rowovima** — `BatteryBadge` composable umesto Surface+Text. Charging state u ikoni.
+- **Google fotka u MembersSheet rowovima** — MemberRow prima `photo: Bitmap?` iz photoCache (već se koristio na markerima).
+- **Zoom 14 → 16.5** na klik člana (`MapViewHolder.flyTo`) — bliže auto-fokus pri inspekciji.
+
+### Circle identity (icon picker svuda)
+- **`CirclePresets.icons`** suženo na 4: `family`, `friends`, `travel`, `event` (Porodica/Drustvo/Putovanje/Događaj). 4 staju u jedan red sa većim krugovima (60dp).
+- **`CirclePresets.colors`** suženo na 6 (uklonjen cyan + orange — vizuelno najbliže drugima). Staje u 1 red edge-to-edge.
+- **`feature/circle/CircleIconAssets.kt`** — mapping iz iconKey → Material ImageVector + lokalizovani label.
+- **CreateCircleScreen**:
+  - ColorPicker: `FlowRow` → `Row(fillMaxWidth) + Arrangement.SpaceBetween` — krugovi edge-to-edge bez viška praznog prostora desno
+  - IconPicker: ista logika, accent boja prati selektovanu boju kruga (preview real-time dok bira)
+- **Render iconKey svuda gde se prikazuje krug**:
+  - `MapScreen.TopFloatingBar` pill: pre samo color dot, sad 28dp avatar (boja + ikona)
+  - `CircleListScreen.CircleRow`: 44dp boji disc + ikona unutra
+  - `CircleDetailScreen.CircleHeader`: 56dp disc + 28dp ikona (umesto hardcoded Icons.Outlined.Group)
+- **`CircleBrief +iconKey`** + propagacija kroz `MapViewModel.combineForUser`.
+- **`CircleDetailUiState +iconKey`** + load iz CircleModel.
+
+### "+ Napravi krug" gradient FAB redesign
+- `CircleListScreen` ExtendedFAB → custom `CreateCircleFab` — gradient pill (indigo 600→400), 36dp `+` u beloj prozirnoj kapsuli, jak shadow.
+- EmptyState `Button` → `CreateCircleButton` (full-width gradient varijanta).
+
+### AuthScreen redesign — bela pozadina
+- Indigo gradient backdrop **uklonjen**, sad **bela pozadina**.
+- Logo 180dp → **220dp**, bez Surface wrapper-a (bela na beloj ne ima smisla).
+- "Krug" naslov u indigo (BrandIndigo600).
+- Google dugme: white-bg indigo-text → **indigo-bg white-text** (kontrast).
+- Email dugme: white outlined → **indigo outlined**.
+- Debug anonymous + footer: muted onSurfaceVariant.
+
+### Splash icon veći
+- `ic_splash_icon.xml` inset **28dp → 10dp** (~60% veći logo na splash-u). Novi logo (4 figure) ima više belog prostora pa može manji inset bez clipping-a.
+
+### Novi logo (4 figure)
+- `logo.png` u rootu sa 4 vibrant figure raspoređene u krug (plava/pink/tirkizna/narandžasta) — čistija siluetna konstrukcija od starog 6-figure dizajna.
+- Kopirano u `drawable-nodpi/krug_logo.png` (zameni stari) i `logo-krug.png` (root reference).
+
+### Notifications mandatory
+- `NotificationsPermissionPage`: secondary "Preskoči" dugme **uklonjeno**. Posle prvog tap-a, ako sistem više ne prikazuje dialog (double-deny ili "Don't ask again"), primary CTA se prebacuje na "Otvori sistemska podešavanja".
+- Body string update-ovan: "Obaveštenja su obavezna — bez njih nećete dobiti SOS od člana kruga koji traži hitnu pomoć".
+- A37 infinite-loop bug (iz prethodne sesije) ostaje rešen jer `SplashViewModel.decide()` NE proverava `hasNotifications` — samo location.
+
+### Landscape lock
+- `AndroidManifest.xml` MainActivity `android:screenOrientation="portrait"`.
+
+### Trailing tačke uklonjene iz UI stringova
+- 27 stringova u `strings.xml` + 6 hardcoded u Kotlin fajlovima (AuthScreen footer, AuthViewModel error poruke, MapScreen SOS dialog body + Privatni mod info banner).
+- Internal tačke u višerečenicnim body stringovima zadržane.
+- iOS-style čistije etikete.
+
+### Log noise → Crashlytics fixes
+- **BootReceiver**: skip `MY_PACKAGE_REPLACED` na A14+. Razlog: Android 14+ ne dozvoljava startovanje FGS sa type=location iz background broadcast-a — baci SecurityException. Pre fix-a, svaki Play Store auto-update generisao bi 1 lažni non-fatal u Crashlytics. Sad: debug log, return. User otvara app posle update-a → FGS startuje iz foreground (Map DisposableEffect).
+- **`publishLocation` + `locationCallback`**: catch `CancellationException` zasebno, log debug umesto warn. Razlog: kad scope umire (FGS shutdown), in-flight publish coroutine baci JCE. Pre: 2-10 lažnih non-fatals po FGS smrti. Sad: tih.
+- **`LocationTrackingService.onCreate`** SecurityException catch: warn → debug (expected background entry).
+- `CrashlyticsTree` forward-uje samo `Log.WARN` i `Log.ERROR` — sa fix-ovima dashboard bi imao samo prave bugove.
+
+### Bug fix: BootReceiver crash na reinstall
+- Symptom: posle reinstall-a na A37, log pokazivao `SecurityException: Starting FGS with type location ...`
+- Root cause: A14+ FGS-with-location ne sme iz background context-a (broadcast receiver bez activity).
+- Fix: BootReceiver early-return za MY_PACKAGE_REPLACED na A14+.
+- Plus dodatna defensiva u `LocationTrackingService.start()` companion: već je proveravala permission, ali ne i background eligibility — to je sistem-level check koji ne možemo zaobići.
+
+### Logo (PSD source)
+- `logo.psd` postoji na Desktop-u ali NIJE u repo-u (Photoshop source je intentional skip — veliki binary, nepotreban za build).
+- Ako neko clone-uje repo i hoće da menja logo, mora da regeneriše PSD ili da koristi `logo.png` kao base.
+
+### Šta NIJE urađeno (sledeća sesija — biranje):
+- **Child mode v1** (per-member, vlasnik označava u CircleDetail; client-side hide leave/share-pause/delete-account)
+- **Diagnostics screen** (debug-only Settings ekran sa FGS state, last publish, permissions, last error — alat za beta podršku)
+- **Pin animacije** (SOS ripple, update pulse)
+- **Onboarding skraćivanje** (combine Welcome/HowItWorks/Privacy)
+- **Haptics**
+- **Map style auto light/dark**
+- Sign-out cleanup (cancel RTDB listeners)
+- Auto-clear stale /locationRequests TTL
+- Release signing + Play Store internal track
+- LocalLifecycleOwner deprecation (Compose 1.7)
+
 ## Gde smo stali (2026-06-17, peta sesija — beta-ready)
 
 Repo public: **https://github.com/aleksandar-cypress/krug**

@@ -4,9 +4,7 @@ import android.content.Context
 import org.krug.app.core.permissions.PermissionUtils
 
 enum class OnboardingPage {
-    WELCOME,
-    HOW_IT_WORKS,
-    PRIVACY,
+    INTRO,
     LOCATION,
     BACKGROUND_LOCATION,
     NOTIFICATIONS,

@@ -25,3 +25,4 @@ import kotlinx.serialization.Serializable
 @Serializable object NotificationsSettings
 @Serializable object About
 @Serializable object DeleteAccount
+@Serializable object Diagnostics

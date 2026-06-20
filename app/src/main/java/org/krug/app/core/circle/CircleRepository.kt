@@ -5,12 +5,17 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.tasks.await
 import timber.log.Timber
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class CircleRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
@@ -95,6 +100,51 @@ class CircleRepository @Inject constructor(
     suspend fun leaveCircle(circleId: String, uid: String) {
         circle(circleId).update("memberIds", FieldValue.arrayRemove(uid)).await()
         runCatching { members(circleId).document(uid).delete().await() }
+    }
+
+    /**
+     * Označi člana kao dete (ili ukloni oznaku). Owner-only operation — rules
+     * dozvoljavaju ovom uid-u da update-uje samo `isChild` field na members docu.
+     */
+    suspend fun setChildStatus(circleId: String, memberUid: String, isChild: Boolean) {
+        members(circleId).document(memberUid)
+            .update("isChild", isChild)
+            .await()
+    }
+
+    /** Observe member docs za uid kroz sve krugove. True ako je isChild u BAR JEDNOM. */
+    fun observeUserIsChildAnywhere(uid: String): Flow<Boolean> =
+        observeMyCircleIds(uid).flatMapLatest { circleIds ->
+            if (circleIds.isEmpty()) flowOf(false)
+            else combine(circleIds.map { cid -> observeMemberIsChild(cid, uid) }) { arr ->
+                arr.any { it }
+            }
+        }
+
+    private fun observeMyCircleIds(uid: String): Flow<List<String>> = callbackFlow {
+        val reg = circles()
+            .whereArrayContains("memberIds", uid)
+            .addSnapshotListener { snap, error ->
+                if (error != null) {
+                    Timber.w(error, "observeMyCircleIds error")
+                    trySend(emptyList<String>())
+                    return@addSnapshotListener
+                }
+                trySend(snap?.documents.orEmpty().map { it.id })
+            }
+        awaitClose { reg.remove() }
+    }
+
+    private fun observeMemberIsChild(circleId: String, uid: String): Flow<Boolean> = callbackFlow {
+        val reg = members(circleId).document(uid).addSnapshotListener { snap, error ->
+            if (error != null) {
+                Timber.w(error, "observeMemberIsChild error for $circleId/$uid")
+                trySend(false)
+                return@addSnapshotListener
+            }
+            trySend(snap?.getBoolean("isChild") == true)
+        }
+        awaitClose { reg.remove() }
     }
 
     /** Obriši ceo krug. Samo vlasnik ima permission preko rules. */

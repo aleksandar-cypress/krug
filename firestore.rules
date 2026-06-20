@@ -74,7 +74,14 @@ service cloud.firestore {
       // circles/{cid}/members/{memberUid}
       match /members/{memberUid} {
         allow read: if isAuthed();
-        allow create, update: if isSelf(memberUid);
+        allow create: if isSelf(memberUid);
+        // Update:
+        //  - Self može da menja sve (shareLocation, nickname).
+        //  - Owner sme da menja SAMO `isChild` field (roditeljska kontrola).
+        allow update: if isSelf(memberUid)
+          || (isAuthed()
+            && request.auth.uid == circleData(cid).ownerId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isChild']));
         allow delete: if isSelf(memberUid)
           || (isAuthed() && request.auth.uid == circleData(cid).ownerId);
       }

@@ -69,6 +69,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import android.view.HapticFeedbackConstants
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -79,12 +81,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.MapView
+import com.mapbox.maps.Style
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.animation.flyTo
 import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.plugin.annotation.generated.CircleAnnotation
+import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.OnPointAnnotationClickListener
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.compass.compass
 import com.mapbox.maps.plugin.scalebar.scalebar
@@ -109,6 +116,12 @@ private fun MemberWithLocation.isPrivate(): Boolean {
     return System.currentTimeMillis() - updatedAt > PRIVATE_MODE_THRESHOLD_MS
 }
 
+/** Lokalno vreme — uveče i noću se prebacuje na tamniju varijantu mape. */
+private fun pickMapStyle(): String {
+    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    return if (hour in 7..18) Style.STANDARD else Style.DARK
+}
+
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,6 +133,10 @@ fun MapScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val view = LocalView.current
+    val haptic: () -> Unit = remember(view) {
+        { view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK) }
+    }
     val mapViewState = remember { MapViewHolder() }
     val photoCache = remember { mutableStateMapOf<String, Bitmap>() }
     var detailUid by remember { mutableStateOf<String?>(null) }
@@ -151,6 +168,7 @@ fun MapScreen(
     // Click handler za pin — fly-to + otvori MemberDetail sheet.
     DisposableEffect(mapViewState, state.members) {
         mapViewState.onPinClick = { uid ->
+            haptic()
             state.members.firstOrNull { it.uid == uid }?.location?.let { loc ->
                 mapViewState.flyTo(loc.lng, loc.lat)
             }
@@ -178,6 +196,23 @@ fun MapScreen(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val activeSosMembers = state.members.filter { it.sos != null }
+
+    // SOS ripple animation — infinite phase 0..1, ~2s ciklus. Drive-uje radar pulse
+    // oko SOS markera. Kad nema aktivnih SOS-ova, animation se i dalje vrti (jeftino),
+    // ali updateSosRipples ne radi ništa.
+    val infiniteTransition = rememberInfiniteTransition(label = "sosRipple")
+    val sosPhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "sosRipplePhase",
+    )
+    LaunchedEffect(activeSosMembers.map { "${it.uid}:${it.location?.lat}:${it.location?.lng}" }, sosPhase) {
+        mapViewState.updateSosRipples(activeSosMembers, sosPhase)
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         MapboxContainer(members = state.members, photoCache = photoCache, holder = mapViewState)
@@ -214,6 +249,7 @@ fun MapScreen(
         SosFab(
             active = state.selfSosActive,
             onClick = {
+                haptic()
                 if (state.selfSosActive) viewModel.clearSos()
                 else sosConfirmVisible = true
             },
@@ -243,6 +279,7 @@ fun MapScreen(
                     members = state.members,
                     photoCache = photoCache,
                     onMemberClick = { uid ->
+                        haptic()
                         sheetVisible = false
                         state.members.firstOrNull { it.uid == uid }?.location?.let { loc ->
                             mapViewState.flyTo(loc.lng, loc.lat)
@@ -273,6 +310,7 @@ fun MapScreen(
                         }
                     },
                     onRefresh = {
+                        haptic()
                         pendingRefocus = detailMember.uid to System.currentTimeMillis()
                         if (detailMember.isSelf) {
                             LocationTrackingService.refreshSelf(context)
@@ -293,6 +331,7 @@ fun MapScreen(
                     circles = state.myCircles,
                     activeCircleId = state.activeCircleId,
                     onPick = { id ->
+                        haptic()
                         viewModel.setActiveCircle(id)
                         circlePickerVisible = false
                     },
@@ -692,6 +731,9 @@ private fun MapboxContainer(
         factory = { ctx ->
             MapView(ctx).also { mv ->
                 holder.mapView = mv
+                // SOS ripple manager mora biti kreiran PRE pin annotation manager-a — circle
+                // se render-uje ispod pinova jer je dodat prvi u layer stack-u Mapbox-a.
+                holder.circleManager = mv.annotations.createCircleAnnotationManager()
                 val manager = mv.annotations.createPointAnnotationManager()
                 holder.annotationManager = manager
                 manager.addClickListener(
@@ -726,6 +768,10 @@ private fun MapboxContainer(
                         .zoom(DEFAULT_ZOOM)
                         .build(),
                 )
+                // Auto light/dark prema vremenu: 7-19h → STANDARD (vibrant day), 19-7h → DARK.
+                // Set once na factory creation; ako user otvori app kasnije, novi map view
+                // se kreira sa drugačijim style-om.
+                mv.mapboxMap.loadStyle(pickMapStyle())
             }
         },
         update = { _ ->
@@ -788,8 +834,11 @@ private fun MapboxContainer(
 private class MapViewHolder {
     var mapView: MapView? = null
     var annotationManager: PointAnnotationManager? = null
+    var circleManager: CircleAnnotationManager? = null
     var didFlyToSelf: Boolean = false
     val annotationToUid = mutableMapOf<String, String>()
+    /** SOS ripple — per-UID circle annotation (radar pulse oko SOS markera). */
+    val sosRipples = mutableMapOf<String, CircleAnnotation>()
     var onPinClick: ((String) -> Unit)? = null
     var lastFingerprint: String = ""
 
@@ -801,6 +850,49 @@ private class MapViewHolder {
                 .build(),
             MapAnimationOptions.mapAnimationOptions { duration(1200L) },
         )
+    }
+
+    /**
+     * Radar-stil SOS ripple — krug oko markera koji se širi i nestaje. `phase` ide 0..1
+     * (drive-uje ga Compose infiniteTransition u MapScreen-u). Sync-uje za svaki frame:
+     *  - kreira CircleAnnotation za novi SOS marker
+     *  - ažurira radius/alpha postojećih
+     *  - uklanja kad SOS nestane
+     */
+    fun updateSosRipples(sosMembers: List<MemberWithLocation>, phase: Float) {
+        val mgr = circleManager ?: return
+        val currentUids = sosMembers.mapNotNull { m -> m.location?.let { m.uid } }.toSet()
+        // Skini ripple za UID-ove koji više nemaju aktivan SOS.
+        val toRemove = sosRipples.keys - currentUids
+        toRemove.forEach { uid ->
+            sosRipples.remove(uid)?.let { mgr.delete(it) }
+        }
+        // 20px → 80px, alpha 0.5 → 0 kroz fazu.
+        val radius = 20.0 + 60.0 * phase
+        val alpha = 0.5 * (1.0 - phase)
+        sosMembers.forEach { m ->
+            val loc = m.location ?: return@forEach
+            val existing = sosRipples[m.uid]
+            if (existing == null) {
+                val ann = mgr.create(
+                    CircleAnnotationOptions()
+                        .withPoint(Point.fromLngLat(loc.lng, loc.lat))
+                        .withCircleRadius(radius)
+                        .withCircleColor("#DC2626")
+                        .withCircleOpacity(alpha)
+                        .withCircleStrokeWidth(2.0)
+                        .withCircleStrokeColor("#DC2626")
+                        .withCircleStrokeOpacity(alpha),
+                )
+                sosRipples[m.uid] = ann
+            } else {
+                existing.point = Point.fromLngLat(loc.lng, loc.lat)
+                existing.circleRadius = radius
+                existing.circleOpacity = alpha
+                existing.circleStrokeOpacity = alpha
+                mgr.update(existing)
+            }
+        }
     }
 }
 

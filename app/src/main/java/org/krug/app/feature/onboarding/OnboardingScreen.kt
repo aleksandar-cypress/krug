@@ -32,11 +32,9 @@ import kotlinx.coroutines.launch
 import org.krug.app.feature.onboarding.pages.AllSetPage
 import org.krug.app.feature.onboarding.pages.BackgroundLocationPage
 import org.krug.app.feature.onboarding.pages.BatteryOptimizationPage
-import org.krug.app.feature.onboarding.pages.HowItWorksPage
+import org.krug.app.feature.onboarding.pages.IntroPage
 import org.krug.app.feature.onboarding.pages.LocationPermissionPage
 import org.krug.app.feature.onboarding.pages.NotificationsPermissionPage
-import org.krug.app.feature.onboarding.pages.PrivacyPage
-import org.krug.app.feature.onboarding.pages.WelcomePage
 
 @Composable
 fun OnboardingScreen(
@@ -74,9 +72,7 @@ fun OnboardingScreen(
             modifier = Modifier.fillMaxSize(),
         ) { pageIndex ->
             when (pages[pageIndex]) {
-                OnboardingPage.WELCOME -> WelcomePage(onContinue = { goNext() })
-                OnboardingPage.HOW_IT_WORKS -> HowItWorksPage(onContinue = { goNext() }, onBack = { goBack() })
-                OnboardingPage.PRIVACY -> PrivacyPage(onContinue = { goNext() }, onBack = { goBack() })
+                OnboardingPage.INTRO -> IntroPage(onContinue = { goNext() })
                 OnboardingPage.LOCATION -> LocationPermissionPage(onGranted = { goNext() })
                 OnboardingPage.BACKGROUND_LOCATION -> BackgroundLocationPage(onContinue = { goNext() })
                 OnboardingPage.NOTIFICATIONS -> NotificationsPermissionPage(onContinueOrSkip = { goNext() })

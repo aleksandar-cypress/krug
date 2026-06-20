@@ -133,28 +133,31 @@ fun AccountScreen(
                 }
                 Text(stringResource(R.string.account_sign_out))
             }
-            Spacer(Modifier.size(8.dp))
-            TextButton(
-                onClick = { showDeleteConfirm = true },
-                enabled = !state.deleting,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (state.deleting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    Spacer(Modifier.size(8.dp))
-                    Text(
-                        text = stringResource(R.string.account_delete_progress),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.account_delete),
-                        color = MaterialTheme.colorScheme.error,
-                    )
+            // Roditeljska kontrola — dete ne sme da obriše nalog samostalno.
+            if (!state.isChildAnywhere) {
+                Spacer(Modifier.size(8.dp))
+                TextButton(
+                    onClick = { showDeleteConfirm = true },
+                    enabled = !state.deleting,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (state.deleting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        Text(
+                            text = stringResource(R.string.account_delete_progress),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.account_delete),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             }
         }

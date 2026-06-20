@@ -16,6 +16,7 @@ import org.krug.app.feature.onboarding.OnboardingScreen
 import org.krug.app.feature.settings.AboutScreen
 import org.krug.app.feature.settings.AccountScreen
 import org.krug.app.feature.settings.BatteryModeScreen
+import org.krug.app.feature.settings.DiagnosticsScreen
 import org.krug.app.feature.settings.PrivacyScreen
 import org.krug.app.feature.settings.SettingsRootScreen
 import org.krug.app.feature.splash.SplashScreen
@@ -70,7 +71,11 @@ fun KrugNavHost() {
                 onPrivacy = { nav.navigate(Privacy) },
                 onBattery = { nav.navigate(BatteryMode) },
                 onAbout = { nav.navigate(About) },
+                onDiagnostics = { nav.navigate(Diagnostics) },
             )
+        }
+        composable<Diagnostics> {
+            DiagnosticsScreen(onBack = { nav.popBackStack() })
         }
         composable<Account> {
             AccountScreen(
