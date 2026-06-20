@@ -75,13 +75,37 @@ class LocationTrackingService : Service() {
     @Volatile private var currentSettings: UserSettings = UserSettings()
     @Volatile private var currentProfile: LocationProfile? = null
 
+    /** Movement filter: poslednja PUBLISHED lokacija (ne svaki callback). */
+    @Volatile private var lastPublishedLat: Double? = null
+    @Volatile private var lastPublishedLng: Double? = null
+
+    /**
+     * BURST profil: SOS aktivan ili peer-ov refresh ping. Drži veoma frequent
+     * fix interval kratko vreme (30min SOS, 5min refresh). Posle isteka, profil
+     * se prirodno vraća na battery mode default.
+     */
+    @Volatile private var sosBoostUntilMs: Long = 0L
+    @Volatile private var refreshBoostUntilMs: Long = 0L
+
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             val loc = result.lastLocation ?: return
+            // Accuracy filter — dropujemo unreliable fixes (indoor, tunnel, slab GPS sat).
+            // Threshold 100m je liberalan: pravi GPS fix retko prelazi 50m čak u zgradama.
+            if (loc.accuracy > MAX_ACCEPTABLE_ACCURACY_M) {
+                Timber.d("Drop low-accuracy fix: ${loc.accuracy}m (threshold ${MAX_ACCEPTABLE_ACCURACY_M}m)")
+                return
+            }
             val (battery, charging) = readBattery()
             reconfigureIfNeeded()
             if (!currentSettings.shareLocationGlobal) {
                 Timber.d("Location sharing paused; skipping publish")
+                return
+            }
+            // Movement filter — preskoči publish ako se nismo mnogo pomerili, OSIM ako je
+            // bilo predugo od poslednjeg publish-a (peers očekuju fresh updatedAt signal).
+            if (!shouldPublish(loc)) {
+                Timber.d("Skip publish: movement < ${SIGNIFICANT_MOVEMENT_M}m + recent publish")
                 return
             }
             val uid = firebaseAuth.currentUser?.uid ?: return
@@ -96,6 +120,8 @@ class LocationTrackingService : Service() {
                         isCharging = charging,
                     )
                     lastPublishAtMs = System.currentTimeMillis()
+                    lastPublishedLat = loc.latitude
+                    lastPublishedLng = loc.longitude
                 }.onFailure { ex ->
                     // FGS shutdown / scope cancel je normalan lifecycle event — ne loguj kao W
                     // (CrashlyticsTree bi to forward-ovao u dashboard kao false-positive).
@@ -104,6 +130,22 @@ class LocationTrackingService : Service() {
                 }
             }
         }
+    }
+
+    /**
+     * Movement filter — publish samo ako je realna promena pozicije. Force publish ipak
+     * svakih FORCE_PUBLISH_INTERVAL_MS da peers imaju svež updatedAt signal (potreban za
+     * "Privatni mod" detection i refresh ping responsiveness).
+     */
+    private fun shouldPublish(loc: android.location.Location): Boolean {
+        val lastLat = lastPublishedLat
+        val lastLng = lastPublishedLng
+        if (lastLat == null || lastLng == null) return true
+        val sinceLastPublish = System.currentTimeMillis() - lastPublishAtMs
+        if (sinceLastPublish >= FORCE_PUBLISH_INTERVAL_MS) return true
+        val results = FloatArray(1)
+        android.location.Location.distanceBetween(lastLat, lastLng, loc.latitude, loc.longitude, results)
+        return results[0] >= SIGNIFICANT_MOVEMENT_M
     }
 
     override fun onCreate() {
@@ -147,6 +189,13 @@ class LocationTrackingService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        // SOS boost — MapViewModel.triggerSos prosleđuje EXTRA_SOS_BOOST=true. Postavlja
+        // BURST profil na 30min za frequent peer updates tokom hitne situacije.
+        if (intent?.getBooleanExtra(EXTRA_SOS_BOOST, false) == true) {
+            sosBoostUntilMs = System.currentTimeMillis() + SOS_BOOST_DURATION_MS
+            scheduleProfileReconfigOnBoostExpiry(SOS_BOOST_DURATION_MS)
+            Timber.d("SOS boost activated until $sosBoostUntilMs")
+        }
         val initial = computeProfile(currentSettings)
         applyProfile(initial)
         // User-initiated refresh (dugme u MemberDetailSheet) preskače cooldown.
@@ -159,6 +208,15 @@ class LocationTrackingService : Service() {
             Timber.d("Skip one-shot fix; last publish was ${sincePublish}ms ago")
         }
         return START_STICKY
+    }
+
+    /** Posle isteka boost-a, vrati profil na default (computeProfile će dati LOW/HIGH). */
+    private fun scheduleProfileReconfigOnBoostExpiry(durationMs: Long) {
+        scope.launch {
+            kotlinx.coroutines.delay(durationMs + 1_000L)
+            applyProfile(computeProfile(currentSettings))
+            Timber.d("Boost expired — profile back to ${currentProfile}")
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -314,8 +372,13 @@ class LocationTrackingService : Service() {
                     Timber.d("Discarding ${stale.size} stale refresh request(s) older than ${REFRESH_REQUEST_TTL_MS / 60_000}min")
                 }
                 if (fresh.isNotEmpty()) {
-                    Timber.d("Refresh request from ${fresh.size} member(s) — pulling fresh fix")
+                    Timber.d("Refresh request from ${fresh.size} member(s) — pulling fresh fix + boost")
                     requestOneShotFix()
+                    // Plus prebaci na BURST profil 5min — ako se kreće, peer ga vidi uživo
+                    // umesto samo jedan fix na ping.
+                    refreshBoostUntilMs = System.currentTimeMillis() + REFRESH_BOOST_DURATION_MS
+                    applyProfile(computeProfile(currentSettings))
+                    scheduleProfileReconfigOnBoostExpiry(REFRESH_BOOST_DURATION_MS)
                 }
                 // Uvek čisti SVE entrije (fresh + stale) da ne ostaje smeća u RTDB.
                 runCatching { locationRepository.clearRefreshRequests(uid, requesters.keys) }
@@ -350,14 +413,19 @@ class LocationTrackingService : Service() {
         }
     }
 
-    // BALANCED je default i čvrsto LOW — heat dolazi od HIGH-frekventnog GPS poll-a.
-    // SOS/refresh ping povlači sveži fix odvojeno (HIGH_ACCURACY one-shot).
-    // MAX je opt-in za korisnike koji eksplicitno žele najtačnije tracking.
-    private fun computeProfile(settings: UserSettings): LocationProfile =
-        when (settings.batteryMode) {
-            BatteryMode.MAX -> LocationProfile.HIGH
-            BatteryMode.BALANCED, BatteryMode.SAVER -> LocationProfile.LOW
-        }
+    // Profile resolution:
+    //  - SOS/refresh boost aktivan → BURST (najbrži interval) bez obzira na settings
+    //  - Battery mode MAX → HIGH
+    //  - Battery < 15% i ne puni se → LOW_THROTTLED (×2 default interval)
+    //  - Default → LOW
+    private fun computeProfile(settings: UserSettings): LocationProfile {
+        val now = System.currentTimeMillis()
+        if (now < sosBoostUntilMs || now < refreshBoostUntilMs) return LocationProfile.BURST
+        if (settings.batteryMode == BatteryMode.MAX) return LocationProfile.HIGH
+        val (battery, charging) = readBattery()
+        if (battery in 0..LOW_BATTERY_THRESHOLD && !charging) return LocationProfile.LOW_THROTTLED
+        return LocationProfile.LOW
+    }
 
     override fun onDestroy() {
         try {
@@ -401,8 +469,18 @@ class LocationTrackingService : Service() {
         val fastestMs: Long,
         val displacementM: Float,
     ) {
+        /**
+         * SOS aktivan ili peer-ov refresh ping. Bounded duration (30min/5min). Konzervativni
+         * BURST: 60s interval (umesto agresivnih 30s) — i dalje 15x frequent vs LOW, ali
+         * battery drain podnošljiv tokom tih nekoliko minuta.
+         */
+        BURST(intervalMs = 60_000L, fastestMs = 30_000L, displacementM = 0f),
+        /** Battery mode MAX — eksplicitno opt-in. */
         HIGH(intervalMs = 300_000L, fastestMs = 120_000L, displacementM = 100f),
+        /** Default — battery-friendly. */
         LOW(intervalMs = 900_000L, fastestMs = 600_000L, displacementM = 300f),
+        /** Battery < 15% i ne puni se — ×2 interval, štedi za vlasnika. */
+        LOW_THROTTLED(intervalMs = 1_800_000L, fastestMs = 900_000L, displacementM = 500f),
     }
 
     companion object {
@@ -413,7 +491,20 @@ class LocationTrackingService : Service() {
         /** Refresh ping-ovi stariji od ovog se ignorišu (verovatno zaboravljeni od dead FGS-a). */
         const val REFRESH_REQUEST_TTL_MS = 5 * 60_000L
         const val SOS_TTL_MS = 30 * 60_000L
+        /** Posle SOS trigger-a, self FGS prelazi na BURST 30min za peers' real-time tracking. */
+        const val SOS_BOOST_DURATION_MS = 30 * 60_000L
+        /** Kad peer pošalje refresh ping, BURST 5min — ako se kreće, prati ga taj period. */
+        const val REFRESH_BOOST_DURATION_MS = 5 * 60_000L
+        /** Movement filter — manje od 15m kretanja preskače publish. */
+        const val SIGNIFICANT_MOVEMENT_M = 15f
+        /** Force publish za freshness signal čak i bez kretanja. */
+        const val FORCE_PUBLISH_INTERVAL_MS = 90_000L
+        /** Maksimum prihvatljive accuracy — fixevi gori od ovog su nepouzdani. */
+        const val MAX_ACCEPTABLE_ACCURACY_M = 100f
+        /** Battery below this % i ne puni se → throttle profile na ×2 interval. */
+        const val LOW_BATTERY_THRESHOLD = 15
         private const val EXTRA_FORCE_REFRESH = "force_refresh"
+        private const val EXTRA_SOS_BOOST = "sos_boost"
 
         /** Live-process flag. Worker chita ovo da preskoči start ako je FGS već živ. */
         val isRunning = AtomicBoolean(false)
@@ -445,6 +536,21 @@ class LocationTrackingService : Service() {
             }
             ensureChannel(context)
             val intent = Intent(context, LocationTrackingService::class.java)
+            ContextCompat.startForegroundService(context, intent)
+        }
+
+        /**
+         * SOS trigger — postavlja BURST profil 30min. MapViewModel.triggerSos zove ovo
+         * paralelno sa SosRepository.trigger() da peers dobijaju frequent location updates.
+         */
+        fun triggerSosBoost(context: Context) {
+            if (!PermissionUtils.hasForegroundLocation(context)) {
+                Timber.d("triggerSosBoost skipped — no location permission")
+                return
+            }
+            ensureChannel(context)
+            val intent = Intent(context, LocationTrackingService::class.java)
+                .putExtra(EXTRA_SOS_BOOST, true)
             ContextCompat.startForegroundService(context, intent)
         }
 

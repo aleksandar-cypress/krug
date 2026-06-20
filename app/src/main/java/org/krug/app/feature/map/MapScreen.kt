@@ -402,6 +402,9 @@ fun MapScreen(
                     TextButton(
                         onClick = {
                             viewModel.triggerSos()
+                            // Boost FGS na BURST profil 30min — peers prate najsvežiju
+                            // lokaciju tokom hitne situacije.
+                            LocationTrackingService.triggerSosBoost(context)
                             sosConfirmVisible = false
                         },
                     ) {
