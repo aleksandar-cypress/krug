@@ -17,7 +17,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.PinDrop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -70,11 +69,8 @@ fun IntroPage(onContinue: () -> Unit) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            IntroFeatureRow(
-                icon = Icons.Outlined.PinDrop,
-                title = stringResource(R.string.onb_welcome_title),
-                body = stringResource(R.string.onb_welcome_body),
-            )
+            // Welcome ide u hero gore — ovde samo "Kako radi" i "Privatnost" feature row-ovi
+            // da ne ponavljamo Welcome body dva puta.
             IntroFeatureRow(
                 icon = Icons.Outlined.Groups,
                 title = stringResource(R.string.onb_how_title),

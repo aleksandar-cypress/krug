@@ -40,12 +40,21 @@ fun LocationPermissionPage(onGranted: () -> Unit) {
     val lifecycleOwner = LocalLifecycleOwner.current
     var foregroundGranted by remember { mutableStateOf(PermissionUtils.hasForegroundLocation(context)) }
     var backgroundGranted by remember { mutableStateOf(PermissionUtils.hasBackgroundLocation(context)) }
+    // Background tap counter — posle prvog tap-a, ako još nije granted, dozvoli "Preskoči"
+    // jer Android 11+ background grant traži navigaciju u Settings što mnogi user-i ne znaju.
+    var bgAttempted by remember { mutableStateOf(false) }
 
-    val launcher = rememberLauncherForActivityResult(
+    val foregroundLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { _ ->
         foregroundGranted = PermissionUtils.hasForegroundLocation(context)
         backgroundGranted = PermissionUtils.hasBackgroundLocation(context)
+    }
+    val backgroundLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { _ ->
+        backgroundGranted = PermissionUtils.hasBackgroundLocation(context)
+        bgAttempted = true
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -59,8 +68,6 @@ fun LocationPermissionPage(onGranted: () -> Unit) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Poll fallback — MIUI / OEM-i ne propagiraju ON_RESUME pouzdano kad user grant-uje
-    // permission iz system settings-a; polling-om pokupimo state.
     LaunchedEffect(Unit) {
         while (!foregroundGranted || !backgroundGranted) {
             delay(500)
@@ -84,20 +91,37 @@ fun LocationPermissionPage(onGranted: () -> Unit) {
                 if (PermissionUtils.hasForegroundLocation(context)) {
                     foregroundGranted = true
                 } else {
-                    launcher.launch(PermissionUtils.foregroundLocationPermissions.toTypedArray())
+                    foregroundLauncher.launch(PermissionUtils.foregroundLocationPermissions.toTypedArray())
                 }
             },
             secondaryButtonText = stringResource(R.string.onb_loc_open_settings),
             onSecondary = { (context as? Activity)?.let { PermissionUtils.openAppSettings(it) } },
         )
     } else {
-        // Faza 2 — "Uvek dozvoli" kroz sistemska podešavanja.
+        // Faza 2 — "Uvek dozvoli". Koristi permission launcher (A11+ automatski redirektuje
+        // u app Settings); polling + ON_RESUME pokupe rezultat. Preskoči se otkrije posle
+        // prvog tap-a tako da user ne ostane zaglavljen ako ne ume da promeni u Settings-u.
         OnboardingPageScaffold(
             icon = Icons.Outlined.MyLocation,
             title = stringResource(R.string.onb_bg_title),
             body = stringResource(R.string.onb_bg_body),
             primaryButtonText = stringResource(R.string.onb_bg_open_settings),
-            onPrimary = { (context as? Activity)?.let { PermissionUtils.openAppSettings(it) } },
+            onPrimary = {
+                if (PermissionUtils.hasBackgroundLocation(context)) {
+                    backgroundGranted = true
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    backgroundLauncher.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                } else {
+                    // < A10 background nije posebna permisija — foreground = sve.
+                    backgroundGranted = true
+                }
+            },
+            secondaryButtonText = if (bgAttempted) stringResource(R.string.action_skip) else null,
+            onSecondary = if (bgAttempted) ({
+                // User je probao i ne uspeva — preskočimo. Lokacija će raditi u foreground-u,
+                // background tracking limitiran. Može da uključi kasnije kroz Settings.
+                backgroundGranted = true
+            }) else null,
         )
     }
 }
