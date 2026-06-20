@@ -105,7 +105,25 @@ class AccountViewModel @Inject constructor(
         if (_state.value.signingOut) return
         _state.update { it.copy(signingOut = true) }
         viewModelScope.launch {
+            val user = authRepository.currentUser
+            val uid = user?.uid
+            val isAnonymous = user?.isAnonymous == true
             LocationTrackingService.stop(context)
+            // Anonimni user-i dobijaju novi uid pri sledećem sign-in-u; stari uid postaje
+            // orfan vlasnik krugova. Da ne ostavimo "vhg ima Samsung A37 5G kao Vlasnik
+            // koji više ne postoji" stanje, čistimo sve njegove podatke pre sign-out-a.
+            // Google sign-in user-i zadržavaju stabilan uid, ne treba im ovo.
+            if (isAnonymous && uid != null) {
+                Timber.d("Anonymous signOut: cleaning up owned data for uid=$uid")
+                runCatching { locationRepository.deleteForUser(uid) }
+                    .onFailure { Timber.w(it, "anonymous signOut: delete RTDB location failed") }
+                runCatching { sosRepository.clear(uid) }
+                    .onFailure { Timber.w(it, "anonymous signOut: clear SOS failed") }
+                runCatching { circleRepository.cleanupForDeletedUser(uid) }
+                    .onFailure { Timber.w(it, "anonymous signOut: circle cleanup failed") }
+                runCatching { userRepository.deleteUser(uid) }
+                    .onFailure { Timber.w(it, "anonymous signOut: user doc delete failed") }
+            }
             authRepository.signOut(context)
             _state.update { it.copy(signingOut = false, signedOut = true) }
         }

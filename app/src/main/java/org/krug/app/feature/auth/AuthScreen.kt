@@ -21,7 +21,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -124,25 +123,6 @@ fun AuthScreen(
                 Text(
                     text = stringResource(R.string.auth_continue_google),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            OutlinedButton(
-                onClick = { viewModel.onEvent(AuthEvent.EmailSignInClicked) },
-                enabled = !state.isSigningIn,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = LogoBlue,
-                ),
-            ) {
-                Text(
-                    text = stringResource(R.string.auth_continue_email),
-                    style = MaterialTheme.typography.titleMedium,
                 )
             }
 
