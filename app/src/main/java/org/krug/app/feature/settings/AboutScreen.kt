@@ -62,57 +62,67 @@ fun AboutScreen(onBack: () -> Unit) {
         title = stringResource(R.string.about_title),
         onBack = onBack,
     ) { _ ->
+        // Spoljni Column drži skrol u gornjem delu + copyright pinovan na dno. Bez ovog,
+        // copyright je bio na kraju iste scroll-Column-e pa je samo bio negde dole (kod
+        // dužih ekrana nikad nije izgledao "na dnu", kod kraćih je bio ispod link-ova).
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxSize(),
         ) {
-            Spacer(Modifier.size(8.dp))
-            Image(
-                painter = painterResource(R.drawable.krug_logo),
-                contentDescription = null,
-                modifier = Modifier.size(230.dp),
-            )
-            Spacer(Modifier.size(16.dp))
-            Text(
-                text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
-                color = LogoBlue,
-            )
-            Spacer(Modifier.size(4.dp))
-            Text(
-                text = stringResource(R.string.app_tagline),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.size(6.dp))
-            Text(
-                text = stringResource(R.string.about_version, versionDisplay),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Spacer(Modifier.size(8.dp))
+                Image(
+                    painter = painterResource(R.drawable.krug_logo),
+                    contentDescription = null,
+                    modifier = Modifier.size(230.dp),
+                )
+                Spacer(Modifier.size(16.dp))
+                Text(
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+                    color = LogoBlue,
+                )
+                Spacer(Modifier.size(4.dp))
+                Text(
+                    text = stringResource(R.string.app_tagline),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.size(6.dp))
+                Text(
+                    text = stringResource(R.string.about_version, versionDisplay),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
-            Spacer(Modifier.size(32.dp))
+                Spacer(Modifier.size(32.dp))
 
-            AboutLinkRow(
-                icon = Icons.Outlined.Lock,
-                label = stringResource(R.string.about_privacy_policy),
-                onClick = { openUrl(PRIVACY_URL) },
-            )
-            Spacer(Modifier.size(10.dp))
-            AboutLinkRow(
-                icon = Icons.Outlined.Description,
-                label = stringResource(R.string.about_terms),
-                onClick = { openUrl(TERMS_URL) },
-            )
-
-            Spacer(Modifier.size(40.dp))
+                AboutLinkRow(
+                    icon = Icons.Outlined.Lock,
+                    label = stringResource(R.string.about_privacy_policy),
+                    onClick = { openUrl(PRIVACY_URL) },
+                )
+                Spacer(Modifier.size(10.dp))
+                AboutLinkRow(
+                    icon = Icons.Outlined.Description,
+                    label = stringResource(R.string.about_terms),
+                    onClick = { openUrl(TERMS_URL) },
+                )
+            }
             Text(
                 text = "© $year Krug · Sva prava zadržana",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }
     }

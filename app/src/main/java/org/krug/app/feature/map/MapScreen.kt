@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.ChildCare
+import androidx.compose.material.icons.outlined.Diversity3
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.NearMe
 import androidx.compose.material.icons.outlined.Person
@@ -681,7 +682,9 @@ private fun TopFloatingBar(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CircleIconButton(
-                icon = Icons.Outlined.Group,
+                // Diversity3 = 3-4 osobe raspoređene u kružnoj formaciji — vizuelno
+                // predstavlja "krug ljudi" što je tačno koncept ove app-a.
+                icon = Icons.Outlined.Diversity3,
                 description = stringResource(R.string.map_action_circles),
                 onClick = onOpenCircles,
             )
@@ -1081,13 +1084,23 @@ private fun MapboxContainer(
                         }
                     },
                 )
-                // Compass se default-no pojavi top-right kad rotirаš mapu — ali tamo je
-                // Settings button. Isključujem ga jer ovaj app ne traži kompas (pin-ovi
-                // su orijentisani severom kroz "Centriraj" / flyTo akcije).
-                mv.compass.updateSettings { enabled = false }
+                val density = ctx.resources.displayMetrics.density
+                // Compass — fadeWhenFacingNorth = true znači da je nevidljiv dok je mapa
+                // poravnata sa severom. Čim user dva-prsta rotira (često slučajno tokom
+                // vožnje), compass se pojavljuje gore-desno; tap vraća mapu na sever.
+                // Pozicioniran ispod buttonsa (statusBars ~30 + padding 12 + button 48 +
+                // spacer ~20 ≈ 110dp ≈ 110px na mdpi; množimo sa density za pravi pixel).
+                mv.compass.updateSettings {
+                    enabled = true
+                    fadeWhenFacingNorth = true
+                    position = Gravity.TOP or Gravity.END
+                    marginTop = 110f * density
+                    marginRight = 12f * density
+                    marginBottom = 0f
+                    marginLeft = 0f
+                }
                 // Scale bar — dole-levo, ispod Članovi pill-a (pill je centriran,
                 // levi ugao je slobodan). Metric units.
-                val density = ctx.resources.displayMetrics.density
                 mv.scalebar.updateSettings {
                     position = Gravity.BOTTOM or Gravity.START
                     marginLeft = 16f * density
