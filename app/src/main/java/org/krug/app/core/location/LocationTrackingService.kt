@@ -48,6 +48,7 @@ import org.krug.app.MainActivity
 import org.krug.app.R
 import org.krug.app.core.circle.CircleRepository
 import org.krug.app.core.permissions.PermissionUtils
+import org.krug.app.core.prefs.LocalPrefs
 import org.krug.app.core.settings.BatteryMode
 import org.krug.app.core.settings.SettingsRepository
 import org.krug.app.core.settings.UserSettings
@@ -68,9 +69,15 @@ class LocationTrackingService : Service() {
     @Inject lateinit var userRepository: UserRepository
     @Inject lateinit var sosRepository: SosRepository
     @Inject lateinit var sosNotifier: SosNotifier
+    @Inject lateinit var localPrefs: LocalPrefs
 
-    /** Per-uid map: poslednji `triggeredAt` koji je već notifikovan korisnika. */
-    private val knownSosTriggered = mutableMapOf<String, Long>()
+    /**
+     * Per-uid map: poslednji `triggeredAt` koji je već notifikovan korisnika.
+     * Lazy-load iz LocalPrefs u onCreate — bez persistence-a, ako Android ubije proces
+     * (OOM, ANR, BootReceiver restart), isti SOS bi pri sledećoj observe-emisiji
+     * fired-ovao notifikaciju ponovo. TTL filter u loadSosNotified() drop-uje stare.
+     */
+    private lateinit var knownSosTriggered: MutableMap<String, Long>
 
     private lateinit var fused: FusedLocationProviderClient
     private var activityClient: ActivityRecognitionClient? = null
@@ -86,6 +93,9 @@ class LocationTrackingService : Service() {
 
     /** Trenutak start-a ove instance — onDestroy ga koristi za FGS lifetime telemetry. */
     @Volatile private var startedAtMs: Long = 0L
+
+    /** Aktivni boost-expiry coroutine — cancel-uje se eksplicitno pre scope.cancel u onDestroy. */
+    @Volatile private var boostExpiryJob: kotlinx.coroutines.Job? = null
 
     /**
      * BURST profil: SOS aktivan ili peer-ov refresh ping. Drži veoma frequent
@@ -185,7 +195,8 @@ class LocationTrackingService : Service() {
         fused = LocationServices.getFusedLocationProviderClient(this)
         isRunning.set(true)
         startedAtMs = System.currentTimeMillis()
-        Timber.i("FGS start")
+        knownSosTriggered = localPrefs.loadSosNotified(SOS_TTL_MS)
+        Timber.i("FGS start (loaded %d SOS dedup entries)", knownSosTriggered.size)
         observeSettings()
         observeRefreshRequests()
         observeCircleSos()
@@ -269,9 +280,15 @@ class LocationTrackingService : Service() {
         return START_STICKY
     }
 
-    /** Posle isteka boost-a, vrati profil na default (computeProfile će dati LOW/HIGH). */
+    /**
+     * Boost expiry job — drži handle u `boostExpiryJob` da bismo mogli da ga cancel-ujemo
+     * pre `scope.cancel()` u onDestroy. Bez ovog, `delay` može da nadživi service teardown
+     * i `applyProfile` bi pucao na `fused` referenci koju je `super.onDestroy` već dao GC-u.
+     * Novi boost zahtev otkazuje stari job (jedan u letu).
+     */
     private fun scheduleProfileReconfigOnBoostExpiry(durationMs: Long) {
-        scope.launch {
+        boostExpiryJob?.cancel()
+        boostExpiryJob = scope.launch {
             kotlinx.coroutines.delay(durationMs + 1_000L)
             applyProfile(computeProfile(currentSettings))
             Timber.d("Boost expired — profile back to ${currentProfile}")
@@ -374,9 +391,13 @@ class LocationTrackingService : Service() {
                     val currentUids = sosMap.keys
                     sosMap.forEach { (uid, sos) -> handleSosUpdate(uid, sos, myCircleIds) }
                     // Članovi više nisu u krug-u — sklon-i notifikacije.
-                    (knownSosTriggered.keys.toSet() - currentUids).forEach { uid ->
-                        sosNotifier.cancelSos(uid)
-                        knownSosTriggered.remove(uid)
+                    val staleUids = knownSosTriggered.keys.toSet() - currentUids
+                    if (staleUids.isNotEmpty()) {
+                        staleUids.forEach { uid ->
+                            sosNotifier.cancelSos(uid)
+                            knownSosTriggered.remove(uid)
+                        }
+                        localPrefs.saveSosNotified(knownSosTriggered)
                     }
                 }
         }
@@ -399,11 +420,13 @@ class LocationTrackingService : Service() {
                 val circleName = sos.circleName?.takeIf { it.isNotBlank() }
                 sosNotifier.notifySos(uid, name, circleName)
                 knownSosTriggered[uid] = sos.triggeredAt
+                localPrefs.saveSosNotified(knownSosTriggered)
                 Timber.d("SOS notification fired for $uid ($name) circleId=${sos.circleId}")
             }
             !isActive && previousTs != null -> {
                 sosNotifier.cancelSos(uid)
                 knownSosTriggered.remove(uid)
+                localPrefs.saveSosNotified(knownSosTriggered)
                 Timber.d("SOS cancelled for $uid")
             }
         }
@@ -526,6 +549,11 @@ class LocationTrackingService : Service() {
         val lifetime = if (startedAtMs > 0L) System.currentTimeMillis() - startedAtMs else 0L
         lastFgsLifetimeMs = lifetime
         Timber.i("FGS destroy (lifetime=%dms)", lifetime)
+        // Eksplicitno otkaži boost-expiry pre scope.cancel — bez ovog je trka: delay()
+        // može da završi 1ms pre scope.cancel-a i applyProfile bi gađao polu-destroyed
+        // fused klijent.
+        boostExpiryJob?.cancel()
+        boostExpiryJob = null
         try {
             fused.removeLocationUpdates(locationCallback)
         } catch (_: Exception) { /* no-op */ }

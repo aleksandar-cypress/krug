@@ -67,37 +67,80 @@ class InviteRepository @Inject constructor(
         val normalized = code.filter { it.isDigit() }
         if (normalized.length != CODE_LENGTH) return JoinResult.Failure.Invalid
 
-        val snap = try {
-            invites().document(normalized).get().await()
+        // Sve provere + write-ovi idu u JEDNU Firestore transakciju da spreči race:
+        // 1) check-then-act na maxUses (dva user-a sa istim kodom mogu da prođu ako se
+        //    invite usedBy update-uje van transakcije)
+        // 2) AlreadyMember check je informativan ali bez transakcije ne sprečava double-join
+        //    ako se memberIds update odvija negde drugde
+        // 3) joinCircle + invite usedBy update bili razdvojeni — ako app crashne između,
+        //    user upisан u krug ali invite slobodan
+        // Sva tri scenarija sada eliminisana — transaction retries automatski na konflikt.
+        var failureReason: JoinResult.Failure? = null
+        var resolvedCircleId: String? = null
+        var resolvedCircleName: String = ""
+        try {
+            firestore.runTransaction { tx ->
+                val inviteRef = invites().document(normalized)
+                val inviteSnap = tx.get(inviteRef)
+                if (!inviteSnap.exists()) {
+                    failureReason = JoinResult.Failure.Invalid
+                    return@runTransaction
+                }
+                val invite = inviteSnap.toObject(InviteModel::class.java) ?: run {
+                    failureReason = JoinResult.Failure.Invalid
+                    return@runTransaction
+                }
+                if (invite.expiresAt != null && invite.expiresAt.before(Date())) {
+                    failureReason = JoinResult.Failure.Expired
+                    return@runTransaction
+                }
+                if (invite.usedBy.size >= invite.maxUses) {
+                    failureReason = JoinResult.Failure.Expired
+                    return@runTransaction
+                }
+                if (uid in invite.usedBy) {
+                    // Korisnik je već koristio ovaj invite. Mapiramo na AlreadyMember
+                    // (semantički bliže od Invalid/Expired).
+                    failureReason = JoinResult.Failure.AlreadyMember
+                    return@runTransaction
+                }
+
+                val circleRef = firestore.collection("circles").document(invite.circleId)
+                val circleSnap = tx.get(circleRef)
+                if (!circleSnap.exists()) {
+                    failureReason = JoinResult.Failure.Invalid
+                    return@runTransaction
+                }
+                @Suppress("UNCHECKED_CAST")
+                val memberIds = (circleSnap.get("memberIds") as? List<String>).orEmpty()
+                if (uid in memberIds) {
+                    failureReason = JoinResult.Failure.AlreadyMember
+                    return@runTransaction
+                }
+                resolvedCircleId = invite.circleId
+                resolvedCircleName = circleSnap.getString("name").orEmpty()
+
+                // Atomic write: 3 dokumenta odjednom — circle.memberIds, member subdoc,
+                // invite.usedBy. Firestore tx commit je all-or-nothing.
+                tx.update(circleRef, "memberIds", FieldValue.arrayUnion(uid))
+                tx.set(
+                    circleRef.collection("members").document(uid),
+                    mapOf(
+                        "role" to MemberModel.ROLE_MEMBER,
+                        "shareLocation" to true,
+                        "isChild" to invite.prefillIsChild,
+                        "joinedAt" to FieldValue.serverTimestamp(),
+                    ),
+                )
+                tx.update(inviteRef, "usedBy", FieldValue.arrayUnion(uid))
+            }.await()
         } catch (e: Exception) {
-            Timber.w(e, "Failed to read invite $normalized")
+            Timber.w(e, "Failed to accept invite (transaction)")
             return JoinResult.Failure.Network
         }
-        if (!snap.exists()) return JoinResult.Failure.Invalid
-
-        val invite = snap.toObject(InviteModel::class.java) ?: return JoinResult.Failure.Invalid
-        val now = Date()
-        if (invite.expiresAt != null && invite.expiresAt.before(now)) {
-            return JoinResult.Failure.Expired
-        }
-        if (invite.usedBy.size >= invite.maxUses) return JoinResult.Failure.Expired
-
-        val circle = try {
-            circleRepository.getCircle(invite.circleId)
-        } catch (e: Exception) {
-            Timber.w(e, "Failed to read circle ${invite.circleId}")
-            return JoinResult.Failure.Network
-        } ?: return JoinResult.Failure.Invalid
-        if (uid in circle.memberIds) return JoinResult.Failure.AlreadyMember
-
-        return try {
-            circleRepository.joinCircle(invite.circleId, uid, asChild = invite.prefillIsChild)
-            invites().document(normalized).update("usedBy", FieldValue.arrayUnion(uid)).await()
-            JoinResult.Success(invite.circleId, circle.name)
-        } catch (e: Exception) {
-            Timber.w(e, "Failed to accept invite")
-            JoinResult.Failure.Network
-        }
+        failureReason?.let { return it }
+        val cid = resolvedCircleId ?: return JoinResult.Failure.Network
+        return JoinResult.Success(cid, resolvedCircleName)
     }
 
     private fun generate6Digit(): String =

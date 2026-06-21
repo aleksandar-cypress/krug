@@ -173,6 +173,31 @@ fun MapScreen(
         onDispose { }
     }
 
+    // MapView lifecycle cleanup — bez ovog, MapView (+ annotations + click listeners +
+    // sosRipples map) ostaje u memory kad user navigira sa Map ekrana. Mapbox MapView je
+    // teška Android View (drži OpenGL resources, telemetry, style sheets). Bez explicit
+    // teardown-a, repeated open/close akumulira deseti MB.
+    DisposableEffect(mapViewState) {
+        onDispose {
+            // 1) Skloni click listener (drži referencu na onPinClick lambda → MapScreen scope).
+            mapViewState.onPinClick = null
+            // 2) Obriši sve aktivne annotation (pin-ove + ripple krugove) — manageri sami
+            //    drže reference na Annotation objekte, GC ih ne čisti dok je manager živ.
+            runCatching {
+                mapViewState.annotationManager?.deleteAll()
+                mapViewState.circleManager?.deleteAll()
+            }
+            mapViewState.annotationToUid.clear()
+            mapViewState.sosRipples.clear()
+            // 3) MapView.onDestroy() oslobađa OpenGL kontekst i telemetry kanale.
+            //    Posle ovog, mapView referenca je no-op (ne sme se koristiti).
+            runCatching { mapViewState.mapView?.onDestroy() }
+            mapViewState.mapView = null
+            mapViewState.annotationManager = null
+            mapViewState.circleManager = null
+        }
+    }
+
     // Lazy prompt za Activity Recognition — ako još nije granted, jedanput kad user uđe
     // u Map. Bez tog grant-a, FGS koristi static LOW profil; sa grant-om, aktivnost-aware
     // (vožnja = češći fix, mirovanje = ređi → bolja preciznost + manje baterije).
