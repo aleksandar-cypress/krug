@@ -84,6 +84,9 @@ class LocationTrackingService : Service() {
     @Volatile private var lastPublishedLat: Double? = null
     @Volatile private var lastPublishedLng: Double? = null
 
+    /** Trenutak start-a ove instance — onDestroy ga koristi za FGS lifetime telemetry. */
+    @Volatile private var startedAtMs: Long = 0L
+
     /**
      * BURST profil: SOS aktivan ili peer-ov refresh ping. Drži veoma frequent
      * fix interval kratko vreme (30min SOS, 5min refresh). Posle isteka, profil
@@ -181,6 +184,8 @@ class LocationTrackingService : Service() {
         }
         fused = LocationServices.getFusedLocationProviderClient(this)
         isRunning.set(true)
+        startedAtMs = System.currentTimeMillis()
+        Timber.i("FGS start")
         observeSettings()
         observeRefreshRequests()
         observeCircleSos()
@@ -456,7 +461,7 @@ class LocationTrackingService : Service() {
     private fun reconfigureIfNeeded() {
         val desired = computeProfile(currentSettings)
         if (desired != currentProfile) {
-            Timber.d("Switching location profile: $currentProfile -> $desired (mode=${currentSettings.batteryMode})")
+            Timber.i("Profile switch %s -> %s (mode=%s)", currentProfile, desired, currentSettings.batteryMode)
             applyProfile(desired)
         }
     }
@@ -518,6 +523,9 @@ class LocationTrackingService : Service() {
     }
 
     override fun onDestroy() {
+        val lifetime = if (startedAtMs > 0L) System.currentTimeMillis() - startedAtMs else 0L
+        lastFgsLifetimeMs = lifetime
+        Timber.i("FGS destroy (lifetime=%dms)", lifetime)
         try {
             fused.removeLocationUpdates(locationCallback)
         } catch (_: Exception) { /* no-op */ }
@@ -618,6 +626,9 @@ class LocationTrackingService : Service() {
 
         /** Timestamp poslednjeg uspešnog publish-a. Worker chita za freshness check. */
         @Volatile var lastPublishAtMs: Long = 0L
+
+        /** Lifetime poslednje instance — Worker koristi za kill-loop detekciju. */
+        @Volatile var lastFgsLifetimeMs: Long = 0L
 
         fun ensureChannel(context: Context) {
             val mgr = NotificationManagerCompat.from(context)

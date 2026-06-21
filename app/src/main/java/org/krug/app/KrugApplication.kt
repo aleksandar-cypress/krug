@@ -9,12 +9,23 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.database.FirebaseDatabase
 import com.mapbox.common.MapboxOptions
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import org.krug.app.core.location.LocationHealthWorker
+import org.krug.app.core.logging.CrashlyticsContext
 import org.krug.app.core.logging.CrashlyticsTree
 import timber.log.Timber
 
 @HiltAndroidApp
 class KrugApplication : Application() {
+
+    @Inject lateinit var crashlyticsContext: CrashlyticsContext
+
+    // Process-wide scope za Crashlytics kontekst observere — žive dok i app process.
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     override fun onCreate() {
         super.onCreate()
         // Logging: u debug ide u logcat (DebugTree), u release ide u Crashlytics.
@@ -57,5 +68,10 @@ class KrugApplication : Application() {
         // worker pokušava da ga restartuje. ExistingPeriodicWorkPolicy.KEEP — ako je već
         // zakazano, ne diramo (preživljava restart app-a).
         LocationHealthWorker.schedule(this)
+
+        // Crashlytics user kontekst — bind tek posle FirebaseApp.initializeApp + Hilt
+        // injection-a. Bind je idempotentan (distinctUntilChanged drop-uje no-op-ove).
+        crashlyticsContext.bind(appScope)
+        Timber.i("App start (build=%s, ver=%s)", BuildConfig.BUILD_TYPE, BuildConfig.VERSION_NAME)
     }
 }

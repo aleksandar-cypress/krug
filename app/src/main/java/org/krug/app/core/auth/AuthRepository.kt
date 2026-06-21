@@ -80,6 +80,7 @@ class AuthRepository @Inject constructor(
                 ?: return SignInResult.Failure(SignInResult.Reason.Unknown)
             refreshDatabaseAuth(user)
             userRepository.upsertOnSignIn(user, deviceLabel())
+            Timber.i("Sign-in: google, uid=%s", user.uid)
             SignInResult.Success(user)
         } catch (e: Exception) {
             Timber.e(e, "Firebase sign-in failed")
@@ -111,6 +112,7 @@ class AuthRepository @Inject constructor(
             // konekciju da se prihvati novi token.
             refreshDatabaseAuth(user)
             userRepository.upsertOnSignIn(user, deviceLabel())
+            Timber.i("Sign-in: anonymous, uid=%s", user.uid)
             SignInResult.Success(user)
         } catch (e: Exception) {
             Timber.e(e, "Anonymous sign-in failed")
@@ -124,6 +126,8 @@ class AuthRepository @Inject constructor(
     }
 
     suspend fun signOut(activityContext: Context) {
+        val outgoingUid = firebaseAuth.currentUser?.uid
+        Timber.i("Sign-out requested for uid=%s", outgoingUid ?: "(none)")
         // Bounce RTDB konekciju PRE signOut-a — drops aktivne ValueEventListenere koji
         // su zakačeni sa starim auth token-om. Bez ovog, listeneri mogu da prožive
         // tranziciju (Firebase ih ne raskida automatski na auth change) i pokušaju

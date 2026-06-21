@@ -92,6 +92,7 @@ class MapViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MapUiState())
 
     fun setActiveCircle(id: String) {
+        Timber.i("Active circle changed to %s", id)
         localPrefs.setActiveCircleId(id)
     }
 
@@ -107,6 +108,10 @@ class MapViewModel @Inject constructor(
             // 1) UI snapshot (instant), 2) FirebaseAuth profile, 3) UserRepository.observeUser
             // (3s timeout), 4) DeviceNames.friendly fallback nikad ne bi trebao pasti.
             val senderName = resolveSenderName(uid, snapshot)
+            Timber.i(
+                "SOS triggered uid=%s circleId=%s sender=%s",
+                uid, circleId ?: "(none)", senderName ?: "(unknown)",
+            )
             runCatching {
                 sosRepository.trigger(
                     uid = uid,
@@ -140,6 +145,7 @@ class MapViewModel @Inject constructor(
 
     fun clearSos() {
         val uid = authRepository.currentUser?.uid ?: return
+        Timber.i("SOS cleared uid=%s", uid)
         viewModelScope.launch {
             runCatching { sosRepository.clear(uid) }
                 .onFailure { Timber.w(it, "Failed to clear SOS") }

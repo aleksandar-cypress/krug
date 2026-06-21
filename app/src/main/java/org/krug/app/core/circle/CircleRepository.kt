@@ -47,6 +47,7 @@ class CircleRepository @Inject constructor(
                 "joinedAt" to FieldValue.serverTimestamp(),
             ),
         ).await()
+        Timber.i("Circle created id=%s name=%s ownerUid=%s", doc.id, name, ownerUid)
         return doc.id
     }
 
@@ -133,6 +134,7 @@ class CircleRepository @Inject constructor(
     suspend fun leaveCircle(circleId: String, uid: String) {
         circle(circleId).update("memberIds", FieldValue.arrayRemove(uid)).await()
         runCatching { members(circleId).document(uid).delete().await() }
+        Timber.i("Circle left id=%s uid=%s", circleId, uid)
     }
 
     /**
@@ -201,6 +203,7 @@ class CircleRepository @Inject constructor(
         val membersSnap = members(circleId).get().await()
         membersSnap.documents.forEach { runCatching { it.reference.delete().await() } }
         circle(circleId).delete().await()
+        Timber.i("Circle deleted id=%s", circleId)
     }
 
     /**

@@ -146,4 +146,8 @@ dependencies {
     // Chrome Custom Tabs — in-app browser za About → Privacy/Terms, ne baca user-a
     // u eksterni browser task (back vraća u Krug, ne gasi app).
     implementation(libs.androidx.browser)
+
+    // Unit testing
+    testImplementation(libs.junit)
+    testImplementation(libs.truth)
 }

@@ -37,6 +37,8 @@ googleid = "1.1.1"
 work = "2.10.0"
 splashscreen = "1.0.1"
 browser = "1.8.0"
+junit = "4.13.2"
+truth = "1.4.4"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
@@ -89,6 +91,8 @@ googleid = { module = "com.google.android.libraries.identity.googleid:googleid",
 androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "splashscreen" }
 androidx-browser = { module = "androidx.browser:browser", version.ref = "browser" }
+junit = { module = "junit:junit", version.ref = "junit" }
+truth = { module = "com.google.truth:truth", version.ref = "truth" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -101,6 +101,10 @@ import com.mapbox.maps.plugin.scalebar.scalebar
 import android.view.Gravity
 import org.krug.app.R
 import org.krug.app.core.location.LocationTrackingService
+import org.krug.app.core.util.compactLastSeen
+import org.krug.app.core.util.formatDistance
+import org.krug.app.core.util.haversineMeters
+import org.krug.app.core.util.sosRelativeTime
 import org.krug.app.feature.circle.CircleIconAssets
 import org.krug.app.ui.theme.LogoBlue
 import org.krug.app.ui.theme.LogoBlueLight
@@ -273,6 +277,17 @@ fun MapScreen(
                 onOpenSettings = onOpenSettings,
                 onCreateCircle = onCreateCircle,
                 onJoinByCode = onJoinByCode,
+            )
+            // Permission warning — re-check svaki put kad se app vrati u foreground.
+            // Ako je user revokovao FINE_LOCATION u sistemskim Settings-ima dok je app bio
+            // u backgroundu, FGS će biti ubijen i mapa ne dobija update. Banner pomaže
+            // korisniku da brzo skoči u sistemski settings i vrati permission.
+            PermissionWarningBanner(
+                onOpenSettings = {
+                    (context as? android.app.Activity)?.let {
+                        org.krug.app.core.permissions.PermissionUtils.openAppSettings(it)
+                    }
+                },
             )
             if (activeSosMembers.isNotEmpty()) {
                 Spacer(Modifier.size(12.dp))
@@ -831,17 +846,7 @@ private fun SosBanner(
     }
 }
 
-/** "Sad", "pre 2 min", "pre 1 h" — za SOS subtitle. Razlikuje se od compactLastSeen-a (kraći). */
-private fun sosRelativeTime(triggeredAt: Long): String {
-    if (triggeredAt <= 0L) return ""
-    val diffMin = (System.currentTimeMillis() - triggeredAt) / 60_000L
-    return when {
-        diffMin < 1 -> "upravo sada"
-        diffMin < 60 -> "pre $diffMin min"
-        diffMin < 60 * 24 -> "pre ${diffMin / 60} h"
-        else -> "pre ${diffMin / (60 * 24)} d"
-    }
-}
+// sosRelativeTime — preseljen u core.util.Time radi unit testabilnosti.
 
 @Composable
 private fun MembersPill(
@@ -1427,25 +1432,7 @@ private fun batteryColor(pct: Int): Color = when {
     else -> Color(0xFFEF4444) // kritično crvena
 }
 
-private fun haversineMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
-    val r = 6371000.0
-    val phi1 = Math.toRadians(lat1)
-    val phi2 = Math.toRadians(lat2)
-    val dphi = Math.toRadians(lat2 - lat1)
-    val dlambda = Math.toRadians(lng2 - lng1)
-    val a = kotlin.math.sin(dphi / 2).let { it * it } +
-        kotlin.math.cos(phi1) * kotlin.math.cos(phi2) *
-        kotlin.math.sin(dlambda / 2).let { it * it }
-    val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
-    return r * c
-}
-
-private fun formatDistance(meters: Double): String = when {
-    meters < 50 -> "blizu"
-    meters < 1000 -> "${meters.toInt()} m"
-    meters < 10_000 -> String.format("%.1f km", meters / 1000.0)
-    else -> "${(meters / 1000.0).toInt()} km"
-}
+// haversineMeters / formatDistance — preseljeni u core.util.Geo radi unit testabilnosti.
 
 @Composable
 private fun MemberDetailSheet(
@@ -1734,14 +1721,80 @@ private fun lastSeenLabel(updatedAt: Long?): String {
 }
 
 /** Kompaktna verzija za StatChip — "sad", "5m", "2h", "1d+" (uvek single-line). */
-private fun compactLastSeen(updatedAt: Long?): String {
-    if (updatedAt == null || updatedAt == 0L) return "-"
-    val diffMs = System.currentTimeMillis() - updatedAt
-    val mins = diffMs / 60_000
-    return when {
-        mins < 1 -> "sad"
-        mins < 60 -> "${mins}m"
-        mins < 60 * 24 -> "${mins / 60}h"
-        else -> "1d+"
+// compactLastSeen — preseljen u core.util.Time radi unit testabilnosti.
+
+/**
+ * Subtle warning banner — pojavljuje se ako fali permission (FINE_LOCATION / background
+ * location na A10+ / POST_NOTIFICATIONS na A13+). Re-check se izvršava svaki put kad app
+ * dođe u RESUMED (user je možda revokovao permission u sistemskim Settings-ima).
+ *
+ * Dismiss-uje se kad user grant-uje. Otvaranje sistemskog settings ekrana je jedini
+ * način — na A11+ se runtime permission ne sme tražiti dva puta posle "Don't ask again".
+ */
+@Composable
+private fun PermissionWarningBanner(onOpenSettings: () -> Unit) {
+    val context = LocalContext.current
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    var missingPermissions by remember { mutableStateOf(emptyList<String>()) }
+
+    DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                val missing = mutableListOf<String>()
+                if (!org.krug.app.core.permissions.PermissionUtils.hasForegroundLocation(context)) {
+                    missing += "Lokacija"
+                }
+                if (org.krug.app.core.permissions.PermissionUtils.needsBackgroundLocationPermission &&
+                    !org.krug.app.core.permissions.PermissionUtils.hasBackgroundLocation(context)
+                ) {
+                    missing += "Lokacija u pozadini"
+                }
+                if (org.krug.app.core.permissions.PermissionUtils.needsNotificationsPermission &&
+                    !org.krug.app.core.permissions.PermissionUtils.hasNotifications(context)
+                ) {
+                    missing += "Obaveštenja"
+                }
+                missingPermissions = missing
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+
+    if (missingPermissions.isEmpty()) return
+    Spacer(Modifier.size(12.dp))
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onOpenSettings),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.size(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Nedostaje dozvola",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                Text(
+                    text = missingPermissions.joinToString(" · ") +
+                        " — članovi kruga ne vide tvoju lokaciju. Tapni za podešavanja.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        }
     }
 }
