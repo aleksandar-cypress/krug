@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.krug.app.core.auth.AuthRepository
 import org.krug.app.core.circle.CircleRepository
+import org.krug.app.core.directions.DirectionsRepository
 import org.krug.app.core.location.LocationModel
 import org.krug.app.core.location.LocationRepository
 import org.krug.app.core.prefs.LocalPrefs
@@ -61,7 +62,18 @@ class MapViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val sosRepository: SosRepository,
     private val localPrefs: LocalPrefs,
+    private val directionsRepository: DirectionsRepository,
 ) : ViewModel() {
+
+    /**
+     * Driving distance fetch — koristi se iz MemberDetailSheet preko LaunchedEffect-a.
+     * Vraća putnu distance u metrima (Mapbox Directions API), ili null ako je network fail
+     * ili koordinate identične. UI fallback-uje na haversine dok je null.
+     */
+    suspend fun loadDrivingDistance(
+        fromLat: Double, fromLng: Double,
+        toLat: Double, toLng: Double,
+    ): Double? = directionsRepository.drivingDistanceMeters(fromLat, fromLng, toLat, toLng)
 
     init {
         localPrefs.onboardingCompleted = true

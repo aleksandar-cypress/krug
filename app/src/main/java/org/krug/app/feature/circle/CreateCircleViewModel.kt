@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import org.krug.app.core.auth.AuthRepository
 import org.krug.app.core.circle.CirclePresets
 import org.krug.app.core.circle.CircleRepository
+import org.krug.app.core.util.capitalizeFirstLetter
 import timber.log.Timber
 
 data class CreateCircleUiState(
@@ -45,7 +46,7 @@ class CreateCircleViewModel @Inject constructor(
     fun clearError() = _state.update { it.copy(genericError = null) }
 
     fun submit() {
-        val trimmed = _state.value.name.trim()
+        val trimmed = _state.value.name.trim().capitalizeFirstLetter()
         if (trimmed.isEmpty()) {
             _state.update { it.copy(nameError = true) }
             return

@@ -1,7 +1,11 @@
 package org.krug.app.feature.settings
 
+import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -39,6 +43,7 @@ import java.util.Calendar
 import org.krug.app.BuildConfig
 import org.krug.app.R
 import org.krug.app.ui.theme.LogoBlue
+import timber.log.Timber
 
 private const val PRIVACY_URL = "https://aleksandar-cypress.github.io/krug/privacy.html"
 private const val TERMS_URL = "https://aleksandar-cypress.github.io/krug/terms.html"
@@ -47,9 +52,7 @@ private const val TERMS_URL = "https://aleksandar-cypress.github.io/krug/terms.h
 fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     fun openUrl(url: String) {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { context.startActivity(intent) }
+        openExternalUrl(context, url)
     }
     // Verzija u release-u nema "-debug" suffix; u debug build-u ostavljamo radi jasnosti.
     val versionDisplay = BuildConfig.VERSION_NAME
@@ -113,6 +116,44 @@ fun AboutScreen(onBack: () -> Unit) {
             )
         }
     }
+}
+
+/**
+ * Defensive eksterni URL launcher:
+ * 1) Pokušaj Chrome Custom Tabs (in-app browser, back se vraća u Krug bez gašenja app-a).
+ * 2) Fallback na klasičan ACTION_VIEW intent (eksterni browser).
+ * 3) Fallback na Toast — nema instaliran nijedan handler.
+ *
+ * Bez ovoga, raw ACTION_VIEW na Android 14+ ume da baci ActivityNotFoundException ako
+ * korisnik nema default browser (custom ROM, headless device, freshly wiped state).
+ */
+private fun openExternalUrl(context: Context, url: String) {
+    val uri = runCatching { Uri.parse(url) }.getOrNull()
+    if (uri == null) {
+        Timber.w("openExternalUrl: failed to parse $url")
+        Toast.makeText(context, "Link je neispravan", Toast.LENGTH_SHORT).show()
+        return
+    }
+    // Custom Tabs path — najbolji UX, ali zahteva da postoji bar jedan browser sa CCT podrškom.
+    runCatching {
+        val tab = CustomTabsIntent.Builder()
+            .setShowTitle(true)
+            .build()
+        tab.launchUrl(context, uri)
+    }.onSuccess { return }
+        .onFailure { Timber.d(it, "Custom Tabs launch failed; trying ACTION_VIEW") }
+
+    // Fallback 1: klasičan ACTION_VIEW.
+    runCatching {
+        val intent = Intent(Intent.ACTION_VIEW, uri)
+        context.startActivity(intent)
+    }.onSuccess { return }
+        .onFailure { e ->
+            if (e !is ActivityNotFoundException) Timber.w(e, "ACTION_VIEW failed for $url")
+        }
+
+    // Fallback 2: nema browsera uopšte.
+    Toast.makeText(context, "Nije moguće otvoriti link", Toast.LENGTH_SHORT).show()
 }
 
 @Composable

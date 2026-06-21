@@ -23,6 +23,7 @@ import org.krug.app.core.circle.CircleModel
 import org.krug.app.core.circle.CircleRepository
 import org.krug.app.core.circle.InviteRepository
 import org.krug.app.core.user.UserModel
+import org.krug.app.core.util.capitalizeFirstLetter
 import timber.log.Timber
 
 data class CircleDetailMember(
@@ -126,7 +127,7 @@ class CircleDetailViewModel @Inject constructor(
     suspend fun updateDetails(name: String, colorHex: String, iconKey: String): Boolean {
         val s = _state.value
         if (!s.isOwner) return false
-        val trimmed = name.trim()
+        val trimmed = name.trim().capitalizeFirstLetter()
         if (trimmed.isEmpty()) return false
         val uid = authRepository.currentUser?.uid ?: return false
         val isDuplicate = runCatching {

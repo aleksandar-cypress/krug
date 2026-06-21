@@ -142,4 +142,8 @@ dependencies {
     // Android 12+ splash screen API — drži sistemski splash dok ViewModel ne odluči,
     // pa direktno na sledeći route. Eliminiše "double splash" jump.
     implementation(libs.androidx.core.splashscreen)
+
+    // Chrome Custom Tabs — in-app browser za About → Privacy/Terms, ne baca user-a
+    // u eksterni browser task (back vraća u Krug, ne gasi app).
+    implementation(libs.androidx.browser)
 }

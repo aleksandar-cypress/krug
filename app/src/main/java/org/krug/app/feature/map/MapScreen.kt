@@ -114,14 +114,13 @@ private val SosRed = Color(0xFFDC2626)
 private val SosRedDark = Color(0xFFB91C1C)
 private val PrivateGray = Color(0xFF9CA3AF)
 
-/** Granica nakon koje smatramo da je član u "privatnom modu" — FGS ubijen, sharing off, ili offline. */
-private const val PRIVATE_MODE_THRESHOLD_MS = 15 * 60_000L
-
 private fun MemberWithLocation.isPrivate(): Boolean {
     if (isSelf) return false // za sebe ne pokazujemo private mode
     val loc = location ?: return true
-    if (loc.paused) return true // user je eksplicitno pauzirao deljenje
-    return System.currentTimeMillis() - loc.updatedAt > PRIVATE_MODE_THRESHOLD_MS
+    // Privatni mod = eksplicitna pauza. Staleness ima svoj "Poslednje: pre X min"
+    // chip; battery-mode intervali (LOW=15min, STILL=20min, LOW_THROTTLED=30min)
+    // su normalan rad i ne smeju flipovati peer u privatni mod.
+    return loc.paused
 }
 
 
@@ -370,6 +369,9 @@ fun MapScreen(
                         } else {
                             viewModel.refreshMember(detailMember.uid)
                         }
+                    },
+                    loadDrivingDistanceMeters = { fromLat, fromLng, toLat, toLng ->
+                        viewModel.loadDrivingDistance(fromLat, fromLng, toLat, toLng)
                     },
                 )
             }
@@ -1325,12 +1327,27 @@ private fun MemberDetailSheet(
     photo: Bitmap?,
     onOpenInMaps: () -> Unit,
     onRefresh: () -> Unit,
+    loadDrivingDistanceMeters: suspend (Double, Double, Double, Double) -> Double?,
 ) {
     var refreshTriggered by remember { mutableStateOf(false) }
     LaunchedEffect(refreshTriggered) {
         if (refreshTriggered) {
             kotlinx.coroutines.delay(5000)
             refreshTriggered = false
+        }
+    }
+    // Putna udaljenost — null dok se učitava ili fail, tad UI fallback-uje na haversine.
+    // Refetch trigger-uje samo na promenu uid-a, ne svaku poziciju (cache bucketuje 100m).
+    var drivingDistanceMeters by remember(member.uid) { mutableStateOf<Double?>(null) }
+    val selfLat = selfLocation?.lat
+    val selfLng = selfLocation?.lng
+    val memberLat = member.location?.lat
+    val memberLng = member.location?.lng
+    LaunchedEffect(member.uid, selfLat, selfLng, memberLat, memberLng) {
+        if (!member.isSelf && selfLat != null && selfLng != null &&
+            memberLat != null && memberLng != null
+        ) {
+            drivingDistanceMeters = loadDrivingDistanceMeters(selfLat, selfLng, memberLat, memberLng)
         }
     }
     val markerColor = when {
@@ -1459,16 +1476,18 @@ private fun MemberDetailSheet(
                     modifier = Modifier.weight(1f),
                 )
             }
-            // Udaljenost — samo za druge, kad imamo obe lokacije i nije privatan.
+            // Udaljenost — putna distance preko Mapbox Directions, fallback na vazdušnu
+            // dok se učitava ili ako network fail. Show samo za druge, kad imamo obe lokacije.
             if (!member.isSelf && !isPrivate && selfLocation != null && member.location != null) {
+                val drivingMeters = drivingDistanceMeters
+                val displayMeters = drivingMeters
+                    ?: haversineMeters(
+                        selfLocation.lat, selfLocation.lng,
+                        member.location.lat, member.location.lng,
+                    )
                 StatChip(
-                    label = "Udaljen",
-                    value = formatDistance(
-                        haversineMeters(
-                            selfLocation.lat, selfLocation.lng,
-                            member.location.lat, member.location.lng,
-                        ),
-                    ),
+                    label = if (drivingMeters != null) "Udaljenost" else "Udalj. (vazd.)",
+                    value = formatDistance(displayMeters),
                     accentColor = MaterialTheme.colorScheme.primary,
                     icon = Icons.Outlined.NearMe,
                     modifier = Modifier.weight(1f),
