@@ -60,6 +60,8 @@ class SplashViewModel @Inject constructor(
 
     private companion object {
         const val SPLASH_TIMEOUT_MS = 5_000L
+        /** Hard cap pending-delete recovery — sprečava infinite splash ako Firestore/RTDB visi. */
+        const val PENDING_DELETE_TIMEOUT_MS = 10_000L
     }
 
     private suspend fun decide() {
@@ -81,28 +83,45 @@ class SplashViewModel @Inject constructor(
         val pendingDelete = localPrefs.pendingDeleteUid
         if (pendingDelete != null && pendingDelete == user.uid) {
             Timber.w("Splash: completing pending delete for uid=%s", user.uid)
-            runCatching { locationRepository.deleteForUser(user.uid) }
-                .onFailure { Timber.w(it, "pending-delete: RTDB location") }
-            runCatching { sosRepository.clear(user.uid) }
-                .onFailure { Timber.w(it, "pending-delete: RTDB SOS") }
-            runCatching { circleRepository.cleanupForDeletedUser(user.uid) }
-                .onFailure { Timber.w(it, "pending-delete: circles") }
-            runCatching { userRepository.deleteUser(user.uid) }
-                .onFailure { Timber.w(it, "pending-delete: user doc") }
-            val deleted = authRepository.deleteAccount()
-            if (deleted) {
-                localPrefs.pendingDeleteUid = null
-                _decision.value = SplashDecision.SignedOut
-                return
+            // Hard timeout oko celog cleanup-a — bez ovog, Firestore/RTDB down može da
+            // visi Splash zauvek (cleanup poziva 4 await() pre Auth.delete-a). 10s daje
+            // dovoljno za normalan network, a sprečava infinite splash ako server pada.
+            // Idempotent operacije — naredni boot će se ponoviti ako se ovaj prekine.
+            val recovered = withTimeoutOrNull(PENDING_DELETE_TIMEOUT_MS) {
+                runCatching { locationRepository.deleteForUser(user.uid) }
+                    .onFailure { Timber.w(it, "pending-delete: RTDB location") }
+                runCatching { sosRepository.clear(user.uid) }
+                    .onFailure { Timber.w(it, "pending-delete: RTDB SOS") }
+                runCatching { circleRepository.cleanupForDeletedUser(user.uid) }
+                    .onFailure { Timber.w(it, "pending-delete: circles") }
+                runCatching { userRepository.deleteUser(user.uid) }
+                    .onFailure { Timber.w(it, "pending-delete: user doc") }
+                authRepository.deleteAccount()
             }
-            // Auth.delete i dalje fail (reauth required). Sign-out user-a — sledeći sign-in
-            // će dobiti čist state (upsertOnSignIn pravi nov users doc), a ghost u Firebase
-            // Auth-u će biti orfan dok user opet ne pokrene delete sa fresh login-om.
-            Timber.w("Splash: Auth.delete still fails, forcing signOut")
-            runCatching { authRepository.signOut(context) }
-            localPrefs.pendingDeleteUid = null
-            _decision.value = SplashDecision.SignedOut
-            return
+            when (recovered) {
+                true -> {
+                    localPrefs.pendingDeleteUid = null
+                    _decision.value = SplashDecision.SignedOut
+                    return
+                }
+                false -> {
+                    // Auth.delete i dalje fail (reauth required). Sign-out user-a — sledeći
+                    // sign-in će dobiti čist state (upsertOnSignIn pravi nov users doc), a
+                    // ghost u Firebase Auth-u će biti orfan dok user opet ne pokrene delete.
+                    Timber.w("Splash: Auth.delete still fails, forcing signOut")
+                    runCatching { authRepository.signOut(context) }
+                    localPrefs.pendingDeleteUid = null
+                    _decision.value = SplashDecision.SignedOut
+                    return
+                }
+                null -> {
+                    // Cleanup timeout-ovao. NE clear-uj pending flag — sledeći start će
+                    // probati opet. Ali NE drži user-a na Splash-u — pusti ga dalje, makar
+                    // sa orphan auth-om; UI će raditi sa praznim podacima koje smo već
+                    // obrisali (krugovi prazni, users doc nema).
+                    Timber.w("Splash: pending-delete cleanup timed out, proceeding with current session")
+                }
+            }
         }
         // OS permissions se brišu uninstall-om dok Firestore i lokalni flag i dalje pamte
         // da je onboarding završen. Bez ove provere user posle reinstall-a sleće na Map

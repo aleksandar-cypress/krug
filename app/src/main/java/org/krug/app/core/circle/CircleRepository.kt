@@ -8,6 +8,9 @@ import javax.inject.Singleton
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -23,6 +26,15 @@ class CircleRepository @Inject constructor(
     private fun circles() = firestore.collection("circles")
     private fun circle(id: String) = circles().document(id)
     private fun members(id: String) = circle(id).collection("members")
+
+    /**
+     * Posljednja greška iz observeMyCircles snapshot listener-a. ViewModels combine-uju
+     * sa observeMyCircles flow-om da razlikuju "user nema krugove" (empty list, no error)
+     * od "Firestore down" (empty list + error != null) — UI tada može da prikaže retry
+     * banner umesto "Napravi prvi krug" CTA.
+     */
+    private val _lastSnapshotError = MutableStateFlow<Throwable?>(null)
+    val lastSnapshotError: StateFlow<Throwable?> = _lastSnapshotError.asStateFlow()
 
     suspend fun createCircle(
         ownerUid: String,
@@ -58,9 +70,11 @@ class CircleRepository @Inject constructor(
             .addSnapshotListener { snap, error ->
                 if (error != null) {
                     Timber.w(error, "observeMyCircles error")
+                    _lastSnapshotError.value = error
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
+                _lastSnapshotError.value = null
                 val list = snap?.documents.orEmpty().mapNotNull { d ->
                     d.toObject(CircleModel::class.java)?.copy(id = d.id)
                 }

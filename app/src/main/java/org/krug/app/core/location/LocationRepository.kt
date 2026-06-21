@@ -11,6 +11,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import timber.log.Timber
 
 @Singleton
 class LocationRepository @Inject constructor(
@@ -62,7 +63,13 @@ class LocationRepository @Inject constructor(
             override fun onDataChange(snapshot: DataSnapshot) {
                 trySend(snapshot.getValue(LocationModel::class.java))
             }
-            override fun onCancelled(error: DatabaseError) = Unit
+            override fun onCancelled(error: DatabaseError) {
+                // Tihi network/permission fail bi ostavio listener "mrtav" — peer-i ne
+                // bi videli ažuriranja a app ne bi imao trag za debugging. Log za
+                // Crashlytics breadcrumb + emit null da downstream UI zna da nema podataka.
+                Timber.w(error.toException(), "RTDB observe(location/%s) cancelled", uid)
+                trySend(null)
+            }
         }
         ref.addValueEventListener(listener)
         awaitClose { ref.removeEventListener(listener) }
@@ -85,7 +92,10 @@ class LocationRepository @Inject constructor(
                 }.toMap()
                 trySend(map)
             }
-            override fun onCancelled(error: DatabaseError) = Unit
+            override fun onCancelled(error: DatabaseError) {
+                Timber.w(error.toException(), "RTDB observe(locationRequests/%s) cancelled", ownUid)
+                trySend(emptyMap())
+            }
         }
         ref.addValueEventListener(listener)
         awaitClose { ref.removeEventListener(listener) }

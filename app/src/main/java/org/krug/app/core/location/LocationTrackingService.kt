@@ -168,6 +168,10 @@ class LocationTrackingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // Defensive init lateinit knownSosTriggered PRE bilo kog ranog return-a — sprečava
+        // NPE u onStartCommand/observeCircleSos ako Android iz nekog razloga uđe u
+        // metode pre dovršetka onCreate-a. Empty mapa je idempotent početni state.
+        knownSosTriggered = mutableMapOf()
         // Android 14+ ne dozvoljava startForeground sa LOCATION type-om bez
         // ACCESS_FINE/COARSE_LOCATION. Bilo koji entry (BootReceiver, Worker, MapScreen)
         // pošto smo bili odbijeni — stopSelf gracefully umesto da app crash-uje.
@@ -195,6 +199,7 @@ class LocationTrackingService : Service() {
         fused = LocationServices.getFusedLocationProviderClient(this)
         isRunning.set(true)
         startedAtMs = System.currentTimeMillis()
+        // Override defensive empty init sa stvarnim disk-loaded podacima (sa TTL prune).
         knownSosTriggered = localPrefs.loadSosNotified(SOS_TTL_MS)
         Timber.i("FGS start (loaded %d SOS dedup entries)", knownSosTriggered.size)
         observeSettings()

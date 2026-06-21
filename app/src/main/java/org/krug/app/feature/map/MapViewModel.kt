@@ -2,21 +2,21 @@ package org.krug.app.feature.map
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.krug.app.core.auth.AuthRepository
 import org.krug.app.core.circle.CircleRepository
 import org.krug.app.core.directions.DirectionsRepository
@@ -25,12 +25,8 @@ import org.krug.app.core.location.LocationRepository
 import org.krug.app.core.prefs.LocalPrefs
 import org.krug.app.core.sos.SosModel
 import org.krug.app.core.sos.SosRepository
-import org.krug.app.core.user.UserModel
 import org.krug.app.core.user.UserRepository
 import org.krug.app.core.util.DeviceNames
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 
 data class MemberWithLocation(
@@ -55,6 +51,12 @@ data class MapUiState(
     val activeCircleId: String? = null,
     /** True nakon prvog Firestore snapshot-a — sprečava flicker empty-state CTA dok se ne učita. */
     val circlesLoaded: Boolean = false,
+    /**
+     * True ako je Firestore observe pao (network down, permission denied, App Check fail).
+     * UI razlikuje "user nema krugove" (empty + !circlesError) od "Firestore down"
+     * (empty + circlesError) — drugi case zaslužuje retry banner umesto onboarding CTA.
+     */
+    val circlesError: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -63,7 +65,6 @@ class MapViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val circleRepository: CircleRepository,
     private val locationRepository: LocationRepository,
-    private val firestore: FirebaseFirestore,
     private val sosRepository: SosRepository,
     private val localPrefs: LocalPrefs,
     private val directionsRepository: DirectionsRepository,
@@ -163,9 +164,13 @@ class MapViewModel @Inject constructor(
 
     private fun combineForUser(selfUid: String): Flow<MapUiState> {
         val circlesFlow = circleRepository.observeMyCircles(selfUid)
-        return combine(circlesFlow, localPrefs.activeCircleIdFlow) { circles, stored ->
-            circles to stored
-        }.flatMapLatest { (circles, storedActive) ->
+        return combine(
+            circlesFlow,
+            localPrefs.activeCircleIdFlow,
+            circleRepository.lastSnapshotError,
+        ) { circles, stored, error ->
+            Triple(circles, stored, error)
+        }.flatMapLatest { (circles, storedActive, error) ->
             val briefs = circles.map { CircleBrief(it.id, it.name, it.colorHex, it.iconKey) }
             // Aktivni krug = ono što je user izabrao (ako i dalje postoji), inače prvi.
             val active = circles.firstOrNull { it.id == storedActive } ?: circles.firstOrNull()
@@ -209,6 +214,7 @@ class MapViewModel @Inject constructor(
                     myCircles = briefs,
                     activeCircleId = active?.id,
                     circlesLoaded = true,
+                    circlesError = error != null && circles.isEmpty(),
                 )
             }
         }
@@ -221,7 +227,10 @@ class MapViewModel @Inject constructor(
 
     private fun memberFlow(uid: String, selfUid: String): Flow<MemberWithLocation> =
         combine(
-            observeUser(uid),
+            // UserRepository.observeUser je single source of truth — ranije smo imali
+            // lokalni observeUser callbackFlow koji je pravio paralelni Firebase listener
+            // (duplikat traffic + duplikat state) na isti users/{uid} doc.
+            userRepository.observeUser(uid),
             locationRepository.observe(uid),
             sosRepository.observe(uid),
         ) { user, loc, sos ->
@@ -242,16 +251,4 @@ class MapViewModel @Inject constructor(
             )
         }
 
-    private fun observeUser(uid: String): Flow<UserModel?> = callbackFlow {
-        val reg = firestore.collection("users").document(uid)
-            .addSnapshotListener { snap, error ->
-                if (error != null) {
-                    Timber.w(error, "observeUser error for $uid")
-                    trySend(null)
-                    return@addSnapshotListener
-                }
-                trySend(snap?.toObject(UserModel::class.java))
-            }
-        awaitClose { reg.remove() }
-    }
 }

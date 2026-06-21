@@ -108,7 +108,10 @@ dependencies {
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.crashlytics)
     implementation(libs.firebase.appcheck.playintegrity)
-    debugImplementation(libs.firebase.appcheck.debug)
+    // App Check debug provider — moramo da bude u svim build-ovima (ne samo debug) jer
+    // KrugApplication ima compile-time referencu na DebugAppCheckProviderFactory u
+    // `if (BuildConfig.DEBUG)` granu. Runtime ostaje DEBUG-only.
+    implementation(libs.firebase.appcheck.debug)
     implementation(libs.play.services.auth)
 
     // Credential Manager (modern Google sign-in)

@@ -93,7 +93,17 @@ fun EnterCodeScreen(
                 label = { Text(stringResource(R.string.enter_code_input_label)) },
                 singleLine = true,
                 isError = state.errorRes != null,
-                supportingText = state.errorRes?.let { res -> { Text(stringResource(res)) } },
+                supportingText = {
+                    val cooldownSec = state.cooldownRemainingSec
+                    val errorRes = state.errorRes
+                    when {
+                        cooldownSec > 0 -> Text(
+                            stringResource(R.string.enter_code_cooldown_countdown, cooldownSec),
+                        )
+                        errorRes != null -> Text(stringResource(errorRes))
+                        else -> Unit
+                    }
+                },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 textStyle = MaterialTheme.typography.headlineMedium.copy(
                     textAlign = TextAlign.Center,
@@ -105,9 +115,11 @@ fun EnterCodeScreen(
             // Pridruži se dugme — odmah ispod inputa (nema weight(1f) na dnu jer ga
             // tastatura prekriva). imePadding() na Column-u uvlači sve iznad tastature.
             Spacer(Modifier.size(24.dp))
+            val cooldownActive = state.cooldownRemainingSec > 0
             Button(
                 onClick = viewModel::submit,
-                enabled = state.code.length == EnterCodeViewModel.CODE_LENGTH && !state.joining,
+                enabled = state.code.length == EnterCodeViewModel.CODE_LENGTH &&
+                    !state.joining && !cooldownActive,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (state.joining) {
@@ -118,7 +130,13 @@ fun EnterCodeScreen(
                     )
                     Spacer(Modifier.size(12.dp))
                 }
-                Text(stringResource(R.string.enter_code_join_cta))
+                Text(
+                    if (cooldownActive) {
+                        stringResource(R.string.enter_code_cooldown_button, state.cooldownRemainingSec)
+                    } else {
+                        stringResource(R.string.enter_code_join_cta)
+                    },
+                )
             }
         }
     }

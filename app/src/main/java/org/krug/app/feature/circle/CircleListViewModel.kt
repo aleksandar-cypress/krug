@@ -7,10 +7,10 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import org.krug.app.core.auth.AuthRepository
 import org.krug.app.core.circle.CircleModel
@@ -19,12 +19,14 @@ import org.krug.app.core.circle.CircleRepository
 data class CircleListUiState(
     val loading: Boolean = true,
     val circles: List<CircleModel> = emptyList(),
+    /** Razdvaja "user nema krugove" od "Firestore down" — UI prikazuje retry banner. */
+    val error: Boolean = false,
 )
 
 @HiltViewModel
 class CircleListViewModel @Inject constructor(
     authRepository: AuthRepository,
-    circleRepository: CircleRepository,
+    private val circleRepository: CircleRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CircleListUiState())
@@ -33,11 +35,22 @@ class CircleListViewModel @Inject constructor(
     init {
         authRepository.observeAuthState()
             .flatMapLatest { user ->
-                if (user == null) flowOf(emptyList())
-                else circleRepository.observeMyCircles(user.uid)
+                if (user == null) {
+                    flowOf(emptyList<CircleModel>() to null)
+                } else {
+                    combine(
+                        circleRepository.observeMyCircles(user.uid),
+                        circleRepository.lastSnapshotError,
+                    ) { circles, error -> circles to error }
+                }
             }
-            .map { circles -> CircleListUiState(loading = false, circles = circles) }
-            .onEach { _state.value = it }
+            .onEach { (circles, error) ->
+                _state.value = CircleListUiState(
+                    loading = false,
+                    circles = circles,
+                    error = error != null && circles.isEmpty(),
+                )
+            }
             .launchIn(viewModelScope)
     }
 }

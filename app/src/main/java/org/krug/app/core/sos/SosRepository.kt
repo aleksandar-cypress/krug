@@ -11,6 +11,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import timber.log.Timber
 
 @Singleton
 class SosRepository @Inject constructor(
@@ -51,7 +52,12 @@ class SosRepository @Inject constructor(
             override fun onDataChange(snapshot: DataSnapshot) {
                 trySend(snapshot.getValue(SosModel::class.java))
             }
-            override fun onCancelled(error: DatabaseError) = Unit
+            override fun onCancelled(error: DatabaseError) {
+                // Bez ovog, tihi network/permission fail bi sakrio razlog što SOS
+                // notifikacije ne dolaze peer-u — Crashlytics breadcrumb daje trag.
+                Timber.w(error.toException(), "RTDB observe(sos/%s) cancelled", uid)
+                trySend(null)
+            }
         }
         r.addValueEventListener(listener)
         awaitClose { r.removeEventListener(listener) }

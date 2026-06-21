@@ -13,11 +13,16 @@ import kotlinx.coroutines.flow.asStateFlow
 class LocalPrefs @Inject constructor(
     @ApplicationContext context: Context,
 ) {
+    // Sve write-ove radimo sa apply() (commit=false) — async write na background thread,
+    // istog momenta visible u istom procesu. Sync commit() je sync disk I/O na Main →
+    // ANR risk čak i pri 5s budget-u, naročito kad app spori prefs fajl. Ako se proces
+    // ubije pre nego što flush stigne na disk, samo dio writes-a se gubi — to je
+    // prihvatljiv tradeoff za ANR-free initial sign-in / circle switch.
     private val prefs = context.getSharedPreferences("krug_prefs", Context.MODE_PRIVATE)
 
     var onboardingCompleted: Boolean
         get() = prefs.getBoolean(KEY_ONBOARDING_DONE, false)
-        set(value) = prefs.edit(commit = true) { putBoolean(KEY_ONBOARDING_DONE, value) }
+        set(value) = prefs.edit(commit = false) { putBoolean(KEY_ONBOARDING_DONE, value) }
 
     private val _activeCircleId = MutableStateFlow(prefs.getString(KEY_ACTIVE_CIRCLE, null))
 
@@ -25,7 +30,7 @@ class LocalPrefs @Inject constructor(
     val activeCircleIdFlow: StateFlow<String?> = _activeCircleId.asStateFlow()
 
     fun setActiveCircleId(id: String?) {
-        prefs.edit(commit = true) {
+        prefs.edit(commit = false) {
             if (id == null) remove(KEY_ACTIVE_CIRCLE) else putString(KEY_ACTIVE_CIRCLE, id)
         }
         _activeCircleId.value = id
@@ -70,7 +75,7 @@ class LocalPrefs @Inject constructor(
      */
     var pendingDeleteUid: String?
         get() = prefs.getString(KEY_PENDING_DELETE_UID, null)
-        set(value) = prefs.edit(commit = true) {
+        set(value) = prefs.edit(commit = false) {
             if (value == null) remove(KEY_PENDING_DELETE_UID)
             else putString(KEY_PENDING_DELETE_UID, value)
         }

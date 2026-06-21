@@ -7,6 +7,9 @@ import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreSettings
+import com.google.firebase.firestore.PersistentCacheSettings
 import com.mapbox.common.MapboxOptions
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -54,6 +57,19 @@ class KrugApplication : Application() {
                 PlayIntegrityAppCheckProviderFactory.getInstance(),
             )
         }
+
+        // Firestore cache size cap — bez ovog, persistence cache može da raste do
+        // 100MB+ na low-end uređajima sa puno krugova/članova. 50MB je razuman tradeoff
+        // (puno za offline, neće preopteretiti malu memoriju).
+        runCatching {
+            FirebaseFirestore.getInstance().firestoreSettings = FirebaseFirestoreSettings.Builder()
+                .setLocalCacheSettings(
+                    PersistentCacheSettings.newBuilder()
+                        .setSizeBytes(50L * 1024 * 1024)
+                        .build(),
+                )
+                .build()
+        }.onFailure { Timber.w(it, "Firestore cache size config failed (already initialized?)") }
 
         // RTDB offline persistence: queue location/SOS write-ova na disk dok je telefon bez neta.
         // Mora se pozvati pre prvog FirebaseDatabase.getInstance() poziva.

@@ -2,7 +2,11 @@ package org.krug.app.core.directions
 
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -37,6 +41,12 @@ class DirectionsRepository @Inject constructor() {
         override fun removeEldestEntry(eldest: Map.Entry<String, CachedDistance>): Boolean =
             size > MAX_CACHE_ENTRIES
     }
+    // In-flight requests — drugi pozivalac na isti key se "pridruži" postojećem
+    // Deferred-u umesto da pošalje paralelan HTTP request. Bez ovog, ako dva uglavnom-
+    // istovremena MemberDetailSheet-a otvore se sa istim parovima koordinata, oboje bi
+    // hit-ovala cache miss i poslala duplikat zahtev ka Mapbox API-ju.
+    private val inFlight = mutableMapOf<String, CompletableDeferred<Double?>>()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
      * Vraća putnu udaljenost u metrima, ili null ako nije moguće (network fail, prazan
@@ -48,14 +58,32 @@ class DirectionsRepository @Inject constructor() {
     ): Double? {
         val key = cacheKey(fromLat, fromLng, toLat, toLng)
         val now = System.currentTimeMillis()
-        mutex.withLock {
+        // Atomska check-then-{cache hit || join in-flight || start new fetch} sekvenca.
+        // Jedan mutex blok obuhvata sve odluke da spreči trku između paralelnih poziva.
+        val deferred: CompletableDeferred<Double?> = mutex.withLock {
             cache[key]?.let { cached ->
-                if (now - cached.fetchedAt < CACHE_TTL_MS) return cached.meters
+                if (now - cached.fetchedAt < CACHE_TTL_MS) {
+                    return cached.meters
+                }
             }
+            inFlight[key]?.let { existing -> return@withLock existing }
+            val fresh = CompletableDeferred<Double?>()
+            inFlight[key] = fresh
+            // Pokrećemo fetch u scope-u da pozivalac može da bude cancellated bez da
+            // ubije in-flight request (drugi pozivalac može da ga koristi).
+            scope.async {
+                val result = runCatching {
+                    fetchFromApi(fromLat, fromLng, toLat, toLng)
+                }.getOrNull()
+                mutex.withLock {
+                    inFlight.remove(key)
+                    if (result != null) cache[key] = CachedDistance(result, System.currentTimeMillis())
+                }
+                fresh.complete(result)
+            }
+            fresh
         }
-        val fetched = fetchFromApi(fromLat, fromLng, toLat, toLng) ?: return null
-        mutex.withLock { cache[key] = CachedDistance(fetched, now) }
-        return fetched
+        return deferred.await()
     }
 
     private suspend fun fetchFromApi(

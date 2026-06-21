@@ -141,7 +141,14 @@ class AuthRepository @Inject constructor(
 
     suspend fun signInAnonymously(): SignInResult {
         return try {
-            val authResult = firebaseAuth.signInAnonymously().await()
+            // Hard timeout — Firebase Auth servis može da visi (network stuck, server down).
+            // Konzistentno sa Google sign-in CREDENTIAL_TIMEOUT_MS (15s).
+            val authResult = withTimeoutOrNull(CREDENTIAL_TIMEOUT_MS) {
+                firebaseAuth.signInAnonymously().await()
+            } ?: run {
+                Timber.w("Anonymous sign-in timed out after %dms", CREDENTIAL_TIMEOUT_MS)
+                return SignInResult.Failure(SignInResult.Reason.Network)
+            }
             val user = authResult.user
                 ?: return SignInResult.Failure(SignInResult.Reason.Unknown)
             // Posle delete-account → sign-in, RTDB klijent može da drži stari (sad

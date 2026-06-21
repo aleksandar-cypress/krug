@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +20,12 @@ data class EnterCodeUiState(
     val joining: Boolean = false,
     val errorRes: Int? = null,
     val joinedCircleId: String? = null,
+    /**
+     * Sekunde preostale do isteka cooldown-a; 0 = može da se submit-uje. UI koristi za
+     * prikaz "Sačekaj X s" countdown-a + disable submit dugmeta. ViewModel tick-uje
+     * vrednost na 1Hz dok ima cooldown-a.
+     */
+    val cooldownRemainingSec: Int = 0,
 )
 
 @HiltViewModel
@@ -57,7 +64,6 @@ class EnterCodeViewModel @Inject constructor(
         val uid = authRepository.currentUser?.uid ?: return
         val now = System.currentTimeMillis()
         if (now < cooldownUntilMs) {
-            val waitSec = ((cooldownUntilMs - now) / 1000L).coerceAtLeast(1)
             _state.update { it.copy(errorRes = org.krug.app.R.string.enter_code_error_cooldown) }
             return
         }
@@ -98,6 +104,28 @@ class EnterCodeViewModel @Inject constructor(
         consecutiveFailures += 1
         cooldownUntilMs = System.currentTimeMillis() + backoffMsFor(consecutiveFailures)
         _state.update { it.copy(joining = false, errorRes = resId) }
+        startCooldownTick()
+    }
+
+    /**
+     * 1Hz tick coroutine — ažurira cooldownRemainingSec u UiState dok god nije 0. UI vidi
+     * countdown ("Sačekaj 4 s", "Sačekaj 3 s", ...) i disables submit dugme automatski
+     * kroz cooldownRemainingSec > 0 check.
+     */
+    private fun startCooldownTick() {
+        viewModelScope.launch {
+            while (true) {
+                val now = System.currentTimeMillis()
+                val remainingMs = cooldownUntilMs - now
+                if (remainingMs <= 0L) {
+                    _state.update { it.copy(cooldownRemainingSec = 0) }
+                    break
+                }
+                val sec = ((remainingMs + 999L) / 1000L).toInt()
+                _state.update { it.copy(cooldownRemainingSec = sec) }
+                delay(500L)
+            }
+        }
     }
 
     private fun backoffMsFor(failures: Int): Long = when (failures) {

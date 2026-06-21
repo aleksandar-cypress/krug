@@ -250,12 +250,14 @@ fun MapScreen(
     // drži bitmap u memory zauvek (svaki bitmap može biti par MB za high-res Google avatar).
     LaunchedEffect(state.members.map { it.photoUrl }) {
         val urls = state.members.mapNotNull { it.photoUrl?.takeIf { u -> u.isNotBlank() } }.toSet()
-        // Evict entry-je koji više nisu u trenutnoj listi članova.
-        val stale = photoCache.keys.toSet() - urls
+        // Evict entry-je koji više nisu u trenutnoj listi članova. toList() pravi snapshot
+        // pre iteration-a — bez ovog, remove() iznutra mogao bi da zbuni iterator kad
+        // mutableStateMapOf interno re-balansira (Compose SnapshotStateMap drži version-e).
+        val stale = (photoCache.keys.toSet() - urls).toList()
         stale.forEach { photoCache.remove(it) }
         // Hard cap — odsečemo najstarije (iteration order je insertion order) ako pređemo limit.
         while (photoCache.size > MAX_PHOTO_CACHE_ENTRIES) {
-            val oldest = photoCache.keys.firstOrNull() ?: break
+            val oldest = photoCache.keys.toList().firstOrNull() ?: break
             photoCache.remove(oldest)
         }
         urls.forEach { url ->
@@ -1109,10 +1111,14 @@ private fun MapboxContainer(
             val manager = holder.annotationManager ?: return@AndroidView
             // Fingerprint check — preskoči deleteAll+create ako se data nije promenila
             // (recomposition se često događa zbog state-a koji ne utiče na pin-ove).
+            // Battery se kvantizuje na 20% bucket-e — sirov 1% promena ne menja prikaz
+            // pin-a, a ranije je svaki 1% (npr. 73% → 74%) okidao deleteAll() + recreate
+            // svih anotacija (~60ms latency). Bucket: -1 (unknown), 0-19, 20-39, ..., 80-100.
             val fingerprint = members.joinToString("|") { m ->
                 val loc = m.location
                 val ph = m.photoUrl?.let { photoCache[it] }?.hashCode() ?: 0
-                "${m.uid}:${loc?.lat ?: ""}:${loc?.lng ?: ""}:${loc?.batteryPct ?: -1}:${m.sos != null}:${m.displayName}:$ph"
+                val battBucket = loc?.batteryPct?.let { it / 20 } ?: -1
+                "${m.uid}:${loc?.lat ?: ""}:${loc?.lng ?: ""}:$battBucket:${m.sos != null}:${m.displayName}:$ph"
             }
             if (fingerprint == holder.lastFingerprint) return@AndroidView
             holder.lastFingerprint = fingerprint
@@ -1803,26 +1809,15 @@ private fun lastSeenLabel(updatedAt: Long?): String {
 private fun PermissionWarningBanner(onOpenSettings: () -> Unit) {
     val context = LocalContext.current
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
-    var missingPermissions by remember { mutableStateOf(emptyList<String>()) }
+    // Inicijalni check izvršiti sinhronizovano da banner odmah pokaže stanje pri prvom
+    // composition-u; bez ovog, čekamo prvi ON_RESUME event koji ne dolazi na initial
+    // mount pa user vidi mapu bez banner-a iako mu nedostaju permission-i.
+    var missingPermissions by remember { mutableStateOf(computeMissingPermissions(context)) }
 
     DisposableEffect(lifecycle) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                val missing = mutableListOf<String>()
-                if (!org.krug.app.core.permissions.PermissionUtils.hasForegroundLocation(context)) {
-                    missing += "Lokacija"
-                }
-                if (org.krug.app.core.permissions.PermissionUtils.needsBackgroundLocationPermission &&
-                    !org.krug.app.core.permissions.PermissionUtils.hasBackgroundLocation(context)
-                ) {
-                    missing += "Lokacija u pozadini"
-                }
-                if (org.krug.app.core.permissions.PermissionUtils.needsNotificationsPermission &&
-                    !org.krug.app.core.permissions.PermissionUtils.hasNotifications(context)
-                ) {
-                    missing += "Obaveštenja"
-                }
-                missingPermissions = missing
+                missingPermissions = computeMissingPermissions(context)
             }
         }
         lifecycle.addObserver(observer)
@@ -1865,4 +1860,22 @@ private fun PermissionWarningBanner(onOpenSettings: () -> Unit) {
             }
         }
     }
+}
+
+private fun computeMissingPermissions(context: android.content.Context): List<String> {
+    val missing = mutableListOf<String>()
+    if (!org.krug.app.core.permissions.PermissionUtils.hasForegroundLocation(context)) {
+        missing += "Lokacija"
+    }
+    if (org.krug.app.core.permissions.PermissionUtils.needsBackgroundLocationPermission &&
+        !org.krug.app.core.permissions.PermissionUtils.hasBackgroundLocation(context)
+    ) {
+        missing += "Lokacija u pozadini"
+    }
+    if (org.krug.app.core.permissions.PermissionUtils.needsNotificationsPermission &&
+        !org.krug.app.core.permissions.PermissionUtils.hasNotifications(context)
+    ) {
+        missing += "Obaveštenja"
+    }
+    return missing
 }
