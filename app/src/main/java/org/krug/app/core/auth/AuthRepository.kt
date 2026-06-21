@@ -16,10 +16,17 @@ import com.google.firebase.database.FirebaseDatabase
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import org.krug.app.R
 import org.krug.app.core.user.UserRepository
 import timber.log.Timber
@@ -28,7 +35,17 @@ sealed interface SignInResult {
     data class Success(val user: FirebaseUser) : SignInResult
     data class Failure(val reason: Reason, val cause: Throwable? = null) : SignInResult
 
-    enum class Reason { Cancelled, NoGoogleAccount, Network, ProviderDisabled, Unknown }
+    enum class Reason {
+        Cancelled,
+        NoGoogleAccount,
+        Network,
+        ProviderDisabled,
+        /** Firebase Auth javlja da je nalog disabled u Console-u ili obrisan. */
+        AccountDisabled,
+        /** ID token nije validan ili je istekao — retry sa fresh credential-om. */
+        InvalidCredential,
+        Unknown,
+    }
 }
 
 @Singleton
@@ -39,13 +56,25 @@ class AuthRepository @Inject constructor(
 ) {
     val currentUser: FirebaseUser? get() = firebaseAuth.currentUser
 
-    fun observeAuthState(): Flow<FirebaseUser?> = callbackFlow {
+    // Singleton scope za shared auth flow — živi koliko i AuthRepository singleton (proces).
+    private val repoScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * Jedan AuthStateListener za ceo proces — ranije je svaki collector pravio svoj
+     * callbackFlow i registrovao zasebnog Firebase listener-a (6+ duplikata kroz VM-ove
+     * + CrashlyticsContext). shareIn sa WhileSubscribed drži tačno jedan listener dok ima
+     * collector-a, gasi 5s posle poslednjeg unsubscribe-a. replay=1 daje novim collector-ima
+     * trenutnu vrednost odmah (bez čekanja sledećeg auth event-a).
+     */
+    private val authStateFlow: SharedFlow<FirebaseUser?> = callbackFlow {
         val listener = FirebaseAuth.AuthStateListener { auth ->
             trySend(auth.currentUser)
         }
         firebaseAuth.addAuthStateListener(listener)
         awaitClose { firebaseAuth.removeAuthStateListener(listener) }
-    }
+    }.shareIn(repoScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
+
+    fun observeAuthState(): Flow<FirebaseUser?> = authStateFlow
 
     suspend fun signInWithGoogle(activityContext: Context): SignInResult {
         val credentialManager = CredentialManager.create(activityContext)
@@ -60,8 +89,16 @@ class AuthRepository @Inject constructor(
             )
             .build()
 
+        // Hard timeout — CredentialManager.getCredential može da visi (Google Play Services
+        // problem, network stuck, dijalog zaboravljen otvoren). Bez timeout-a, user vidi
+        // beskonačan spinner. 15s je dovoljno za normalan dialog interaction + odgovor.
         val idToken: String = try {
-            val response = credentialManager.getCredential(activityContext, request)
+            val response = withTimeoutOrNull(CREDENTIAL_TIMEOUT_MS) {
+                credentialManager.getCredential(activityContext, request)
+            } ?: run {
+                Timber.w("Google credential request timed out after %dms", CREDENTIAL_TIMEOUT_MS)
+                return SignInResult.Failure(SignInResult.Reason.Network)
+            }
             val credential = response.credential
             if (credential !is CustomCredential || credential.type != TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                 return SignInResult.Failure(SignInResult.Reason.Unknown)
@@ -84,7 +121,7 @@ class AuthRepository @Inject constructor(
             SignInResult.Success(user)
         } catch (e: Exception) {
             Timber.e(e, "Firebase sign-in failed")
-            SignInResult.Failure(SignInResult.Reason.Network, e)
+            SignInResult.Failure(mapFirebaseAuthError(e), e)
         }
     }
 
@@ -116,12 +153,33 @@ class AuthRepository @Inject constructor(
             SignInResult.Success(user)
         } catch (e: Exception) {
             Timber.e(e, "Anonymous sign-in failed")
-            val reason = if (e.message.orEmpty().contains("restricted to administrators", ignoreCase = true)) {
-                SignInResult.Reason.ProviderDisabled
-            } else {
-                SignInResult.Reason.Network
-            }
-            SignInResult.Failure(reason, e)
+            SignInResult.Failure(mapFirebaseAuthError(e), e)
+        }
+    }
+
+    /**
+     * Mapira FirebaseAuthException → SignInResult.Reason. Prati Firebase error codes
+     * (https://firebase.google.com/docs/reference/admin/error-handling) sa fallback-om
+     * na message-based detekciju za stara izdanja SDK-a koje ne setuju error code.
+     */
+    private fun mapFirebaseAuthError(e: Exception): SignInResult.Reason {
+        val msg = e.message.orEmpty().lowercase()
+        val errorCode = (e as? com.google.firebase.FirebaseException)?.let {
+            (it as? com.google.firebase.auth.FirebaseAuthException)?.errorCode
+        }
+        return when {
+            errorCode == "ERROR_USER_DISABLED" -> SignInResult.Reason.AccountDisabled
+            errorCode == "ERROR_USER_NOT_FOUND" -> SignInResult.Reason.AccountDisabled
+            errorCode == "ERROR_INVALID_CREDENTIAL" -> SignInResult.Reason.InvalidCredential
+            errorCode == "ERROR_INVALID_USER_TOKEN" -> SignInResult.Reason.InvalidCredential
+            // Anonymous provider explicitno isključen u Console-u.
+            "restricted to administrators" in msg ||
+                "anonymous accounts are not enabled" in msg ||
+                errorCode == "ERROR_OPERATION_NOT_ALLOWED" -> SignInResult.Reason.ProviderDisabled
+            "network" in msg || "timeout" in msg -> SignInResult.Reason.Network
+            "disabled" in msg || "not found" in msg -> SignInResult.Reason.AccountDisabled
+            "invalid" in msg && "credential" in msg -> SignInResult.Reason.InvalidCredential
+            else -> SignInResult.Reason.Network
         }
     }
 
@@ -173,5 +231,9 @@ class AuthRepository @Inject constructor(
             "network" in msg -> SignInResult.Reason.Network
             else -> SignInResult.Reason.Unknown
         }
+    }
+
+    private companion object {
+        const val CREDENTIAL_TIMEOUT_MS = 15_000L
     }
 }

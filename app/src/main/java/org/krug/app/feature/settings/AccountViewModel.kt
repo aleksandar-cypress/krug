@@ -16,6 +16,7 @@ import org.krug.app.core.auth.AuthRepository
 import org.krug.app.core.circle.CircleRepository
 import org.krug.app.core.location.LocationRepository
 import org.krug.app.core.location.LocationTrackingService
+import org.krug.app.core.prefs.LocalPrefs
 import org.krug.app.core.sos.SosRepository
 import org.krug.app.core.user.UserRepository
 import timber.log.Timber
@@ -43,6 +44,7 @@ class AccountViewModel @Inject constructor(
     private val circleRepository: CircleRepository,
     private val locationRepository: LocationRepository,
     private val sosRepository: SosRepository,
+    private val localPrefs: LocalPrefs,
 ) : ViewModel() {
 
     private val _state: MutableStateFlow<AccountUiState>
@@ -140,6 +142,10 @@ class AccountViewModel @Inject constructor(
         if (_state.value.isChildAnywhere) return
         _state.update { it.copy(deleting = true, deleteNeedsReauth = false) }
         viewModelScope.launch {
+            // 0. Mark pending delete u prefs — ako Auth.delete fail-uje a app crashne pre
+            //    nego što user pokrene reauth, SplashViewModel pri sledećem startu vidi
+            //    ovaj flag i retry-uje cleanup ili force-uje signOut (sprečava ghost-account).
+            localPrefs.pendingDeleteUid = uid
             // 1. Zaustavi FGS odmah — više ne sme da publish-uje.
             LocationTrackingService.stop(context)
             // 2. RTDB cleanup (location + SOS).
@@ -155,9 +161,13 @@ class AccountViewModel @Inject constructor(
             // 4. Firebase Auth delete. Ako traži recent re-login, signal-uj UI-u.
             val authDeleted = authRepository.deleteAccount()
             if (!authDeleted) {
+                // Pending flag ostaje set — Splash će na sledećem startu retry-ovati ili
+                // force-ovati signOut da user ne ostane u inconsistent state-u.
                 _state.update { it.copy(deleting = false, deleteNeedsReauth = true) }
                 return@launch
             }
+            // Clean delete uspeo — clear pending flag.
+            localPrefs.pendingDeleteUid = null
             // 5. Sign-out cleanup (clear credentials).
             runCatching { authRepository.signOut(context) }
             _state.update { it.copy(deleting = false, signedOut = true) }

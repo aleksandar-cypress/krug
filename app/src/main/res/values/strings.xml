@@ -85,6 +85,7 @@
     <string name="enter_code_error_invalid">Kod nije validan ili je istekao</string>
     <string name="enter_code_error_already_member">Već ste član ovog kruga</string>
     <string name="enter_code_error_generic">Greška, pokušaj ponovo</string>
+    <string name="enter_code_error_cooldown">Previše pokušaja. Sačekaj malo pa pokušaj ponovo</string>
 
     <!-- Location tracking notification -->
     <string name="loc_notif_channel">Deljenje lokacije</string>

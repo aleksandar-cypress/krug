@@ -61,9 +61,24 @@ class LocalPrefs @Inject constructor(
         prefs.edit(commit = false) { putString(KEY_SOS_NOTIFIED, serialized) }
     }
 
+    /**
+     * GDPR delete recovery — kad user pokrene "Obriši nalog", upisujemo njegov uid
+     * pre nego što ulećemo u Firestore/RTDB cleanup. Ako Firebase Auth.delete() traži
+     * recent re-login i fail-uje, ovaj flag ostaje i SplashViewModel pri sledećem
+     * startu detektuje "ghost" stanje (data obrisana, auth još živ) pa retry-uje
+     * cleanup ili force-uje signOut.
+     */
+    var pendingDeleteUid: String?
+        get() = prefs.getString(KEY_PENDING_DELETE_UID, null)
+        set(value) = prefs.edit(commit = true) {
+            if (value == null) remove(KEY_PENDING_DELETE_UID)
+            else putString(KEY_PENDING_DELETE_UID, value)
+        }
+
     private companion object {
         const val KEY_ONBOARDING_DONE = "onboarding_completed"
         const val KEY_ACTIVE_CIRCLE = "active_circle_id"
         const val KEY_SOS_NOTIFIED = "sos_notified_ts"
+        const val KEY_PENDING_DELETE_UID = "pending_delete_uid"
     }
 }

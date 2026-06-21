@@ -14,9 +14,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
 import org.krug.app.core.auth.AuthRepository
+import org.krug.app.core.circle.CircleRepository
+import org.krug.app.core.location.LocationRepository
 import org.krug.app.core.permissions.PermissionUtils
 import org.krug.app.core.prefs.LocalPrefs
+import org.krug.app.core.sos.SosRepository
 import org.krug.app.core.splash.SplashGate
+import org.krug.app.core.user.UserRepository
 import timber.log.Timber
 
 sealed interface SplashDecision {
@@ -36,6 +40,10 @@ class SplashViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val firestore: FirebaseFirestore,
     private val localPrefs: LocalPrefs,
+    private val circleRepository: CircleRepository,
+    private val locationRepository: LocationRepository,
+    private val sosRepository: SosRepository,
+    private val userRepository: UserRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -57,6 +65,42 @@ class SplashViewModel @Inject constructor(
     private suspend fun decide() {
         val user = authRepository.currentUser
         if (user == null) {
+            // Cleanup pending-delete entry ako je bilo signed-out (može biti orfan iz starog
+            // app verzije kad smo upisali flag bez parnjak signOut-a).
+            if (localPrefs.pendingDeleteUid != null) localPrefs.pendingDeleteUid = null
+            _decision.value = SplashDecision.SignedOut
+            return
+        }
+
+        // GDPR ghost-account recovery — ako je trenutni uid u pending-delete prefs-u,
+        // znači da je prošli delete-account ostao na pola: data obrisana, auth-delete
+        // failed sa "needs reauth", user nije rešio reauth. Sada retry-ujemo cleanup
+        // (idempotent — obrisani docs ostaju obrisani) pa probamo Auth.delete ponovo.
+        // Ako i dalje fail, force-ujemo signOut da user ne nastavi sa ghost stanjem
+        // (data je svakako obrisana — Settings će sve videti prazno).
+        val pendingDelete = localPrefs.pendingDeleteUid
+        if (pendingDelete != null && pendingDelete == user.uid) {
+            Timber.w("Splash: completing pending delete for uid=%s", user.uid)
+            runCatching { locationRepository.deleteForUser(user.uid) }
+                .onFailure { Timber.w(it, "pending-delete: RTDB location") }
+            runCatching { sosRepository.clear(user.uid) }
+                .onFailure { Timber.w(it, "pending-delete: RTDB SOS") }
+            runCatching { circleRepository.cleanupForDeletedUser(user.uid) }
+                .onFailure { Timber.w(it, "pending-delete: circles") }
+            runCatching { userRepository.deleteUser(user.uid) }
+                .onFailure { Timber.w(it, "pending-delete: user doc") }
+            val deleted = authRepository.deleteAccount()
+            if (deleted) {
+                localPrefs.pendingDeleteUid = null
+                _decision.value = SplashDecision.SignedOut
+                return
+            }
+            // Auth.delete i dalje fail (reauth required). Sign-out user-a — sledeći sign-in
+            // će dobiti čist state (upsertOnSignIn pravi nov users doc), a ghost u Firebase
+            // Auth-u će biti orfan dok user opet ne pokrene delete sa fresh login-om.
+            Timber.w("Splash: Auth.delete still fails, forcing signOut")
+            runCatching { authRepository.signOut(context) }
+            localPrefs.pendingDeleteUid = null
             _decision.value = SplashDecision.SignedOut
             return
         }

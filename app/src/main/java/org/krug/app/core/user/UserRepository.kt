@@ -56,8 +56,23 @@ class UserRepository @Inject constructor(
         userDoc(uid).set(mapOf("fcmToken" to token), SetOptions.merge()).await()
     }
 
+    /**
+     * Validacija na nivou repository-ja (defense-in-depth): trim + max length 40 + odbij
+     * blank. Bez ovog, ako neki budući caller propusti validaciju, mogli bismo da
+     * upišemo prazan/whitespace-only display name u Firestore. Trim u repo garantuje da
+     * UI prikazi i SOS payload-ovi nikad nemaju leading/trailing space.
+     */
     suspend fun updateDisplayName(uid: String, name: String) {
-        userDoc(uid).set(mapOf("displayName" to name), SetOptions.merge()).await()
+        val cleaned = name.trim().take(MAX_DISPLAY_NAME_LENGTH)
+        if (cleaned.isBlank()) {
+            Timber.w("updateDisplayName: rejected blank name for $uid")
+            return
+        }
+        userDoc(uid).set(mapOf("displayName" to cleaned), SetOptions.merge()).await()
+    }
+
+    private companion object {
+        const val MAX_DISPLAY_NAME_LENGTH = 40
     }
 
     fun observeUser(uid: String): Flow<UserModel?> = callbackFlow {

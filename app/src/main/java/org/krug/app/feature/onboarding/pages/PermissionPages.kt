@@ -24,7 +24,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import kotlinx.coroutines.delay
 import org.krug.app.R
 import org.krug.app.core.permissions.PermissionUtils
 
@@ -57,6 +56,9 @@ fun LocationPermissionPage(onGranted: () -> Unit) {
         bgAttempted = true
     }
 
+    // Re-check pri svakom ON_RESUME — pokriva i return iz system Settings-a i return iz
+    // permission dialog-a. Polling loop (delay 500ms) uklonjen — bio je redundantan sa
+    // LifecycleEventObserver-om i kosti baterije.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -66,14 +68,6 @@ fun LocationPermissionPage(onGranted: () -> Unit) {
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    LaunchedEffect(Unit) {
-        while (!foregroundGranted || !backgroundGranted) {
-            delay(500)
-            if (!foregroundGranted) foregroundGranted = PermissionUtils.hasForegroundLocation(context)
-            if (!backgroundGranted) backgroundGranted = PermissionUtils.hasBackgroundLocation(context)
-        }
     }
 
     LaunchedEffect(foregroundGranted, backgroundGranted) {
@@ -144,6 +138,9 @@ fun NotificationsPermissionPage(onContinueOrSkip: () -> Unit) {
         if (granted) onContinueOrSkip()
     }
 
+    // Re-check na ON_RESUME — pokupi rezultat kad user ode i vrati se iz system Settings-a.
+    // Polling loop (delay 500ms) uklonjen jer je launcher.onResult + ON_RESUME observer
+    // sve pokrivao.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -152,13 +149,6 @@ fun NotificationsPermissionPage(onContinueOrSkip: () -> Unit) {
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    LaunchedEffect(Unit) {
-        while (!granted) {
-            delay(500)
-            if (PermissionUtils.hasNotifications(context)) granted = true
-        }
     }
 
     LaunchedEffect(granted) {

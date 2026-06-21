@@ -114,9 +114,24 @@ import org.krug.app.ui.theme.LogoTeal
 private const val DEFAULT_LAT = 44.7866 // Belgrade
 private const val DEFAULT_LNG = 20.4489
 private const val DEFAULT_ZOOM = 12.0
+/** Hard cap na photoCache — sprečava unbounded memory rast (svaki avatar može biti par MB). */
+private const val MAX_PHOTO_CACHE_ENTRIES = 64
 private val SosRed = Color(0xFFDC2626)
 private val SosRedDark = Color(0xFFB91C1C)
 private val PrivateGray = Color(0xFF9CA3AF)
+
+/**
+ * Mapbox circle/text annotation API prima samo string hex boje (ne Compose Color objekat).
+ * Konstante derivovane iz odgovarajućih Color/theme tokena radi održavanja jedinstva —
+ * ako se brand boja promeni u Color.kt, ovde se update-uje jedanput.
+ */
+private const val HEX_SOS_RED = "#DC2626"
+private const val HEX_PRIVATE_GRAY = "#9CA3AF"
+private const val HEX_SELF_BLUE = "#3A86C8" // = LogoBlue
+private const val HEX_PIN_TEXT = "#1F2937"
+private const val HEX_PIN_HALO = "#FFFFFF"
+private const val HEX_PULSE_INDIGO = "#818CF8" // = BrandIndigo500
+private const val HEX_PULSE_INDIGO_DARK = "#6366F1" // = BrandIndigo600
 
 private fun MemberWithLocation.isPrivate(): Boolean {
     if (isSelf) return false // za sebe ne pokazujemo private mode
@@ -230,8 +245,19 @@ fun MapScreen(
     }
 
     // Učitaj profilne fotke (Google sign-in) za sve članove kojima imamo URL.
+    // Cache se sad eksplicitno cleanup-uje: zadržavamo SAMO URL-ove vidljivih članova
+    // + hard cap od 64 ulaza. Bez ovog, korisnik koji je davno napustio krug i dalje
+    // drži bitmap u memory zauvek (svaki bitmap može biti par MB za high-res Google avatar).
     LaunchedEffect(state.members.map { it.photoUrl }) {
         val urls = state.members.mapNotNull { it.photoUrl?.takeIf { u -> u.isNotBlank() } }.toSet()
+        // Evict entry-je koji više nisu u trenutnoj listi članova.
+        val stale = photoCache.keys.toSet() - urls
+        stale.forEach { photoCache.remove(it) }
+        // Hard cap — odsečemo najstarije (iteration order je insertion order) ako pređemo limit.
+        while (photoCache.size > MAX_PHOTO_CACHE_ENTRIES) {
+            val oldest = photoCache.keys.firstOrNull() ?: break
+            photoCache.remove(oldest)
+        }
         urls.forEach { url ->
             if (photoCache[url] != null) return@forEach
             val req = ImageRequest.Builder(context).data(url).allowHardware(false).build()
@@ -250,10 +276,11 @@ fun MapScreen(
     val activeSosMembers = state.members.filter { it.sos != null }
 
     // SOS ripple animation — infinite phase 0..1, ~2s ciklus. Drive-uje radar pulse
-    // oko SOS markera. Kad nema aktivnih SOS-ova, animation se i dalje vrti (jeftino),
-    // ali updateSosRipples ne radi ništa.
+    // oko SOS markera + glow na in-app banner-u. Kad nema aktivnih SOS-ova, sosPhase je
+    // statički 0f — bez ovog, animacija je tikala 60fps i okidala LaunchedEffect svake
+    // ms (60 coroutine startup-a/s) iako updateSosRipples nije imao šta da uradi.
     val infiniteTransition = rememberInfiniteTransition(label = "sosRipple")
-    val sosPhase by infiniteTransition.animateFloat(
+    val animatedSosPhase by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -262,16 +289,28 @@ fun MapScreen(
         ),
         label = "sosRipplePhase",
     )
-    LaunchedEffect(activeSosMembers.map { "${it.uid}:${it.location?.lat}:${it.location?.lng}" }, sosPhase) {
+    val sosPhase = if (activeSosMembers.isEmpty()) 0f else animatedSosPhase
+    // Reset ripples kad lista SOS-ova promeni (per-uid kreiranje/uklanjanje).
+    LaunchedEffect(activeSosMembers.map { "${it.uid}:${it.location?.lat}:${it.location?.lng}" }) {
         mapViewState.updateSosRipples(activeSosMembers, sosPhase)
+    }
+    // Tik animaciju — samo dok ima aktivnih SOS-ova. Bez gate-a, LaunchedEffect re-runs
+    // svaku frame čak i u "no SOS" stanju.
+    if (activeSosMembers.isNotEmpty()) {
+        LaunchedEffect(sosPhase) {
+            mapViewState.updateSosRipples(activeSosMembers, sosPhase)
+        }
     }
 
     // Update pulse — kratak vizuelni "tap" oko markera kad mu se ažurira lokacija.
     // Tracking last observed updatedAt per uid; kad se uid-ova vrednost poveća, pokreni
     // one-shot animaciju (suptilan scale + fade). Bez pulse na inicijalnu vrednost.
+    // Cleanup: posle obrade, uklonimo UID-ove koji više nisu u members listi (npr.
+    // user je napustio krug) — bez ovog, mapa raste sa svakim historijskim članom.
     val lastObservedUpdate = remember { mutableStateMapOf<String, Long>() }
     LaunchedEffect(state.members.map { "${it.uid}:${it.location?.updatedAt ?: 0L}" }) {
         val scope = this
+        val activeUids = state.members.map { it.uid }.toSet()
         state.members.forEach { member ->
             val loc = member.location ?: return@forEach
             val prev = lastObservedUpdate[member.uid]
@@ -281,6 +320,9 @@ fun MapScreen(
                 scope.launch { mapViewState.runUpdatePulse(loc.lng, loc.lat) }
             }
         }
+        // Drop entry-je koji nisu više među aktivnim članovima — sprečava unbounded rast.
+        val stale = lastObservedUpdate.keys - activeUids
+        stale.forEach { lastObservedUpdate.remove(it) }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -430,7 +472,8 @@ fun MapScreen(
                     circles = state.myCircles,
                     activeCircleId = state.activeCircleId,
                     onPick = { id ->
-                        haptic()
+                        // Bez haptic-a — promena aktivnog kruga je sekundarna navigacija
+                        // (svakodnevna akcija), za razliku od SOS-a / member detail-a.
                         viewModel.setActiveCircle(id)
                         circlePickerVisible = false
                     },
@@ -1080,9 +1123,9 @@ private fun MapboxContainer(
                 val loc = member.location ?: return@forEach
                 val priv = member.isPrivate()
                 val color = when {
-                    member.sos != null -> "#DC2626" // red for SOS
-                    priv -> "#9CA3AF" // gray — stara lokacija, privatni mod
-                    member.isSelf -> "#3A86C8" // logo blue
+                    member.sos != null -> HEX_SOS_RED
+                    priv -> HEX_PRIVATE_GRAY
+                    member.isSelf -> HEX_SELF_BLUE
                     else -> MapMarkers.colorForUid(member.uid)
                 }
                 val photo = member.photoUrl?.let { photoCache[it] }
@@ -1098,8 +1141,8 @@ private fun MapboxContainer(
                         .withTextField(label)
                         .withTextSize(12.0)
                         .withTextOffset(listOf(0.0, 1.6))
-                        .withTextColor("#1F2937")
-                        .withTextHaloColor("#FFFFFF")
+                        .withTextColor(HEX_PIN_TEXT)
+                        .withTextHaloColor(HEX_PIN_HALO)
                         .withTextHaloWidth(2.0),
                 )
                 holder.annotationToUid[annotation.id] = member.uid
@@ -1151,10 +1194,10 @@ private class MapViewHolder {
             CircleAnnotationOptions()
                 .withPoint(Point.fromLngLat(lng, lat))
                 .withCircleRadius(10.0)
-                .withCircleColor("#818CF8") // indigo accent
+                .withCircleColor(HEX_PULSE_INDIGO)
                 .withCircleOpacity(0.55)
                 .withCircleStrokeWidth(1.5)
-                .withCircleStrokeColor("#6366F1")
+                .withCircleStrokeColor(HEX_PULSE_INDIGO_DARK)
                 .withCircleStrokeOpacity(0.65),
         )
         val totalMs = 800L
@@ -1198,10 +1241,10 @@ private class MapViewHolder {
                     CircleAnnotationOptions()
                         .withPoint(Point.fromLngLat(loc.lng, loc.lat))
                         .withCircleRadius(radius)
-                        .withCircleColor("#DC2626")
+                        .withCircleColor(HEX_SOS_RED)
                         .withCircleOpacity(alpha)
                         .withCircleStrokeWidth(2.0)
-                        .withCircleStrokeColor("#DC2626")
+                        .withCircleStrokeColor(HEX_SOS_RED)
                         .withCircleStrokeOpacity(alpha),
                 )
                 sosRipples[m.uid] = ann

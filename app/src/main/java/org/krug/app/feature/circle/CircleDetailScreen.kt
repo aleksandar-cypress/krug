@@ -89,7 +89,10 @@ fun CircleDetailScreen(
                 title = { Text(state.circleName.ifBlank { stringResource(R.string.circle_detail_title) }) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
                     }
                 },
                 actions = {

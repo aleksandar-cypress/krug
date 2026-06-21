@@ -65,6 +65,8 @@ class AuthViewModel @Inject constructor(
         SignInResult.Reason.NoGoogleAccount -> "Nije pronađen Google nalog na uređaju"
         SignInResult.Reason.Network -> "Mrežna greška, pokušaj ponovo"
         SignInResult.Reason.ProviderDisabled -> "Anonimna prijava nije omogućena u Firebase Console-u"
+        SignInResult.Reason.AccountDisabled -> "Ovaj nalog je onemogućen ili obrisan. Kontaktiraj podršku"
+        SignInResult.Reason.InvalidCredential -> "Prijava je istekla. Pokušaj ponovo"
         SignInResult.Reason.Unknown -> "Nešto je pošlo po zlu. Pokušaj ponovo"
     }
 }
