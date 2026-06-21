@@ -405,7 +405,8 @@ class LocationTrackingService : Service() {
     }
 
     private suspend fun fetchDisplayName(uid: String): String =
-        withTimeoutOrNull(2_000L) {
+        withTimeoutOrNull(5_000L) {
+            // 5s — Firestore cold start može da bude sporiji od starog 2s thresholda.
             // Bogatiji fallback chain — UserRepository.observeUser daje displayName /
             // email / deviceModel; biramo prvo neprazno (DeviceNames.friendly za device).
             userRepository.observeUser(uid).filterNotNull().first().let { u ->

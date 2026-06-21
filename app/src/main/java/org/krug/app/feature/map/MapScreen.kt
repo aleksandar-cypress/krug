@@ -276,9 +276,13 @@ fun MapScreen(
             )
             if (activeSosMembers.isNotEmpty()) {
                 Spacer(Modifier.size(12.dp))
+                val activeCircleName = state.myCircles
+                    .firstOrNull { it.id == state.activeCircleId }?.name
                 SosBanner(
                     members = activeSosMembers,
                     selfUid = state.selfUid,
+                    circleName = activeCircleName,
+                    pulsePhase = sosPhase,
                     onClickMember = { m ->
                         m.location?.let { loc ->
                             mapViewState.flyTo(loc.lng, loc.lat)
@@ -659,60 +663,183 @@ private fun SosFab(
 private fun SosBanner(
     members: List<MemberWithLocation>,
     selfUid: String?,
+    circleName: String?,
+    pulsePhase: Float,
     onClickMember: (MemberWithLocation) -> Unit,
     onCancelSelf: () -> Unit,
 ) {
+    val others = members.filter { it.uid != selfUid }
+    // Pulse 0..1 (cosine) — drži glow ritmičan umesto sawtooth linearnog flicker-a.
+    // Sinhron sa map ripple animacijom (isti pulsePhase iz rememberInfiniteTransition).
+    val pulseStrength = (1f - kotlin.math.cos(pulsePhase * 2f * Math.PI).toFloat()) / 2f
+    val glowDp = (8f + 14f * pulseStrength).dp
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(elevation = 8.dp, shape = RoundedCornerShape(20.dp), clip = false),
-        shape = RoundedCornerShape(20.dp),
-        color = SosRed,
+            .shadow(
+                elevation = glowDp,
+                shape = RoundedCornerShape(22.dp),
+                clip = false,
+                spotColor = SosRed,
+                ambientColor = SosRed,
+            ),
+        shape = RoundedCornerShape(22.dp),
+        color = Color.Transparent,
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.Warning,
-                    contentDescription = null,
-                    tint = Color.White,
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(22.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(SosRed, SosRedDark),
+                    ),
                 )
-                Spacer(Modifier.size(10.dp))
-                Text(
-                    text = "Hitno: neko traži pomoć",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White,
-                )
-            }
-            Spacer(Modifier.size(8.dp))
-            members.forEach { m ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White.copy(alpha = 0.15f))
-                        .padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val label = if (m.uid == selfUid) "Ti" else m.displayName.ifBlank { "Član" }
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = Color.White,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (m.uid == selfUid) {
-                        TextButton(onClick = onCancelSelf) {
-                            Text("Otkaži", color = Color.White, fontWeight = FontWeight.Bold)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            Column {
+                // Header — 🆘 icon u semitransparent krugu + naslov + subtitle.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.22f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "🆘",
+                            fontSize = 22.sp,
+                        )
+                    }
+                    Spacer(Modifier.size(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        val titleText = when {
+                            others.size == 1 -> {
+                                val name = others.first().displayName.ifBlank { "Član kruga" }
+                                "$name traži pomoć"
+                            }
+                            others.size > 1 -> "${others.size} članova traži pomoć"
+                            else -> "Tvoj SOS je aktivan"
                         }
-                    } else {
-                        TextButton(onClick = { onClickMember(m) }) {
-                            Text("Vidi", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = titleText,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = Color.White,
+                        )
+                        // Subtitle = krug + vreme od najsvežijeg SOS-a. Najsvežiji jer ako
+                        // ima više SOS-ova, najnoviji je najrelevantniji "pre X min" marker.
+                        val freshestSosAt = members.maxOfOrNull { it.sos?.triggeredAt ?: 0L } ?: 0L
+                        val timeLabel = sosRelativeTime(freshestSosAt)
+                        val subtitle = buildString {
+                            if (!circleName.isNullOrBlank()) {
+                                append("krug „")
+                                append(circleName)
+                                append("\"")
+                            }
+                            if (timeLabel.isNotBlank()) {
+                                if (isNotEmpty()) append(" · ")
+                                append(timeLabel)
+                            }
+                        }
+                        if (subtitle.isNotEmpty()) {
+                            Spacer(Modifier.size(2.dp))
+                            Text(
+                                text = subtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.85f),
+                            )
                         }
                     }
                 }
-                if (m != members.last()) Spacer(Modifier.size(6.dp))
+
+                Spacer(Modifier.size(14.dp))
+
+                members.forEachIndexed { index, m ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color.White.copy(alpha = 0.18f))
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Avatar — beli krug sa inicijalima u crvenoj (high contrast na
+                        // crvenoj pozadini banner-a). Bolje od generic Person ikone.
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color.White),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = MapMarkers.computeInitials(
+                                    m.displayName.ifBlank { if (m.uid == selfUid) "Ti" else "?" },
+                                ),
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = SosRedDark,
+                            )
+                        }
+                        Spacer(Modifier.size(12.dp))
+                        val label = if (m.uid == selfUid) "Ti" else m.displayName.ifBlank { "Član kruga" }
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                            color = Color.White,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (m.uid == selfUid) {
+                            TextButton(
+                                onClick = onCancelSelf,
+                            ) {
+                                Text(
+                                    text = "Otkaži",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        } else {
+                            // FilledTonalButton — beli pill sa crvenim tekstom, pop-uje
+                            // protiv crvene gradient pozadine. CTA očigledniji od starog
+                            // TextButton-a.
+                            androidx.compose.material3.FilledTonalButton(
+                                onClick = { onClickMember(m) },
+                                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = Color.White,
+                                    contentColor = SosRedDark,
+                                ),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                            ) {
+                                Text(
+                                    text = "Pokaži",
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
+                    if (index < members.lastIndex) Spacer(Modifier.size(8.dp))
+                }
             }
         }
+    }
+}
+
+/** "Sad", "pre 2 min", "pre 1 h" — za SOS subtitle. Razlikuje se od compactLastSeen-a (kraći). */
+private fun sosRelativeTime(triggeredAt: Long): String {
+    if (triggeredAt <= 0L) return ""
+    val diffMin = (System.currentTimeMillis() - triggeredAt) / 60_000L
+    return when {
+        diffMin < 1 -> "upravo sada"
+        diffMin < 60 -> "pre $diffMin min"
+        diffMin < 60 * 24 -> "pre ${diffMin / 60} h"
+        else -> "pre ${diffMin / (60 * 24)} d"
     }
 }
 

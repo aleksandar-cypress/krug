@@ -94,9 +94,9 @@
     <!-- SOS notification -->
     <string name="sos_notif_channel">SOS obaveštenja</string>
     <string name="sos_notif_channel_desc">Hitna obaveštenja kada član kruga pokrene SOS</string>
-    <string name="sos_notif_title">🆘 %1$s traži hitnu pomoć</string>
-    <string name="sos_notif_body">Pokrenut je SOS. Tapni da vidiš gde je član i pošalješ pomoć</string>
-    <string name="sos_notif_body_with_circle">SOS u krugu „%1$s\". Tapni da vidiš gde je član i pošalješ pomoć</string>
+    <string name="sos_notif_title">🆘 %1$s traži pomoć</string>
+    <string name="sos_notif_body">Pokrenut je SOS.\nTapni da otvoriš mapu i vidiš gde je član.</string>
+    <string name="sos_notif_body_with_circle">Iz kruga „%1$s\".\nTapni da otvoriš mapu i vidiš gde je član.</string>
     <string name="sos_notif_unknown_sender">Član kruga</string>
 
     <!-- Map UI -->

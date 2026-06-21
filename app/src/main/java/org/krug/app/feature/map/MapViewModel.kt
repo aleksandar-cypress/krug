@@ -26,7 +26,11 @@ import org.krug.app.core.prefs.LocalPrefs
 import org.krug.app.core.sos.SosModel
 import org.krug.app.core.sos.SosRepository
 import org.krug.app.core.user.UserModel
+import org.krug.app.core.user.UserRepository
 import org.krug.app.core.util.DeviceNames
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 
 data class MemberWithLocation(
@@ -63,6 +67,7 @@ class MapViewModel @Inject constructor(
     private val sosRepository: SosRepository,
     private val localPrefs: LocalPrefs,
     private val directionsRepository: DirectionsRepository,
+    private val userRepository: UserRepository,
 ) : ViewModel() {
 
     /**
@@ -95,15 +100,13 @@ class MapViewModel @Inject constructor(
         val snapshot = uiState.value
         val loc = snapshot.selfLocation
         val circleId = snapshot.activeCircleId
-        // Ime pošiljaoca embedujemo u SOS payload — receiver više ne mora da čeka
-        // observeUser fetch (koji ume da timeout-uje i daje generic "Član" fallback).
-        // Self member već ima resolved displayName preko memberFlow-a (DeviceNames.friendly
-        // + email prefix + device fallback) — to je isti chain koji UI svuda koristi.
-        val selfMember = snapshot.members.firstOrNull { it.isSelf }
-        val senderName = selfMember?.displayName?.takeIf { it.isNotBlank() }
-            ?: authRepository.currentUser?.displayName?.takeIf { !it.isNullOrBlank() }
         val circleName = snapshot.myCircles.firstOrNull { it.id == circleId }?.name
         viewModelScope.launch {
+            // Ime se rešava sinhronizno — UI selfMember može biti null ako user pritisne
+            // SOS dok se members lista još učitava (auth → Firestore round-trip). Bulletproof:
+            // 1) UI snapshot (instant), 2) FirebaseAuth profile, 3) UserRepository.observeUser
+            // (3s timeout), 4) DeviceNames.friendly fallback nikad ne bi trebao pasti.
+            val senderName = resolveSenderName(uid, snapshot)
             runCatching {
                 sosRepository.trigger(
                     uid = uid,
@@ -115,6 +118,24 @@ class MapViewModel @Inject constructor(
                 )
             }.onFailure { Timber.w(it, "Failed to trigger SOS") }
         }
+    }
+
+    private suspend fun resolveSenderName(uid: String, snapshot: MapUiState): String? {
+        snapshot.members.firstOrNull { it.isSelf }?.displayName
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+        authRepository.currentUser?.displayName
+            ?.takeIf { !it.isNullOrBlank() }
+            ?.let { return it }
+        // Firestore fetch sa 3s timeout-om — UserRepository je već observable, povučemo
+        // prvi non-null snapshot. DeviceNames.friendly fallback garantuje da retko vraćamo
+        // null (samo ako fetch propadne / device label prazan).
+        val fromDoc = withTimeoutOrNull(3_000L) {
+            userRepository.observeUser(uid).filterNotNull().first()
+        } ?: return null
+        return fromDoc.displayName.takeIf { it.isNotBlank() }
+            ?: fromDoc.email.substringBefore('@').takeIf { it.isNotBlank() }
+            ?: DeviceNames.friendly(fromDoc.deviceModel).takeIf { it.isNotBlank() }
     }
 
     fun clearSos() {
