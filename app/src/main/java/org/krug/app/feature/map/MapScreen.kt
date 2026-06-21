@@ -1430,8 +1430,11 @@ private fun MemberDetailSheet(
                 ) {
                     Icon(Icons.Filled.Warning, contentDescription = null, tint = Color.White)
                     Spacer(Modifier.width(10.dp))
+                    val sosName = member.displayName
+                        .ifBlank { if (member.isSelf) "Ti" else "Član" }
                     Text(
-                        text = "Aktivan SOS: traži pomoć",
+                        text = if (member.isSelf) "SOS aktivan — tvoji krugovi su obavešteni"
+                        else "$sosName traži hitnu pomoć",
                         color = Color.White,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     )

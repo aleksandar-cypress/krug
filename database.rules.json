@@ -25,6 +25,8 @@
         "triggeredAt": { ".validate": "newData.isNumber()" },
         "message":     { ".validate": "newData.isString() || !newData.exists()" },
         "circleId":    { ".validate": "newData.isString() || !newData.exists()" },
+        "senderName":  { ".validate": "newData.isString() && newData.val().length <= 64 || !newData.exists()" },
+        "circleName":  { ".validate": "newData.isString() && newData.val().length <= 32 || !newData.exists()" },
         "$other":      { ".validate": false }
       }
     },

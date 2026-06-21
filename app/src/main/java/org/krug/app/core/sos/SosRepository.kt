@@ -23,15 +23,21 @@ class SosRepository @Inject constructor(
         lat: Double,
         lng: Double,
         circleId: String?,
+        senderName: String? = null,
+        circleName: String? = null,
         message: String? = null,
     ) {
-        val data = mapOf(
-            "lat" to lat,
-            "lng" to lng,
-            "triggeredAt" to ServerValue.TIMESTAMP,
-            "message" to message,
-            "circleId" to circleId,
-        )
+        // RTDB rules odbacuju null vrednosti za string polja, pa filter-ujemo. Samo prisutne
+        // (lat/lng/triggeredAt) idu uvek, ostalo opciono.
+        val data = buildMap<String, Any> {
+            put("lat", lat)
+            put("lng", lng)
+            put("triggeredAt", ServerValue.TIMESTAMP)
+            if (message != null) put("message", message)
+            if (circleId != null) put("circleId", circleId)
+            if (!senderName.isNullOrBlank()) put("senderName", senderName)
+            if (!circleName.isNullOrBlank()) put("circleName", circleName)
+        }
         ref(uid).setValue(data).await()
     }
 

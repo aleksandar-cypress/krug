@@ -92,8 +92,17 @@ class MapViewModel @Inject constructor(
 
     fun triggerSos() {
         val uid = authRepository.currentUser?.uid ?: return
-        val loc = uiState.value.selfLocation
-        val circleId = uiState.value.activeCircleId
+        val snapshot = uiState.value
+        val loc = snapshot.selfLocation
+        val circleId = snapshot.activeCircleId
+        // Ime pošiljaoca embedujemo u SOS payload — receiver više ne mora da čeka
+        // observeUser fetch (koji ume da timeout-uje i daje generic "Član" fallback).
+        // Self member već ima resolved displayName preko memberFlow-a (DeviceNames.friendly
+        // + email prefix + device fallback) — to je isti chain koji UI svuda koristi.
+        val selfMember = snapshot.members.firstOrNull { it.isSelf }
+        val senderName = selfMember?.displayName?.takeIf { it.isNotBlank() }
+            ?: authRepository.currentUser?.displayName?.takeIf { !it.isNullOrBlank() }
+        val circleName = snapshot.myCircles.firstOrNull { it.id == circleId }?.name
         viewModelScope.launch {
             runCatching {
                 sosRepository.trigger(
@@ -101,6 +110,8 @@ class MapViewModel @Inject constructor(
                     lat = loc?.lat ?: 0.0,
                     lng = loc?.lng ?: 0.0,
                     circleId = circleId,
+                    senderName = senderName,
+                    circleName = circleName,
                 )
             }.onFailure { Timber.w(it, "Failed to trigger SOS") }
         }

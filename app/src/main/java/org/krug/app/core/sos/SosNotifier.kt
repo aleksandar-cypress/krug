@@ -52,7 +52,7 @@ class SosNotifier @Inject constructor(
         mgr.createNotificationChannel(channel)
     }
 
-    fun notifySos(uid: String, displayName: String) {
+    fun notifySos(uid: String, displayName: String, circleName: String? = null) {
         ensureChannel()
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -61,8 +61,15 @@ class SosNotifier @Inject constructor(
             context, uid.hashCode(), openIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val title = context.getString(R.string.sos_notif_title, displayName.ifBlank { "Član" })
-        val body = context.getString(R.string.sos_notif_body)
+        val resolvedName = displayName.ifBlank { context.getString(R.string.sos_notif_unknown_sender) }
+        val title = context.getString(R.string.sos_notif_title, resolvedName)
+        // Bogatiji body kad imamo ime kruga — "Iz kruga „Porodica"…". Bez kruga padamo
+        // na generic poruku iz strings.xml.
+        val body = if (!circleName.isNullOrBlank()) {
+            context.getString(R.string.sos_notif_body_with_circle, circleName)
+        } else {
+            context.getString(R.string.sos_notif_body)
+        }
         val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)

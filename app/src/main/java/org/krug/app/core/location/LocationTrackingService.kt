@@ -388,8 +388,11 @@ class LocationTrackingService : Service() {
         val previousTs = knownSosTriggered[uid]
         when {
             isActive && previousTs != sos!!.triggeredAt -> {
-                val name = fetchDisplayName(uid)
-                sosNotifier.notifySos(uid, name)
+                // Prvo iz payload-a (zero-latency, set u trenutku trigger-a). Legacy SOS-i
+                // (pre v0.2) nemaju senderName — fallback na observeUser fetch.
+                val name = sos.senderName?.takeIf { it.isNotBlank() } ?: fetchDisplayName(uid)
+                val circleName = sos.circleName?.takeIf { it.isNotBlank() }
+                sosNotifier.notifySos(uid, name, circleName)
                 knownSosTriggered[uid] = sos.triggeredAt
                 Timber.d("SOS notification fired for $uid ($name) circleId=${sos.circleId}")
             }
@@ -403,7 +406,15 @@ class LocationTrackingService : Service() {
 
     private suspend fun fetchDisplayName(uid: String): String =
         withTimeoutOrNull(2_000L) {
-            userRepository.observeUser(uid).filterNotNull().first().displayName.orEmpty()
+            // Bogatiji fallback chain — UserRepository.observeUser daje displayName /
+            // email / deviceModel; biramo prvo neprazno (DeviceNames.friendly za device).
+            userRepository.observeUser(uid).filterNotNull().first().let { u ->
+                u.displayName.takeIf { it.isNotBlank() }
+                    ?: u.email.substringBefore('@').takeIf { it.isNotBlank() }
+                    ?: org.krug.app.core.util.DeviceNames.friendly(u.deviceModel)
+                        .takeIf { it.isNotBlank() }
+                    ?: ""
+            }
         }.orEmpty()
 
     /** Drugi član krug-a je tražio osvežavanje — povuci sveži fix i očisti ping-ove. */
