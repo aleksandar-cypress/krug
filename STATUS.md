@@ -2,12 +2,100 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-20, deveta sesija — logo brand identity + location quality v1)
+## Gde smo stali (2026-06-21, deseta sesija — bug fixes + audit pass 1-4 + UX iteracije)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `2382cce`.
-Firebase rules: Firestore + RTDB deployovane sa child mode + paused field validatorima.
-A37 + Xiaomi Mi 11 oba sa najnovijim build-om. Beta grupa nepromenjena (aleksandarr + jelenavasilic84), nije ponovo distribuirano.
-APK za testiranje: `~/Downloads/krug-0.1.0-debug-2026-06-20.zip` (50MB, ZIP).
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `55e6e66`.
+Firebase rules: Firestore + RTDB deployovane (Firestore rules sa child shareLocation lock, RTDB sa senderName/circleName SOS validatorima).
+A37 + Xiaomi Mi 11 oba sa najnovijim build-om instalirana danas (više puta).
+APK za testiranje: `~/Downloads/krug-0.1.0-55e6e66-20260621-1323.zip` (50MB, ZIP).
+
+**Health stanja**: 36 unit testova zelenih, release build (R8 minify) testiran i prolazi, FGS proces hard cap + restart logika sa kill-loop detekcijom, Crashlytics breadcrumbs i custom keys za uid/circleId/anonymous.
+
+## Deseta sesija (2026-06-21) — user-reported bugovi + 4-tier code audit + UX polish
+
+### User-prijavljeni bugovi (commit b49d2ed, c4755cc, da8f96f)
+- **MapScreen "Udaljen" → "Udaljenost"** (label fix).
+- **Putna umesto vazdušne distance**: `DirectionsRepository` sa Mapbox Directions API + LRU cache (64 entry, 5min TTL, 100m bucket). Fallback na haversine dok se učitava ili pri network fail (label "Udalj. (vazd.)" tad).
+- **Privatni mod baga**: `isPrivate()` sada okida samo na `loc.paused == true`. Staleness više ne flipuje peer u privatni mod — battery-mode intervali (LOW=15min, STILL=20min, LOW_THROTTLED=30min) više nisu false-positive.
+- **Crash na Uslovi link**: openUrl prebačen na Chrome Custom Tabs (`androidx.browser:1.8.0`), sa ACTION_VIEW + Toast fallback-om. Back se sada vraća u Krug umesto da gasi app.
+- **Capitalize naziv kruga**: `core/util/StringFormat.kt` sa locale-aware `capitalizeFirstLetter()`, primenjeno u CreateCircleViewModel i CircleDetailViewModel.
+- **SOS notifikacija "Neko"**: prebačeno na embedovan senderName + circleName u RTDB payload-u (zero-latency, nije observe-user fetch koji ume da timeout-uje). MapViewModel.triggerSos resolve-uje self ime preko 3-fold fallback chain-a (memberFlow → FirebaseAuth → UserRepository sa 3s timeout). LocationTrackingService.fetchDisplayName proširen chain (displayName → email prefix → friendly device → ""). Receiver-timeout 2s → 5s.
+- **In-app SOS banner redesign**: 🆘 ikona u semi-transparent krugu, gradient red→red-dark, naslov sa imenom ("X traži pomoć"), subtitle "krug „Y" · pre Z min", per-member avatar pill (beli krug sa inicijalima u SosRedDark), "Pokaži" FilledTonalButton beli, pulsirajući glow shadow sinhron sa map ripple.
+- **RTDB rules deploy**: dodato `senderName` (≤64) + `circleName` (≤32) validacije.
+
+### Phase: stabilnost (commit 9ca7bae)
+- **Crashlytics breadcrumbs + custom keys**: `CrashlyticsContext` singleton (uid + anonymous + activeCircleId), `CrashlyticsTree` propagira INFO logove kao breadcrumb-e, `Timber.i()` na svim ključnim akcijama (sign-in/out, SOS trigger/clear, circle create/leave/delete, circle switch, FGS start/destroy/profile-switch, app start).
+- **Process-death recovery**: `LocationHealthWorker` proverava `shareLocationGlobal` (ne budi FGS uzalud), detektuje kill-loop pattern (lifetime < 60s → `Timber.w` non-fatal), detektuje silent A14+ start failure (proverava isRunning posle 2s → `Result.retry()`). LocationTrackingService prati `startedAtMs` + `lastFgsLifetimeMs`.
+- **Permission UX**: `PermissionWarningBanner` na vrhu mape, lifecycle ON_RESUME re-check.
+- **Unit testovi**: `app/src/test/` sa JUnit 4 + Truth, `core.util.Geo` (haversineMeters, formatDistance) + `core.util.Time` (compactLastSeen, sosRelativeTime) extracted iz MapScreen. 36 testova: StringFormat(7), DeviceNames(10), Geo(8), Time(11). Sve green.
+
+### Audit Pass 1 — 4 paralelna Explore agenta (Auth/Location/Circle/UI)
+Pokrenuti agenti, konsolidovan rangirani izveštaj sa file:line referencama. Razdvojeno u 4 TIER-a po impact-u.
+
+### TIER 1 — CRITICAL (commit c224ed0)
+- **T1.1 Rules: child shareLocation lock**. firestore.rules line 81 — `isSelf(memberUid)` davao update SVIH polja na member doc-u. Sada self-update ograničen na samo `nickname` field. Child ne može da promeni `isChild` ili `shareLocation` direktnim API pozivom. Rules deploy-ovane.
+- **T1.2 FGS boost job lifecycle**. `scheduleProfileReconfigOnBoostExpiry` sad čuva Job handle u `boostExpiryJob`, cancel-uje se eksplicitno pre `scope.cancel()` u onDestroy. Bez ovog, `delay()` može da nadživi service teardown i `applyProfile` bi gađao polu-destroyed `fused` klijent.
+- **T1.3 Mapbox MapView dispose**. Novi DisposableEffect(mapViewState) u onDispose poziva `annotationManager.deleteAll()`, `circleManager.deleteAll()`, clear-uje sosRipples + annotationToUid, null-uje onPinClick i poziva `mapView.onDestroy()`. Bez ovog, MapView (OpenGL kontekst + telemetry kanali) ostaje u memory svaki put kad user navigira sa Map ekrana.
+- **T1.4 SOS dedup persistence**. `knownSosTriggered` prebačen iz in-memory mape u LocalPrefs (load u FGS onCreate, save na svaku promenu). TTL filter pri load-u drop-uje entry-je starije od 30min. Bez ovog, ako Android ubije FGS proces (OOM, BootReceiver restart), isti SOS bi opet zvonio.
+- **T1.5 Invite accept Firestore transakcija**. Stari flow imao 3 race window-a: check-then-act na maxUses, AlreadyMember check non-atomic, joinCircle + invite usedBy razdvojeni. Sad sve tri provere + tri write-a (circle.memberIds, member subdoc, invite.usedBy) u jednu atomsku transakciju sa auto-retry.
+
+### TIER 2 — HIGH (commit 78d3c8a)
+- **T2.1 photoCache LRU bounded** — eviction stale URL-ova + hard cap 64.
+- **T2.2 SOS animation pause** — `sosPhase = 0f` kad `activeSosMembers.isEmpty()`, LaunchedEffect gate-ovan; ranije se animacija tikala 60fps i okidala coroutine launch svake ms iako updateSosRipples nije imao šta da uradi.
+- **T2.3 Permission busy-wait → lifecycle** — uklonjen 500ms polling loop iz LocationPermissionPage i NotificationsPermissionPage.
+- **T2.4 GDPR delete ghost recovery** — `pendingDeleteUid` u LocalPrefs; SplashViewModel pri sledećem startu retry-uje cleanup + Auth.delete; ako i dalje fail, force signOut.
+- **T2.5 SignInResult.Reason expansion** — `AccountDisabled`, `InvalidCredential`; novi `mapFirebaseAuthError` čita FirebaseAuthException error code-ove.
+- **T2.6 Invite brute-force throttle** — exponential backoff (1s/2s/5s/15s) za consecutive failures + AtomicBoolean za double-tap race.
+
+### TIER 3 — polish (commit 78d3c8a)
+- **T3.1 Accessibility** — contentDescription na svim back IconButton-ima (CircleList, CircleDetail, CreateCircle, EnterCode, SettingsScaffold).
+- **T3.2 Dead code** — skenirano, agent grešno klasifikovao `lastSeenLabel` kao dead, ipak je u upotrebi. SOS_TTL_MS duplikat između VM i FGS ostavljen kao defensive.
+- **T3.3 Hardcoded boje → konstante** — `HEX_SOS_RED`, `HEX_PULSE_INDIGO` itd. reflektuju brand tokene iz Color.kt.
+- **T3.4 lastObservedUpdate cleanup** — drop UID-ove koji nisu u trenutnim members posle obrade.
+- **T3.5 UserRepository.updateDisplayName** — trim + max 40 char + odbij blank na repository nivou.
+- **T3.6 Google sign-in timeout** — `withTimeoutOrNull(15s)` na CredentialManager.getCredential.
+- **T3.7 Haptic feedback audit** — uklonjen iz CirclePicker (sekundarna nav).
+- **T3.8 Auth flow shareIn** — jedan AuthStateListener za ceo proces; SharedFlow + WhileSubscribed(5s) + replay=1.
+
+### Audit Pass 2 — još 4 paralelna Explore agenta (verifikacija + perf + error + build)
+Detaljniji audit fokusiran na regression check, threading, error consistency, build/secrets. Konsolidovan u TIER 4.
+
+### TIER 4 — release blockers + UX polish (commit 897dc93)
+- **F1 Proguard @Keep za Firebase POJO**. Release build sa `minifyEnabled=true` je do sada bio slomljen — R8 bi preimenovao field-ove pa Firestore deserialization silent fail. Dodato keep rules za UserModel, CircleModel, MemberModel, InviteModel, SosModel, LocationModel, UserSettings + njihovi konstruktori. **Verifikovan release build sad prolazi (assembleRelease).** Najopasniji ceo audit nalaz.
+- **F1.b debugAppCheck → implementation** (bila debugImplementation, što je u release-u izazivalo Unresolved reference).
+- **F2 LocalPrefs commit=true → commit=false (apply)** — sync disk I/O na Main thread je ANR risk; 3 hot path-a (onboarding, circle switch, pending delete).
+- **F3 SplashViewModel pending-delete u withTimeoutOrNull(10s)** — bez ovog Firestore/RTDB down bi mogao infinite-spin Splash.
+- **F4 PermissionWarningBanner inicijalni check sinhroni** — `computeMissingPermissions(context)` helper; ranije je čekao prvi ON_RESUME pa se banner ne bi pojavio pri prvom otvaranju mape.
+- **F5 signInAnonymously withTimeoutOrNull(15s)** — konzistentno sa Google.
+- **F6 RTDB `onCancelled` logging** — LocationRepository observe + observeRefreshRequests, SosRepository observe — sad `Timber.w(error.toException(), ...)` + emit null/empty. Crashlytics breadcrumb dobija trag kad RTDB pada.
+- **F7 EnterCode cooldown countdown UI** — `cooldownRemainingSec` eksponovan u UiState; ViewModel 1Hz tick coroutine, EnterCodeScreen prikazuje "Sačekaj X s" countdown + disable submit dugmeta.
+- **F8 MapViewModel.observeUser uklonjen** — koristi se `UserRepository.observeUser` direktno (eliminisan duplikat Firestore listener-a).
+- **F9 CircleRepository.lastSnapshotError StateFlow** — MapUiState i CircleListUiState imaju `circlesError`/`error` polje da UI razlikuje "user nema krugove" od "Firestore down". UI banner još nije implementiran, data layer spreman.
+- **F10 DirectionsRepository CompletableDeferred in-flight** — dva istovremena poziva sa istim key-em sada dele isti fetch umesto duplikat HTTP-a.
+- **F11 Mapbox fingerprint battery quantize** — `batteryPct / 20` bucket-i umesto raw %, ne okida deleteAll() na 1% promenu.
+- **Defensive polish**: knownSosTriggered defensive empty init pre permission check, photoCache.toList() pre forEach, Firestore PersistentCacheSettings 50MB cap, AndroidManifest tools:targetApi 31 → 36.
+
+### UX iteracije (commit 55e6e66)
+- **Mapbox kompas u rotaciji** — `fadeWhenFacingNorth = true`, pojavi se gore-desno (ispod buttons row-a) kad user dva-prsta rotira mapu; tap vraća na sever. Nevidljiv dok je mapa već poravnata sa severom.
+- **Krugovi ikona** — `Icons.Outlined.Group` → `Icons.Outlined.Diversity3` (3-4 osobe u kružnoj formaciji, vizuelno "krug ljudi"). Prvi pokušaj sa `GroupWork` odbačen po user feedback-u.
+- **AboutScreen footer** — copyright pinovan na dno ekrana (outer Column sa weight + scroll iznad).
+
+### Šta NIJE urađeno (deferred, low priority)
+- **Firestore rules: bilo ko authenticated može da čita sve krugove/članove** — poznata limitacija (TODO comment u rules-u), traži Cloud Functions ili veći refactor invite flow-a. Risk je teorija (privacy leak svih krugova u prod-u), ne ugrožava family use case.
+- **Dark mode** — eksplicitno ostavljeno light-only po Theme.kt komentaru, brand identity je fiksiran.
+- **UI banner za Firestore error state** — data layer kroz F9 spreman ali UI ne pokazuje banner; user vidi prazan list umesto "Greška, retry" kad Firestore padne.
+- **Touch target sweep <48dp** — neke ikone u avatar/battery chip-ovima 36dp; nije applikovano svuda jer su neke vizuelne ikone, ne click target-i.
+- **Google API key cert restrictions** — Firebase Console action, ne kod. Korisnik treba da doda Android cert restrictions na ključ `AIzaSyChf...` ručno.
+
+## Sledeća sesija — kandidati
+
+1. **Distribuiraj nov build beta grupi** (Aleksandar + Jelena) — ovaj build (55e6e66) je značajan upgrade nad 2382cce, vredi push-ovati.
+2. **Real-world test** — voziti se sa A37, posmatrati lokaciju da li i dalje skače kad rotiraš (validira kompas), posmatrati battery drain (validira animation pause + battery quantize).
+3. **UI banner za Firestore error** — kratak rad, koristi `circlesError`/`error` field-ove iz state-a, pokaži retry banner.
+4. **Status bar transparency / edge-to-edge polish** — sad sa kompasom + statusBarsPadding-om, vredi proveriti da ništa ne curi ispod sistemskih traka.
+5. **Play Store priprema** — versionCode bump, screenshots, opis. Release build verifikovan da prolazi, mapping fajl se generiše za Crashlytics.
+
+---
 
 ## Deveta sesija (2026-06-20 noć) — logo brand palette + location quality (Phase 1+2) + orphan circle cleanup
 
