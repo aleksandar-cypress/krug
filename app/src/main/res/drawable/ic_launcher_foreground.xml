@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Adaptive icon foreground. 22dp inset → logo render u centralnoj ~64dp zoni 108dp
-    adaptive canvas-a (matches Android safe-zone od 66dp). Bez ovog inset-a logo deluje
-    "zoomed in" i squircle mask-ovi (One UI, Pixel) seku ivice figura.
-    Sa vector logo-om (`ic_krug_logo`) launcher dobija crisp brand bez bitmap aliasinga.
+    adaptive canvas-a (matches Android safe-zone 66dp). Notification badge ima safety
+    preko setLargeIcon u FGS i SosNotifier-u sa ic_notification_large drawable-om koji
+    ima dodatni padding — nije potrebno žrtvovati home screen ikonu.
 -->
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
     android:drawable="@drawable/ic_krug_logo"
