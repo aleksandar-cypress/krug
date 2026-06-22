@@ -1181,11 +1181,16 @@ private fun MapboxContainer(
                 // Ne forsiramo lightPreset — neka korisnik kroz system settings kontroliše.
                 mv.mapboxMap.loadStyle(Style.STANDARD)
                 // Disable Mapbox-ov ugrađeni location puck (plavi krug + accuracy ring iz
-                // device GPS-a). Bug koji je user prijavio: kad se član kreće, refresh
-                // ostavlja "plavi krug" na mapi, sledeći refresh kamera flyTo gleda na njega.
-                // Razlog: Mapbox puck je nezavisan od naših pin anotacija — koristi live
-                // device GPS dok naš self pin koristi Firestore podatke (lag). Pošto već
-                // crtamo self pin kroz `MapMarkers.pinMarker`, puck je redundantan i zbunjuje.
+                // device GPS-a). Bug: kad se član kreće, refresh ostavlja "plavi krug" na
+                // mapi. Mapbox puck je nezavisan od naših pin anotacija — koristi live
+                // device GPS dok naš self pin koristi Firestore podatke (lag).
+                // updateSettings + pulsingEnabled=false + enabled=false → siguran way da
+                // se sve komponente Mapbox-ovog location renderera disable-uju (direktan
+                // setter `mv.location.enabled = false` Samsung One UI ponekad ne respektuje).
+                mv.location.updateSettings {
+                    enabled = false
+                    pulsingEnabled = false
+                }
                 mv.location.enabled = false
             }
         },
