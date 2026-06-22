@@ -2,14 +2,83 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-21, deseta sesija — bug fixes + audit pass 1-4 + UX iteracije)
+## Gde smo stali (2026-06-22, jedanaesta sesija — SVG logo + brand rollout)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `55e6e66`.
-Firebase rules: Firestore + RTDB deployovane (Firestore rules sa child shareLocation lock, RTDB sa senderName/circleName SOS validatorima).
-A37 + Xiaomi Mi 11 oba sa najnovijim build-om instalirana danas (više puta).
-APK za testiranje: `~/Downloads/krug-0.1.0-55e6e66-20260621-1323.zip` (50MB, ZIP).
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `fb67947`.
+Firebase rules: Firestore + RTDB deployovane.
+A37 + Xiaomi Mi 11 oba sa najnovijim build-om instalirana.
 
-**Health stanja**: 36 unit testova zelenih, release build (R8 minify) testiran i prolazi, FGS proces hard cap + restart logika sa kill-loop detekcijom, Crashlytics breadcrumbs i custom keys za uid/circleId/anonymous.
+**Health stanja**: build i dalje uredan (debug + release), 36 unit testova zelenih, FGS + Crashlytics arhitektura nepromenjena.
+
+## Jedanaesta sesija (2026-06-22) — SVG brand rollout + splash animacija
+
+### Novi brand asset (commit `76d6f9d`)
+- `logo.svg` (i `logo.psd`) ručno napravljen brand — 4 figure (krug ljudi) sa lučnim povezivačima, boje iz `Color.kt` (`LogoBlue` `#3A86C8`, `LogoPink` `#E56B8F`, `LogoTeal` `#48B09B`, `LogoOrange` `#F3B250`).
+- Konvertovan u Android `VectorDrawable`:
+  - `ic_krug_logo.xml` (color)
+  - `ic_krug_logo_monochrome.xml` (themed icons Android 13+)
+- viewBox 911.83 × 909.26 sa `group translateX/Y` koji kompenzuje original SVG `translate(-44.8 -47.77)`.
+
+### `KrugLogo` Compose komponenta — `app/src/main/java/org/krug/app/ui/brand/KrugLogo.kt`
+- Parsira SVG path-ove preko `PathParser`, drži po Path-u + boji za fine kontrolu.
+- API: `KrugLogo(modifier, animated, spinKey, contentDescription)`.
+- `animated = true` → spin 180° (1.2s, `FastOutSlowInEasing`) sa 300ms delay-om posle launcher icon morph-a; bez scale entrance-a i bez breath idle animacije (oba sklonjeno posle iteracija sa user-om).
+- `spinKey: Any?` → svaka promena vrednosti okida jednu 360° rotaciju za tap-to-spin easter-egg-e (npr. AboutScreen). Prvi composition se preskače.
+- `animated = false` → statičan render za male ikone (MapScreen "Krugovi" button, AuthScreen, empty state).
+
+### Splash flow (`SplashScreen.kt` + `MainActivity.kt`)
+- `KrugLogo(animated=true)` 192dp centriran na beloj pozadini.
+- `MIN_DISPLAY_MS = 1_600L` — min vreme prikaza pre navigacije (omogućava spin-u da se kompletuje).
+- `setOnExitAnimationListener { provider.remove() }` u MainActivity-u — override-uje Android 12+ default icon zoom-out exit animaciju koja je izazivala "logo se pojavi veliki na sekund" flash.
+- Sistemski splash icon `ic_splash_icon.xml` je vector sa **jednim transparentnim path-om** (`fillColor=#00000000`). Ovaj specifičan oblik:
+  - Empty body = Samsung One UI fallback na launcher icon (treptaj).
+  - Solid white = MIUI dodaje shadow oko bele ploče (vidljiv kvadrat).
+  - **Transparent path** = sistem vidi validan drawable bez piksela za render, oba uređaja prikazuju ništa.
+
+### `KrugSpinner` — `ui/brand/KrugSpinner.kt`
+- 4 brand-colored dots koji rotiraju oko centra, infinite linear animation.
+- Spreman za zamenu `CircularProgressIndicator`-a u većim loading state-ovima (nije force-replace u-ovoj sesiji jer su postojeći u button-ima 18dp gde brand boje ne odgovaraju).
+
+### Logo zamene kroz app
+- **Launcher ikona**: `ic_launcher_foreground.xml` i `ic_launcher_monochrome.xml` koriste vector logo sa **22dp inset-om** (centralna 64dp zona od 108dp adaptive canvas-a).
+- **AuthScreen**: `Image(painterResource(krug_logo.png))` → `KrugLogo(modifier=size(230.dp))`. Crisp na svim density-jima.
+- **AboutScreen**: isti logo 230dp + tap-to-spin easter egg (clip(`RoundedCornerShape(115.dp)`) za circular ripple + `padding(10.dp)` da head_blue top ne padne u clip ivicu).
+- **MapScreen "Krugovi" button**: `Icons.Outlined.Diversity3` → static `Image(painter=R.drawable.ic_krug_logo)` 36dp unutar 48dp glass button-a.
+- **CircleListScreen empty state**: `Icons.Outlined.Group` 80dp → `KrugLogo` 120dp (prvi utisak novog user-a sad je brand).
+
+### Splash animation tuning (više iteracija)
+Krenuli smo sa "orbital entrance" (4 figure spiraliraju iz off-screen-a + spin), preko "scale-up from tiny", do finalne **samo-spin** verzije. Razlozi za uklanjanje entrance-a:
+- Scale entrance od 0.3 → 1.0 stvara vizuelni "shrink-then-grow" diskontinuitet sa Android launcher-icon-to-splash morph-om.
+- Bilo koji entrance veličinski mismatch sa sistemskim splash-om je vidljiv kao "logo se pojavi veliki/mali na sekund" pre prave animacije.
+- Bez entrance scale-a, Compose splash render je identičan sistemskom (oba 192dp), pa launcher morph → sistem splash → Compose splash je glatko.
+- Single 180° spin daje "wow" bez stvaranja diskontinuiteta.
+
+### SAFE_FIT_FACTOR uklonjen
+Inicijalno KrugLogo je imao internal `SAFE_FIT_FACTOR = 0.94f` (5% padding unutar canvas-a) radi safety od circular clip-ova. Ovo je pravilo "splash logo se shrink-uje 5% nakon sistemskog splash-a → veliki na sekund pa se smanji". Sklonjen → KrugLogo sad fits canvas tesno. AboutScreen koji ima circular clip dobio `.padding(10.dp)` direktno u modifier-u (clip-safe padding samo gde treba).
+
+### Notification ikone (commit `fb67947`)
+- **`ic_notification.xml`** — 24dp monohromatska 4-dot silhouette, za status bar small icon. Zamenjuje `ic_launcher_foreground` koji je imao premali safe zone za notification crop maske.
+- **`ic_notification_large.xml`** — pun color logo u viewBox 1800x1800 sa group translate (398, 397) koji centrira figure na **41% radijusa od centra** (outer extent ~46% sa head radius-om). Konvertuje se u 192dp bitmap preko `ContextCompat.getDrawable.toBitmap(192, 192)` i prosleđuje preko `setLargeIcon`.
+- Oba poziva (`LocationTrackingService` FGS notification + `SosNotifier`) korigovana.
+
+### Samsung One UI quirk — NIJE REŠEN
+- **Problem**: Na A37, FGS notification badge (veliki krug levo u notification panelu) prikazuje launcher icon umesto `setLargeIcon`-a. Samsung One UI 7+ izgleda hardcoded ignoriše `setLargeIcon` za FGS notifikacije i koristi launcher icon foreground sa svojim kružnim crop-om, koji seče glave figura.
+- **Pokušaji koji nisu radili**: `setLargeIcon(bitmap)`, povećanje padding-a unutar `ic_notification_large`, IconCompat varijanta.
+- **Jedini fix koji bi radio**: povećati `ic_launcher_foreground` inset sa 22dp na 32dp+ — ali to čini launcher ikonu na home screen-u manjom, što user ne želi.
+- **Trenutno stanje**: na Mi 11 notifikacija izgleda crisp i correct; na A37 figure su delimično isečene u badge-u. User je prihvatio da se ostavi ovako.
+
+### Šta NIJE urađeno u ovoj sesiji (deferred)
+- Empty state logo u MapScreen-u (kad nema krugova) — postoji "Napravi prvi krug" gradient pill ali bez logoa iznad. CircleList empty state je dobio brand logo.
+- `KrugSpinner` nije ugrađen u postojeće loading state-ove (button progress indicators su 18dp gde brand boje su kontraproduktivne).
+- Sistem splash duration tuning — sada je `MIN_DISPLAY_MS = 1_600L` što daje spin-u dovoljno vremena ali možda može da se skrati ako treba.
+
+## Sledeća sesija — kandidati
+
+1. **Samsung notification badge fix** — istražiti može li se override-ovati Samsung-ov default badge behavior preko `setStyle(NotificationCompat.DecoratedCustomViewStyle)` ili RemoteViews. Ili napraviti separate `ic_launcher_round` sa drugačijim inset-om koji koristi samo Samsung.
+2. **Distribuiraj nov build beta grupi** — current `fb67947` je značajan brand upgrade.
+3. **Real-world test** — vožnja sa A37, validacija lokacije + brand consistency.
+4. **UI banner za Firestore error** — data layer (F9 iz prethodne sesije) još uvek spreman, UI ne pokazuje banner.
+5. **Play Store priprema** — versionCode bump, screenshots, opis. Release build verifikovan da prolazi.
 
 ## Deseta sesija (2026-06-21) — user-reported bugovi + 4-tier code audit + UX polish
 
