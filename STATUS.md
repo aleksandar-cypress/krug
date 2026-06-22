@@ -2,13 +2,108 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-22, jedanaesta sesija — SVG logo + brand rollout)
+## Gde smo stali (2026-06-22, dvanaesta sesija — UI polish + Samsung S24 dodato u flotu)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `fb67947`.
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `8c53d49`.
 Firebase rules: Firestore + RTDB deployovane.
-A37 + Xiaomi Mi 11 oba sa najnovijim build-om instalirana.
+**Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — sve tri sa najnovijim build-om.
 
 **Health stanja**: build i dalje uredan (debug + release), 36 unit testova zelenih, FGS + Crashlytics arhitektura nepromenjena.
+
+## Dvanaesta sesija (2026-06-22) — UI polish + brand sheets + bug fixes
+
+### Onboarding (commit `8a66526`)
+- **PageScaffold**: bela krug-kontejner za icon zamenjena **brand gradient kontejnerom** (`LogoBlue50` → `LogoPink50`) sa pulse animacijom (`infiniteRepeatable` 1.0 ↔ 1.04 / 3.2s, `FastOutSlowInEasing`, `RepeatMode.Reverse`).
+- **IntroPage (Welcome)**: dodat `KrugLogo` 140dp hero iznad welcome teksta — brand first impression umesto čistog teksta.
+
+### Loading states (commit `8a66526`)
+- **CircleListScreen**: dok Firestore prvi snapshot ne stigne, prikazujemo **4 shimmer skeleton kartice** (alpha 0.35 ↔ 0.85 / 1.1s repeat) umesto blank screen-a. Strukturalno matchuje CircleRow oblik (44dp avatar circle + dve text linije).
+
+### Micro-interactions (commit `8a66526`)
+- **`pressScaleClickable` modifier** (`ui/brand/PressScale.kt`) — replikuje `Modifier.clickable` ali sa spring scale animacijom na press (0.96x default, `DampingRatioMediumBouncy`, `StiffnessMedium`).
+- Primenjeno na: `CreateCircleFab`, `CreateCircleButton`, "Napravi prvi krug" pill, "Imam pozivnicu" Surface, `CircleRow` (pressedScale=0.98), `CirclePickerRow`, `ShareGradientButton` (ShowInvite).
+- **`CircleIconButton` + `CircleLogoButton`**: na svaki tap **360° spin** (`animateFloatAsState` sa `spinTrigger * 360f`) — ista vrsta animacije kao splash logo. Umesto press scale (user feedback: "umesto smanjivanja, isto tako zarotiras logo kao na pocetku").
+
+### MapScreen sheets polish (commit `8a66526`)
+- **MemberDetailSheet**: 
+  - `StatChip` pozadina sada **brand-tinted** (8% alpha accent + 22% alpha border) umesto generic `surfaceContainerHigh`. Battery zeleno/orange/crveno, distance plavo, last-seen primary. Svaki chip dobija identitet svoje accent boje.
+  - Avatar krug ima **shadow halo u marker boji** (`shadow` sa `ambientColor`/`spotColor` = markerColor) za depth.
+- **CirclePickerSheet**: 
+  - `RadioButton` → **44dp color-coded circle icon** sa ikonom kruga (`CircleIconAssets.forKey`) — vizuelni jezik konzistentan sa TopFloatingBar pill-om.
+  - Selected state: **2dp colored border + 10% alpha tinted background + "Aktivan krug" subtitle** u accent boji (umesto generic `primaryContainer`).
+  - "Detalji" TextButton → `IconButton` sa `ChevronRight` (kompaktniji, ne odvlači pažnju).
+  - Press scale na ceo red (0.98x).
+
+### Splash spin (commit `8c53d49`)
+- `SPIN_TARGET_DEG`: 180° → **360°** (pun krug). User testirao oba, ostavljeno na 360° kao default (više energije).
+
+### ShowInvite screen redesign (commit `8a66526`)
+- Dodat **`KrugLogo` 96dp hero** na vrhu — brand prisustvo na "magic moment" trenutku.
+- **Code box**: `primaryContainer` flat → **gradient LogoBlue → LogoBlueLight** sa belim digit box-ovima i shadow halo-om u LogoBlue boji. Veće dimenzije (40×60dp digit boxes).
+- **Novi "Kopiraj kod" button** između code-a i share-a — sa `ContentCopy` ikonom, switch-uje na `Check` + "Kopirano" tekst nakon tap-a (1.8s feedback delay). Koristi `ClipboardManager`.
+- **Share button**: Material `Button` → **gradient pill** (kao CreateCircleFab) sa press scale animacijom, baltimore + Share ikona u semi-transparent krugu.
+
+### CreateCircle redesign (commit `8c53d49`)
+- **Live preview krug 120dp** na vrhu — boja + ikona iz state-a, ime ispod (placeholder ako prazan). Shadow halo u accent boji (`ambientColor`/`spotColor` = accentColor).
+- **Color picker**: krug 44dp, selected ima `onBackground` border 3dp.
+- **Icon picker**: unselected ima `outlineVariant` border 1dp (bilo: bez border-a, gubilo se na beloj pozadini ekrana → user je javio "krug je odsečen"). Selected: accent fill + 2dp accent border.
+- **Create CTA**: solid `LogoBlue` pill (probano: inline `Brush.linearGradient` se rekreirao na svakoj recomposition-i kad input text promeni state, vizuelno "kvario" boju button-a na Samsung S24 — solid color je stabilniji izbor).
+
+### Bug fixes (commit `8c53d49`)
+- **Mapbox built-in location puck disable** (`MapScreen.kt:1189`): user prijavio "plavi krug ostaje na mapi posle refresh-a". Mapbox Standard style automatski uključuje location component sa plavim puck-om iz live device GPS-a — nezavisan od naših pin anotacija. Hardened disable: `mv.location.updateSettings { enabled = false; pulsingEnabled = false }` + `mv.location.enabled = false` (samo direktan setter Samsung One UI ponekad ignoriše).
+- **Refresh focus** (`MapScreen.kt:464`): kad user tapne "Osveži lokaciju" člana, sada **odmah** flyTo na trenutnu poznatu poziciju + setuje `pendingRefocus` za novi update. `LaunchedEffect(pendingRefocus, state.members)` detektuje kad stigne nov `loc.updatedAt > baseline` i fly-uje na novu poziciju.
+- **CircleListScreen state.loading**: bio je `Unit` (blank screen) → sada poziva `SkeletonList()`.
+
+### UI eksperimenti koji nisu prošli (vraćeni)
+- **Avatar Settings button**: pokušaj sa Google profile photo u Settings button-u (Gmail/Maps pattern). User: "ne ne, ruzno je".
+- **Brand gradient Settings button**: gear ikona preko gradient kruga. User: "ne svidja mi se".
+- **Profile + Settings split**: 3 button-a (Krugovi + Avatar + Settings). User: "ne ne, zajebi, ostavi samo gear ikonu ovakva kakva jeste".
+- Finalna odluka: Settings ostaje plain `Icons.Outlined.Settings` gear sa 360° spin na tap.
+
+### Krug spinner i fade-in heuristike (commit `8a66526`)
+- `KrugSpinner` komponenta (4 brand dots rotirajuća) ostala neugrađena — postojeći loading indicatori u button-ima 18dp gde brand boje ne odgovaraju (button background je već primary color).
+- Splash KrugLogo bez alpha fade-in heuristike: pokušali fade-in da pokrije Samsung One UI launcher pulse, ali to se vidi kao "logo niče iz transparentnog" na drugim uređajima. Vraćeno na "logo se prikazuje odmah na finalnoj veličini, samo spin daje animaciju".
+
+### Šta NIJE urađeno (deferred za sledeću sesiju)
+- **Settings hierarchy polish** — list rows → grouped cards po kategorijama (Profil / Privatnost / Performanse / O app).
+- **EnterCode keypad polish** — 6-box keypad style code input umesto jednog text field-a.
+- **MembersSheet polish** — kad tapneš "Članovi" pill, otvara se flat list.
+- **NavHost slide transitions** — između screen-ova trenutno fade default.
+- **Custom SOS confirm dialog** — Material AlertDialog → brand-styled dialog.
+- **Empty state za MapScreen** kad imaš krug ali nema članova još.
+- **Samsung S24 cold-start "white screen"** — user prijavio: app je zakucao na loading screen, posle USB konekta otišlo na Map. Logcat pokazao normalan startup (FGS, Firebase init, Mapbox surface render za 1s); MapScreen JIT-compiled tek u 11:13 (≈2 minuta posle launch-a) što je verovatno bila kombinacija slow JIT + Doze. Ostavljeno kao "intermitentni problem, pratimo" — potencijalni fix: baseline profile za Compose hot path.
+
+## Play Store gotovost (procena ~60-70%)
+
+**Tehnički gotovo (✓):**
+- Release build sa R8 minifikacijom (TIER 4 fix iz desete sesije)
+- `targetSdk 36`, 64-bit support
+- Crashlytics + Timber breadcrumbs
+- Privacy policy URL (`aleksandar-cypress.github.io/krug/privacy.html`) i Terms URL postoje
+- Permission flow + onboarding
+- FGS pravilno konfigurisan
+- 36 unit testova zelenih
+
+**Što fali (~1-2 sesije rada):**
+- **Screenshots** — 5-8 reprezentativnih ekrana (može iz emulatora ili sa S24/Mi11)
+- **Feature graphic** 1024×500 (banner za store listing)
+- **Store listing copy** — kratak opis (80 chars), dugi opis (~500 reči), title, what's new
+- **Data safety form** — Google traži deklaraciju (lokacija je "sensitive", ime, email, photo, device ID)
+- **Upload signing key** — kreirati `release.keystore`, konfigurisati `signingConfig` u `app/build.gradle.kts`, dodati passwords u `~/.gradle/gradle.properties`
+- **AAB build** (`./gradlew bundleRelease`) i upload na Play Console
+- **VersionCode bump** (trenutno `versionCode=1`)
+- **Internal testing track setup** — 100% bezbedan prvi korak
+
+## Sledeća sesija — kandidati
+
+1. **Play Store priprema** — signing keystore + signed AAB + data safety + screenshots + store listing copy
+2. **Settings hierarchy polish** (#A) — category cards umesto flat list-a
+3. **EnterCode keypad polish** (#B) — 6-box code input
+4. **MembersSheet polish** — match CirclePicker visual jezik
+5. **NavHost slide transitions** — između screen-ova
+6. **Samsung S24 cold-start investigation** — baseline profile za Compose hot path
+7. **Real-world test** — distribuiraj nov build beta grupi (Aleksandar + Jelena)
+8. **Empty state za MapScreen** sa logo iznad
 
 ## Jedanaesta sesija (2026-06-22) — SVG brand rollout + splash animacija
 
