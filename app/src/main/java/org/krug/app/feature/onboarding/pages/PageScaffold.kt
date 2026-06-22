@@ -1,7 +1,12 @@
 package org.krug.app.feature.onboarding.pages
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -20,13 +25,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import org.krug.app.ui.theme.LogoBlue50
+import org.krug.app.ui.theme.LogoPink50
 
 @Composable
 internal fun OnboardingPageScaffold(
@@ -48,24 +59,36 @@ internal fun OnboardingPageScaffold(
     ) {
         Spacer(Modifier.size(72.dp))
 
-        androidx.compose.material3.Surface(
-            shape = CircleShape,
-            color = androidx.compose.ui.graphics.Color.White,
-            shadowElevation = 8.dp,
-            modifier = Modifier.size(140.dp),
+        // Brand gradient hero container sa nežnim breath pulse-om (1.0 ↔ 1.04 / 3.2s).
+        // Gradient od LogoBlue50 → LogoPink50 reflektuje brand primary + secondary u svetlim
+        // tonovima — soft i welcoming za onboarding kontekst.
+        val pulse = rememberInfiniteTransition(label = "onb-hero-pulse")
+        val scale by pulse.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.04f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 3_200, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "onb-hero-scale",
+        )
+        Box(
+            modifier = Modifier
+                .size(140.dp)
+                .scale(scale)
+                .shadow(elevation = 14.dp, shape = CircleShape, clip = false)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(colors = listOf(LogoBlue50, LogoPink50)),
+                ),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier
-                    .padding(28.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(72.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(72.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
         }
 
         Spacer(Modifier.size(36.dp))

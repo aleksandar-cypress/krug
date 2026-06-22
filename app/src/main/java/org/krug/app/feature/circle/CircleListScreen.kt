@@ -1,5 +1,11 @@
 package org.krug.app.feature.circle
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.krug.app.R
 import org.krug.app.core.circle.CircleModel
 import org.krug.app.ui.brand.KrugLogo
+import org.krug.app.ui.brand.pressScaleClickable
 import org.krug.app.ui.theme.LogoBlue
 import org.krug.app.ui.theme.LogoBlueLight
 
@@ -95,7 +102,7 @@ fun CircleListScreen(
                 .padding(padding),
         ) {
             when {
-                state.loading -> Unit
+                state.loading -> SkeletonList()
                 state.circles.isEmpty() -> EmptyState(onCreate = onCreate, onJoin = onJoin)
                 else -> CircleList(
                     circles = state.circles,
@@ -153,6 +160,75 @@ private fun EmptyState(onCreate: () -> Unit, onJoin: () -> Unit) {
 }
 
 /**
+ * Skeleton placeholder lista — 4 shimmer kartice koje matchuju CircleRow oblik.
+ * Pokazuje se dok Firestore prvi snapshot ne stigne. Bez ovog, user vidi blank screen
+ * sa "+" FAB-om što deluje kao bug ("ima podatke ali ne učitava ih").
+ */
+@Composable
+private fun SkeletonList() {
+    val transition = rememberInfiniteTransition(label = "skeleton-shimmer")
+    val shimmer by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1_100, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "skeleton-alpha",
+    )
+    val shimmerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = shimmer)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        repeat(4) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(shimmerColor),
+                    )
+                    Spacer(Modifier.size(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Box(
+                            modifier = Modifier
+                                .height(16.dp)
+                                .fillMaxWidth(fraction = 0.62f)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(shimmerColor),
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .height(12.dp)
+                                .fillMaxWidth(fraction = 0.38f)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(shimmerColor),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * Premium FAB za "Napravi krug" — gradient pill sa belim "+" badge-om.
  * Veći touch target (60dp) i jači shadow nego stock Material FAB.
  */
@@ -171,7 +247,7 @@ private fun CreateCircleFab(text: String, onClick: () -> Unit) {
             )
             .clip(RoundedCornerShape(30.dp))
             .background(gradient)
-            .clickable(onClick = onClick)
+            .pressScaleClickable(onClick = onClick)
             .padding(start = 12.dp, end = 22.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -211,7 +287,7 @@ private fun CreateCircleButton(text: String, onClick: () -> Unit, modifier: Modi
             .shadow(elevation = 10.dp, shape = RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
             .background(gradient)
-            .clickable(onClick = onClick)
+            .pressScaleClickable(onClick = onClick)
             .height(56.dp)
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -263,7 +339,7 @@ private fun CircleRow(circle: CircleModel, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
+            .pressScaleClickable(pressedScale = 0.98f, onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),

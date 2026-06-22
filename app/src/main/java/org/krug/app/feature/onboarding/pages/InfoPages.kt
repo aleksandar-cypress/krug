@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.krug.app.R
+import org.krug.app.ui.brand.KrugLogo
 
 /**
  * Spojeni Welcome + HowItWorks + Privacy u jedan ekran sa 3 sekcije.
@@ -46,7 +47,17 @@ fun IntroPage(onContinue: () -> Unit) {
             .padding(horizontal = 28.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.size(56.dp))
+        Spacer(Modifier.size(40.dp))
+
+        // Brand hero — animirani logo daje prvi vizuelni utisak app-a pre nego što user
+        // pročita welcome tekst. Bez ovog ekran je samo "text + 2 ikone + dugme" što ne
+        // gradi brand recognition.
+        KrugLogo(
+            modifier = Modifier.size(140.dp),
+        )
+
+        Spacer(Modifier.size(28.dp))
+
         Text(
             text = stringResource(R.string.onb_welcome_title),
             style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
@@ -61,7 +72,7 @@ fun IntroPage(onContinue: () -> Unit) {
             textAlign = TextAlign.Center,
         )
 
-        Spacer(Modifier.size(32.dp))
+        Spacer(Modifier.size(28.dp))
 
         Column(
             modifier = Modifier

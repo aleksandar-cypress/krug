@@ -128,7 +128,7 @@ internal const val KRUG_LOGO_TOTAL_ANIMATION_MS = 1_400
 // scale/rotate animacija na splash-u.
 private const val SPIN_DELAY_MS = 300L
 private const val SPIN_DURATION_MS = 1_200
-private const val SPIN_TARGET_DEG = 180f
+private const val SPIN_TARGET_DEG = 360f
 
 // ---- Geometry ------------------------------------------------------------------------
 

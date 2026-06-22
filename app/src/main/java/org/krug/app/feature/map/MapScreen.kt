@@ -1,9 +1,11 @@
 package org.krug.app.feature.map
 
 import android.annotation.SuppressLint
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -34,6 +36,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BatteryFull
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ChildCare
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.NearMe
@@ -55,6 +58,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,7 +70,9 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
+import androidx.core.graphics.toColorInt
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -74,6 +80,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import org.krug.app.ui.brand.pressScaleClickable
 import android.view.HapticFeedbackConstants
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -89,6 +96,7 @@ import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.animation.flyTo
+import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotation
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
@@ -448,10 +456,16 @@ fun MapScreen(
                     },
                     onRefresh = {
                         haptic()
-                        // Baseline = CURRENT updatedAt (server timestamp) u trenutku tap-a.
-                        // Kasnije poređenje `loc.updatedAt > baseline` uvek koristi server
-                        // vreme (ne device clock koje može biti skewed); kad stigne sveži
-                        // fix sa novim server timestamp-om, automatski flyTo.
+                        // 1) Odmah flyTo na poslednju poznatu poziciju člana — user vidi
+                        //    da je akcija registrovana, čak i ako nova lokacija stigne za
+                        //    nekoliko sekundi. Bez ovog, kamera ne reaguje na tap dok ne
+                        //    stigne refresh odgovor (može da deluje kao da dugme ne radi).
+                        detailMember.location?.let { loc ->
+                            mapViewState.flyTo(loc.lng, loc.lat)
+                        }
+                        // 2) Baseline = CURRENT updatedAt — kad stigne fresh fix sa novim
+                        //    server timestamp-om, LaunchedEffect(pendingRefocus, members)
+                        //    automatski flyTo na NOVU poziciju (u slučaju da se član kreće).
                         val baseline = detailMember.location?.updatedAt ?: 0L
                         pendingRefocus = detailMember.uid to baseline
                         if (detailMember.isSelf) {
@@ -591,7 +605,7 @@ private fun TopFloatingBar(
                                 colors = listOf(LogoBlue, LogoBlueLight),
                             ),
                         )
-                        .clickable(onClick = onCreateCircle)
+                        .pressScaleClickable(onClick = onCreateCircle)
                         .padding(horizontal = 18.dp, vertical = 12.dp),
                 ) {
                     Box(
@@ -629,7 +643,7 @@ private fun TopFloatingBar(
                 shadowElevation = 6.dp,
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
-                    .clickable(onClick = onJoinByCode),
+                    .pressScaleClickable(onClick = onJoinByCode),
             ) {
                 Text(
                     text = "Imam pozivnicu →",
@@ -701,17 +715,31 @@ private fun CircleIconButton(
     description: String,
     onClick: () -> Unit,
 ) {
+    // 360° spin na svaki tap — ista vrsta animacije kao splash logo spin. Spring-bouncy
+    // zamenjuje prethodni scale-down (user feedback: "umesto smanjivanja, isto tako
+    // zarotiras logo kao na pocetku"). spinTrigger se inkrementira tako da svaki tap
+    // okida novu animaciju (umesto da se zaustavi na 360° posle prvog).
+    var spinTrigger by remember { mutableIntStateOf(0) }
+    val rotation by animateFloatAsState(
+        targetValue = spinTrigger * 360f,
+        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+        label = "icon-spin",
+    )
     Box(
         modifier = Modifier
             .size(48.dp)
             .krugGlass(CircleShape)
-            .clickable(onClick = onClick),
+            .clickable {
+                spinTrigger += 1
+                onClick()
+            },
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = description,
             tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.rotate(rotation),
         )
     }
 }
@@ -726,17 +754,28 @@ private fun CircleLogoButton(
     description: String,
     onClick: () -> Unit,
 ) {
+    var spinTrigger by remember { mutableIntStateOf(0) }
+    val rotation by animateFloatAsState(
+        targetValue = spinTrigger * 360f,
+        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+        label = "logo-spin",
+    )
     Box(
         modifier = Modifier
             .size(48.dp)
             .krugGlass(CircleShape)
-            .clickable(onClick = onClick),
+            .clickable {
+                spinTrigger += 1
+                onClick()
+            },
         contentAlignment = Alignment.Center,
     ) {
         Image(
             painter = painterResource(R.drawable.ic_krug_logo),
             contentDescription = description,
-            modifier = Modifier.size(36.dp),
+            modifier = Modifier
+                .size(36.dp)
+                .rotate(rotation),
         )
     }
 }
@@ -1141,6 +1180,13 @@ private fun MapboxContainer(
                 // Mapbox Standard sam adaptira light/dark prema system theme-u uređaja.
                 // Ne forsiramo lightPreset — neka korisnik kroz system settings kontroliše.
                 mv.mapboxMap.loadStyle(Style.STANDARD)
+                // Disable Mapbox-ov ugrađeni location puck (plavi krug + accuracy ring iz
+                // device GPS-a). Bug koji je user prijavio: kad se član kreće, refresh
+                // ostavlja "plavi krug" na mapi, sledeći refresh kamera flyTo gleda na njega.
+                // Razlog: Mapbox puck je nezavisan od naših pin anotacija — koristi live
+                // device GPS dok naš self pin koristi Firestore podatke (lag). Pošto već
+                // crtamo self pin kroz `MapMarkers.pinMarker`, puck je redundantan i zbunjuje.
+                mv.location.enabled = false
             }
         },
         update = { _ ->
@@ -1322,34 +1368,12 @@ private fun CirclePickerSheet(
         )
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(circles, key = { it.id }) { c ->
-                val selected = c.id == activeCircleId
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(
-                            if (selected) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        )
-                        .clickable { onPick(c.id) }
-                        .padding(horizontal = 14.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    androidx.compose.material3.RadioButton(
-                        selected = selected,
-                        onClick = { onPick(c.id) },
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = c.name,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { onOpenDetail(c.id) }) {
-                        Text(stringResource(R.string.map_circle_picker_detail))
-                    }
-                }
+                CirclePickerRow(
+                    circle = c,
+                    selected = c.id == activeCircleId,
+                    onPick = { onPick(c.id) },
+                    onOpenDetail = { onOpenDetail(c.id) },
+                )
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -1358,6 +1382,76 @@ private fun CirclePickerSheet(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(stringResource(R.string.map_circle_picker_manage))
+        }
+    }
+}
+
+@Composable
+private fun CirclePickerRow(
+    circle: CircleBrief,
+    selected: Boolean,
+    onPick: () -> Unit,
+    onOpenDetail: () -> Unit,
+) {
+    // Boja kruga je centralni vizuelni element — daje svakom redu identitet bez čitanja
+    // imena. Selected state je obojeni border + accent pozadina umesto generic
+    // primaryContainer (koji se gubi između drugih elemenata u sheet-u).
+    val accent = Color(android.graphics.Color.parseColor(circle.colorHex))
+    val bgColor = if (selected) accent.copy(alpha = 0.10f)
+        else MaterialTheme.colorScheme.surfaceContainerHigh
+    val borderColor = if (selected) accent else Color.Transparent
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(bgColor)
+            .border(
+                width = if (selected) 2.dp else 0.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(16.dp),
+            )
+            .pressScaleClickable(pressedScale = 0.98f, onClick = onPick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Circle icon — colored circle sa icon-om u sredini, isti vizuelni jezik kao
+        // chip u TopFloatingBar pill-u. Active state: subtle glow ring oko (accent pri 0.4).
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(accent),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = CircleIconAssets.forKey(circle.iconKey),
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = circle.name,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (selected) {
+                Text(
+                    text = "Aktivan krug",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = accent,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+        IconButton(onClick = onOpenDetail) {
+            Icon(
+                imageVector = Icons.Outlined.ChevronRight,
+                contentDescription = stringResource(R.string.map_circle_picker_detail),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -1589,6 +1683,8 @@ private fun MemberDetailSheet(
             Box(
                 modifier = Modifier
                     .size(72.dp)
+                    .shadow(elevation = 8.dp, shape = CircleShape, clip = false,
+                        ambientColor = markerColor, spotColor = markerColor)
                     .clip(CircleShape)
                     .background(markerColor),
                 contentAlignment = Alignment.Center,
@@ -1782,11 +1878,18 @@ private fun StatChip(
     modifier: Modifier = Modifier,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
 ) {
+    // Chip pozadina je vrlo blagi tint accent boje (8% alpha) — daje brand prisustvo
+    // svakom chip-u bez "vrišti" boje. Border iste boje sa 22% alpha za suptilnu ivicu.
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(horizontal = 10.dp, vertical = 12.dp),
+            .clip(RoundedCornerShape(14.dp))
+            .background(accentColor.copy(alpha = 0.08f))
+            .border(
+                width = 1.dp,
+                color = accentColor.copy(alpha = 0.22f),
+                shape = RoundedCornerShape(14.dp),
+            )
+            .padding(horizontal = 12.dp, vertical = 12.dp),
     ) {
         Text(
             text = label,
