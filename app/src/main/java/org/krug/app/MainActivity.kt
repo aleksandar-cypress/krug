@@ -25,6 +25,11 @@ class MainActivity : ComponentActivity() {
         // pa stvarni ekran — "double splash" jump.
         val splashScreen = installSplashScreen()
         splashScreen.setKeepOnScreenCondition { !SplashGate.ready.get() }
+        // Override sistemskog "icon exit animation"-a (Android 12+) — bez ovog, splash icon
+        // se automatski zoom-out-uje (raste i fade-uje) pre dismiss-a, što user vidi kao
+        // "logo se pojavi veliki na sekund" pre Compose animacije. provider.remove() odmah
+        // skloni splash bez animacije — Compose splash glatko preuzima.
+        splashScreen.setOnExitAnimationListener { provider -> provider.remove() }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {

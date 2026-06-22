@@ -1,6 +1,5 @@
 package org.krug.app.feature.auth
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,7 +33,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,6 +40,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.krug.app.BuildConfig
 import org.krug.app.R
+import org.krug.app.ui.brand.KrugLogo
 import org.krug.app.ui.theme.LogoBlue
 
 @Composable
@@ -77,10 +76,8 @@ fun AuthScreen(
         ) {
             Spacer(Modifier.weight(0.8f))
 
-            // Bela pozadina → logo direktno (bez Surface wrapper-a), veći za WOW.
-            Image(
-                painter = painterResource(R.drawable.krug_logo),
-                contentDescription = null,
+            // Vector logo — crisp na svim density-jima, ista veličina kao splash brand.
+            KrugLogo(
                 modifier = Modifier.size(230.dp),
             )
 

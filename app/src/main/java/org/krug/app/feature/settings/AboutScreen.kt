@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.browser.customtabs.CustomTabsIntent
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,18 +29,22 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.util.Calendar
 import org.krug.app.BuildConfig
 import org.krug.app.R
+import org.krug.app.ui.brand.KrugLogo
 import org.krug.app.ui.theme.LogoBlue
 import timber.log.Timber
 
@@ -77,10 +80,18 @@ fun AboutScreen(onBack: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.size(8.dp))
-                Image(
-                    painter = painterResource(R.drawable.krug_logo),
-                    contentDescription = null,
-                    modifier = Modifier.size(230.dp),
+                // Tap-to-spin: vector logo se okrene 360° na svaki tap. Mali easter-egg
+                // koji daje brand interakciju bez ometanja primarnih akcija na ekranu.
+                var spinTaps by remember { mutableIntStateOf(0) }
+                KrugLogo(
+                    modifier = Modifier
+                        .size(230.dp)
+                        .clip(RoundedCornerShape(115.dp))
+                        .clickable { spinTaps += 1 }
+                        // Padding unutar clip-a sprečava da head_blue (čija najviša tačka
+                        // pada na y≈0 u viewport coord-u) bude sečen kružnim clip-om.
+                        .padding(10.dp),
+                    spinKey = spinTaps,
                 )
                 Spacer(Modifier.size(16.dp))
                 Text(

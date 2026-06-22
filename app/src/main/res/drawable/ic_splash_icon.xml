@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Splash screen icon. Android 12+ splash render-uje icon u krug od 192dp sa
-    safe zone-om ~160dp. Novi logo (4 figure) ima više belog prostora po ivicama
-    nego stari (6 figura) pa može manji inset = veći logo na splash-u bez sečenja.
+    Splash screen icon: vector sa jednim transparentnim path-om (nije empty body, što je
+    Samsung One UI tumačio kao "fallback na launcher icon" pa se video treptaj; nije ni
+    solidna bela ploča, što je MIUI render-ovao sa shadow-om pa se video kvadrat).
+    Transparentan path = ostaje validan drawable (sistem ne fallback-uje), nema piksela
+    za render (MIUI ne dodaje shadow oko ničega).
 -->
-<inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:drawable="@drawable/krug_logo"
-    android:inset="10dp" />
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M0,0h108v108h-108z" />
+</vector>

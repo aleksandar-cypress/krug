@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,7 +35,6 @@ import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.ChildCare
-import androidx.compose.material.icons.outlined.Diversity3
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.NearMe
 import androidx.compose.material.icons.outlined.Person
@@ -73,6 +73,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import android.view.HapticFeedbackConstants
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -681,10 +682,7 @@ private fun TopFloatingBar(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CircleIconButton(
-                // Diversity3 = 3-4 osobe raspoređene u kružnoj formaciji — vizuelno
-                // predstavlja "krug ljudi" što je tačno koncept ove app-a.
-                icon = Icons.Outlined.Diversity3,
+            CircleLogoButton(
                 description = stringResource(R.string.map_action_circles),
                 onClick = onOpenCircles,
             )
@@ -714,6 +712,31 @@ private fun CircleIconButton(
             imageVector = icon,
             contentDescription = description,
             tint = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+/**
+ * Identičan layout kao [CircleIconButton] ali sadrži brand logo (color-aware VectorDrawable)
+ * umesto monohromatske Material ikone. Logo u 48dp glass-button-u predstavlja "Krugovi" akciju
+ * — vizuelno konzistentno sa splash-om i AuthScreen-om.
+ */
+@Composable
+private fun CircleLogoButton(
+    description: String,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .krugGlass(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_krug_logo),
+            contentDescription = description,
+            modifier = Modifier.size(36.dp),
         )
     }
 }

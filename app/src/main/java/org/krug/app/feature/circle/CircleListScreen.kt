@@ -47,6 +47,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.krug.app.R
 import org.krug.app.core.circle.CircleModel
+import org.krug.app.ui.brand.KrugLogo
 import org.krug.app.ui.theme.LogoBlue
 import org.krug.app.ui.theme.LogoBlueLight
 
@@ -115,11 +116,9 @@ private fun EmptyState(onCreate: () -> Unit, onJoin: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            imageVector = Icons.Outlined.Group,
-            contentDescription = null,
-            modifier = Modifier.size(80.dp),
-            tint = MaterialTheme.colorScheme.primary,
+        // Brand logo umesto generic group ikone — empty state je prvi utisak novog user-a.
+        KrugLogo(
+            modifier = Modifier.size(120.dp),
         )
         Spacer(Modifier.size(24.dp))
         Text(
