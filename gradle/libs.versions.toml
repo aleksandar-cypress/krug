@@ -37,6 +37,7 @@ googleid = "1.1.1"
 work = "2.10.0"
 splashscreen = "1.0.1"
 browser = "1.8.0"
+profileinstaller = "1.4.1"
 junit = "4.13.2"
 truth = "1.4.4"
 
@@ -91,6 +92,7 @@ googleid = { module = "com.google.android.libraries.identity.googleid:googleid",
 androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "splashscreen" }
 androidx-browser = { module = "androidx.browser:browser", version.ref = "browser" }
+androidx-profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }
 junit = { module = "junit:junit", version.ref = "junit" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
 

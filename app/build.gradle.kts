@@ -150,6 +150,12 @@ dependencies {
     // u eksterni browser task (back vraća u Krug, ne gasi app).
     implementation(libs.androidx.browser)
 
+    // ProfileInstaller — instalira baseline profile pri install-u app-a. Sa
+    // `baseline-prof.txt` u src/main/, ART precompile-uje navedene Kotlin/Compose
+    // hot path-ove pri install-u → ~10-30% brži cold start. Google Play takođe
+    // distribuira "cloud profile" agregiran iz svih usera kad ima dovoljno traffic-a.
+    implementation(libs.androidx.profileinstaller)
+
     // Unit testing
     testImplementation(libs.junit)
     testImplementation(libs.truth)

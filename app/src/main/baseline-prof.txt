@@ -1,0 +1,73 @@
+# Krug baseline profile — manually authored, targeted at cold-start hot paths.
+# Format: <flags>L<class>;-><method><signature>
+#   H = "hot" (called frequently)
+#   S = "startup" (called during app/activity startup)
+#   P = "post-startup" (called after first frame)
+#
+# For accurate per-flow profile generation, set up `:baselineprofile` macrobenchmark
+# module + Baseline Profile Gradle plugin. This hand-crafted profile covers the
+# obvious startup paths until that setup lands.
+
+# Application + entry point
+HSPLorg/krug/app/KrugApplication;
+HSPLorg/krug/app/MainActivity;
+HSPLorg/krug/app/MainActivity;-><init>()V
+HSPLorg/krug/app/MainActivity;->onCreate(Landroid/os/Bundle;)V
+HSPLorg/krug/app/KrugAppKt;
+
+# Splash gate + ViewModel
+HSPLorg/krug/app/core/splash/SplashGate;
+HSPLorg/krug/app/feature/splash/SplashViewModel;
+HSPLorg/krug/app/feature/splash/SplashViewModel;-><init>(Lorg/krug/app/core/auth/AuthRepository;Lcom/google/firebase/firestore/FirebaseFirestore;Lorg/krug/app/core/prefs/LocalPrefs;Lorg/krug/app/core/circle/CircleRepository;Lorg/krug/app/core/location/LocationRepository;Lorg/krug/app/core/sos/SosRepository;Lorg/krug/app/core/user/UserRepository;Landroid/content/Context;)V
+HSPLorg/krug/app/feature/splash/SplashScreenKt;
+
+# Navigation
+HSPLorg/krug/app/navigation/KrugNavHostKt;
+HSPLorg/krug/app/navigation/RoutesKt;
+
+# Brand logo (rendered on splash + auth + about + empty states)
+HSPLorg/krug/app/ui/brand/KrugLogoKt;
+HSPLorg/krug/app/ui/brand/KrugLogoKt;->KrugLogo(Landroidx/compose/ui/Modifier;ZLjava/lang/Object;Ljava/lang/String;Landroidx/compose/runtime/Composer;II)V
+
+# Theme
+HSPLorg/krug/app/ui/theme/ThemeKt;
+HSPLorg/krug/app/ui/theme/ColorKt;
+HSPLorg/krug/app/ui/theme/TypeKt;
+
+# Auth / Map / Onboarding entry points (first composable rendered after splash decides)
+HSPLorg/krug/app/feature/auth/AuthScreenKt;
+HSPLorg/krug/app/feature/auth/AuthViewModel;
+HSPLorg/krug/app/feature/map/MapScreenKt;
+HSPLorg/krug/app/feature/map/MapViewModel;
+HSPLorg/krug/app/feature/onboarding/OnboardingScreenKt;
+HSPLorg/krug/app/feature/onboarding/OnboardingViewModel;
+
+# Core repositories used during splash decide()
+HSPLorg/krug/app/core/auth/AuthRepository;
+HSPLorg/krug/app/core/prefs/LocalPrefs;
+HSPLorg/krug/app/core/circle/CircleRepository;
+HSPLorg/krug/app/core/user/UserRepository;
+
+# LocationTrackingService (FGS started from MapScreen / boot receiver)
+HSPLorg/krug/app/core/location/LocationTrackingService;
+HSPLorg/krug/app/core/location/LocationRepository;
+
+# Compose runtime hot paths (typical Compose startup)
+HSPLandroidx/compose/runtime/ComposerImpl;
+HSPLandroidx/compose/runtime/SnapshotStateKt;
+HSPLandroidx/compose/runtime/Recomposer;
+HSPLandroidx/compose/runtime/Composer;
+HSPLandroidx/compose/runtime/snapshots/SnapshotStateList;
+HSPLandroidx/compose/runtime/snapshots/SnapshotStateMap;
+HSPLandroidx/compose/material3/MaterialThemeKt;
+HSPLandroidx/compose/foundation/layout/BoxKt;
+HSPLandroidx/compose/foundation/layout/ColumnKt;
+HSPLandroidx/compose/foundation/layout/RowKt;
+HSPLandroidx/compose/foundation/CanvasKt;
+
+# Hilt
+HSPLdagger/hilt/android/internal/managers/ApplicationComponentManager;
+
+# Mapbox MapView init (lazy, post-startup)
+PLcom/mapbox/maps/MapView;
+PLcom/mapbox/maps/MapboxMap;
