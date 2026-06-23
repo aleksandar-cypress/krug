@@ -11,5 +11,9 @@ data class LocationModel(
     val charging: Boolean = false,
     /** Korisnik je pauzirao deljenje (Privacy → Switch off). Klijent prikazuje "Privatni mod" odmah. */
     val paused: Boolean = false,
+    /** GPS bearing/heading u stepenima [0..360], 0=sever. 0 ako uređaj nema bearing fix. */
+    val bearing: Float = 0f,
+    /** GPS speed u m/s. 0 ako uređaj nema speed fix ili miruje. Koristi se za course-up nav mod. */
+    val speed: Float = 0f,
     val updatedAt: Long = 0L,
 )

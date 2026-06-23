@@ -345,6 +345,11 @@ class LocationTrackingService : Service() {
 
     private fun publishLocation(uid: String, loc: android.location.Location, source: String) {
         val (battery, charging) = readBattery()
+        // Bearing i speed iz Android Location-a. `hasBearing()` / `hasSpeed()` su false ako
+        // GPS još nije fix-ovao smer (statičan user, indoor, fresh launch). 0 default je OK
+        // jer course-up logika gleda `speed > threshold` pa 0 znači "miruj north-up".
+        val bearing = if (loc.hasBearing()) loc.bearing else 0f
+        val speed = if (loc.hasSpeed()) loc.speed else 0f
         scope.launch {
             runCatching {
                 locationRepository.publish(
@@ -354,6 +359,8 @@ class LocationTrackingService : Service() {
                     accuracy = loc.accuracy,
                     batteryPct = battery,
                     isCharging = charging,
+                    bearing = bearing,
+                    speed = speed,
                 )
                 lastPublishAtMs = System.currentTimeMillis()
                 Timber.d("Published $source fix (lat=${loc.latitude}, lng=${loc.longitude}, acc=${loc.accuracy})")

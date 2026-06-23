@@ -29,6 +29,8 @@ class LocationRepository @Inject constructor(
         accuracy: Float,
         batteryPct: Int,
         isCharging: Boolean,
+        bearing: Float = 0f,
+        speed: Float = 0f,
     ) {
         val data = mapOf(
             "lat" to lat,
@@ -37,6 +39,8 @@ class LocationRepository @Inject constructor(
             "batteryPct" to batteryPct,
             "charging" to isCharging,
             "paused" to false,
+            "bearing" to bearing,
+            "speed" to speed,
             "updatedAt" to ServerValue.TIMESTAMP,
         )
         locationRef(uid).setValue(data).await()

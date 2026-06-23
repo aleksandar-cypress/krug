@@ -95,6 +95,7 @@ import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
+import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.animation.flyTo
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.annotation.annotations
@@ -138,6 +139,12 @@ private val PrivateGray = Color(0xFF9CA3AF)
 private const val HEX_SOS_RED = "#DC2626"
 private const val HEX_PRIVATE_GRAY = "#9CA3AF"
 private const val HEX_SELF_BLUE = "#3A86C8" // = LogoBlue
+
+/**
+ * Course-up speed threshold (m/s). Iznad ovoga, mapa se rotira po smeru kretanja
+ * ("driving mode"). 2.78 m/s = 10 km/h — granica između hodanja (1.4 m/s avg) i vožnje.
+ */
+private const val COURSE_UP_SPEED_THRESHOLD = 2.78f
 private const val HEX_PIN_TEXT = "#1F2937"
 private const val HEX_PIN_HALO = "#FFFFFF"
 private const val HEX_PULSE_INDIGO = "#818CF8" // = BrandIndigo500
@@ -150,6 +157,21 @@ private fun MemberWithLocation.isPrivate(): Boolean {
     // chip; battery-mode intervali (LOW=15min, STILL=20min, LOW_THROTTLED=30min)
     // su normalan rad i ne smeju flipovati peer u privatni mod.
     return loc.paused
+}
+
+/**
+ * Member je "long offline" ako lokacija nije osvežena 24h+. Razlozi mogu biti: app
+ * obrisan, telefon zaglavljen u Doze-u, isključen, no permission, no network. Ne možemo
+ * razlikovati bez Cloud Functions-a → klijent-side UI pokazuje korisniku "možda nije
+ * aktivan" hint sa opcijom da ga ukloni iz kruga.
+ */
+private const val LONG_OFFLINE_THRESHOLD_MS = 24L * 60L * 60L * 1000L  // 24h
+
+private fun MemberWithLocation.isLongOffline(now: Long = System.currentTimeMillis()): Boolean {
+    if (isSelf) return false
+    val updatedAt = location?.updatedAt ?: return false
+    if (updatedAt <= 0L) return false
+    return (now - updatedAt) > LONG_OFFLINE_THRESHOLD_MS
 }
 
 
@@ -191,6 +213,24 @@ fun MapScreen(
         val pending = pendingRefocus ?: return@LaunchedEffect
         kotlinx.coroutines.delay(30_000)
         if (pendingRefocus == pending) pendingRefocus = null
+    }
+
+    // Course-up navigation: kada se self kreće brže od 2.78 m/s (10 km/h ≈ vožnja),
+    // kamera bearing prati GPS bearing pa je smer kretanja UVEK gore. Kad stane, vraća
+    // se na north-up (bearing 0). Bez ovog, mapa stoji u apsolutnoj orijentaciji i
+    // user mora ručno da rotira kompasom kad vozi. Threshold 2.78 m/s je standardni
+    // "driving vs walking" prag u nav app-ovima.
+    val selfBearing = state.selfLocation?.bearing
+    val selfSpeed = state.selfLocation?.speed
+    LaunchedEffect(selfBearing, selfSpeed) {
+        val bearing = selfBearing ?: return@LaunchedEffect
+        val speed = selfSpeed ?: return@LaunchedEffect
+        if (speed >= COURSE_UP_SPEED_THRESHOLD) {
+            mapViewState.rotateBearing(bearing)
+        } else {
+            // Kad user stane (npr. semafor, parking), reset na north-up. 0f je north.
+            mapViewState.rotateBearing(0f)
+        }
     }
 
     DisposableEffect(Unit) {
@@ -1177,21 +1217,26 @@ private fun MapboxContainer(
                         .zoom(DEFAULT_ZOOM)
                         .build(),
                 )
-                // Mapbox Standard sam adaptira light/dark prema system theme-u uređaja.
-                // Ne forsiramo lightPreset — neka korisnik kroz system settings kontroliše.
-                mv.mapboxMap.loadStyle(Style.STANDARD)
-                // Disable Mapbox-ov ugrađeni location puck (plavi krug + accuracy ring iz
-                // device GPS-a). Bug: kad se član kreće, refresh ostavlja "plavi krug" na
-                // mapi. Mapbox puck je nezavisan od naših pin anotacija — koristi live
-                // device GPS dok naš self pin koristi Firestore podatke (lag).
-                // updateSettings + pulsingEnabled=false + enabled=false → siguran way da
-                // se sve komponente Mapbox-ovog location renderera disable-uju (direktan
-                // setter `mv.location.enabled = false` Samsung One UI ponekad ne respektuje).
+                // Disable PRE loadStyle — neki style-ovi (Standard) imaju location layer u
+                // konfiguraciji koji se aktivira pri load-u, pa ako disable kasnimo posle
+                // loadStyle (koji je async), puck se već renderuje. Ovde disable settings
+                // čekaju u plugin state-u, pa kad layer pokuša da se aktivira, ne uspe.
                 mv.location.updateSettings {
                     enabled = false
                     pulsingEnabled = false
                 }
                 mv.location.enabled = false
+                // Mapbox Standard sam adaptira light/dark prema system theme-u uređaja.
+                // Ne forsiramo lightPreset — neka korisnik kroz system settings kontroliše.
+                mv.mapboxMap.loadStyle(Style.STANDARD) {
+                    // Onstyle-loaded callback — re-aplikujemo disable jer Standard style
+                    // može da pokuša da re-enable-uje location komponentu kada se load-uje.
+                    mv.location.updateSettings {
+                        enabled = false
+                        pulsingEnabled = false
+                    }
+                    mv.location.enabled = false
+                }
             }
         },
         update = { _ ->
@@ -1227,16 +1272,21 @@ private fun MapboxContainer(
                     .ifBlank { if (member.isSelf) "Ti" else "Član" }
                     .take(18)
                 val batteryPct = member.location.batteryPct.takeIf { it in 0..100 }
+                // Long-offline member (>24h) dobija 40% alpha pin ("ghost") — vizuelno
+                // signaliziraš da nije aktivan dugo, možda je obrisao app.
+                val iconOpacity = if (member.isLongOffline()) 0.4 else 1.0
                 val annotation = manager.create(
                     PointAnnotationOptions()
                         .withPoint(Point.fromLngLat(loc.lng, loc.lat))
                         .withIconImage(MapMarkers.pinMarker(context, color, photo, initials, batteryPct))
+                        .withIconOpacity(iconOpacity)
                         .withTextField(label)
                         .withTextSize(12.0)
                         .withTextOffset(listOf(0.0, 1.6))
                         .withTextColor(HEX_PIN_TEXT)
                         .withTextHaloColor(HEX_PIN_HALO)
-                        .withTextHaloWidth(2.0),
+                        .withTextHaloWidth(2.0)
+                        .withTextOpacity(iconOpacity),
                 )
                 holder.annotationToUid[annotation.id] = member.uid
             }
@@ -1277,6 +1327,20 @@ private class MapViewHolder {
     }
 
     /**
+     * Course-up rotation: postavi camera bearing na [bearing] (stepeni, 0=sever).
+     * Kratka animacija (400ms) — daje smooth osećaj rotacije dok kreiranja, ne "skok".
+     * Koristi se samo kad je `speed > threshold` (vožnja); kad user stane, pozovi sa 0f
+     * da resetuje na north-up.
+     */
+    fun rotateBearing(bearing: Float) {
+        val mv = mapView ?: return
+        mv.mapboxMap.easeTo(
+            CameraOptions.Builder().bearing(bearing.toDouble()).build(),
+            MapAnimationOptions.mapAnimationOptions { duration(400L) },
+        )
+    }
+
+    /**
      * Kratak "tap" pulse oko markera kad mu lokacija osveži — suptilan vizuelni signal
      * "kreće se / svež update". One-shot, traje ~800ms. Pokreće se iz MapScreen-a kad
      * detektuje povećan updatedAt za uid (LaunchedEffect-om). Self-uid pulse-uje takođe.
@@ -1293,19 +1357,27 @@ private class MapViewHolder {
                 .withCircleStrokeColor(HEX_PULSE_INDIGO_DARK)
                 .withCircleStrokeOpacity(0.65),
         )
-        val totalMs = 800L
-        val steps = 24
-        val stepMs = totalMs / steps
-        for (i in 1..steps) {
-            val phase = i.toFloat() / steps
-            ann.circleRadius = 10.0 + 32.0 * phase
-            val alpha = 0.55 * (1.0 - phase).coerceAtLeast(0.0)
-            ann.circleOpacity = alpha
-            ann.circleStrokeOpacity = alpha
-            runCatching { mgr.update(ann) }
-            kotlinx.coroutines.delay(stepMs)
+        // try/finally — bug: kad se član kreće, location update stigne brzo, LaunchedEffect
+        // key se menja, coroutine se cancel-uje pre nego što stigne do `mgr.delete(ann)`.
+        // Annotation ostaje na mapi ZAUVEK (vidljiv kao indigo "plavi" krug). User je video
+        // niz takvih krugova kao "track" prethodnih pozicija. finally garantuje cleanup čak
+        // i pri cancellation-u.
+        try {
+            val totalMs = 800L
+            val steps = 24
+            val stepMs = totalMs / steps
+            for (i in 1..steps) {
+                val phase = i.toFloat() / steps
+                ann.circleRadius = 10.0 + 32.0 * phase
+                val alpha = 0.55 * (1.0 - phase).coerceAtLeast(0.0)
+                ann.circleOpacity = alpha
+                ann.circleStrokeOpacity = alpha
+                runCatching { mgr.update(ann) }
+                kotlinx.coroutines.delay(stepMs)
+            }
+        } finally {
+            runCatching { mgr.delete(ann) }
         }
-        runCatching { mgr.delete(ann) }
     }
 
     /**
@@ -1741,6 +1813,7 @@ private fun MemberDetailSheet(
         }
 
         val isPrivate = member.isPrivate()
+        val isLongOffline = member.isLongOffline()
 
         if (member.sos != null) {
             Spacer(Modifier.height(16.dp))
@@ -1762,6 +1835,34 @@ private fun MemberDetailSheet(
                         else "$sosName traži hitnu pomoć",
                         color = Color.White,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    )
+                }
+            }
+        } else if (isLongOffline) {
+            Spacer(Modifier.height(16.dp))
+            // Long-offline banner: member nije osvežio lokaciju 24h+. Bez Cloud Functions
+            // ne možemo razlikovati "obrisao app" od "telefon ugašen" od "no permission" —
+            // ali svi razlozi imaju isti UX impact: refresh neće raditi. Banner objašnjava
+            // user-u + sugeriše remove iz Detalji kruga (gde vlasnik može kicks-uje člana).
+            val daysOffline = ((System.currentTimeMillis() - (member.location?.updatedAt ?: 0L)) /
+                (24L * 60L * 60L * 1000L)).toInt().coerceAtLeast(1)
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = PrivateGray.copy(alpha = 0.12f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "Nije aktivan ${daysOffline}d",
+                        color = PrivateGray,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Možda je obrisao app ili je telefon ugašen. Refresh neće " +
+                            "raditi. Vlasnik kruga može ga ukloniti iz Detalji kruga.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
@@ -1852,7 +1953,9 @@ private fun MemberDetailSheet(
                 }
             }
         } else if (member.location != null) {
-            if (!isPrivate) {
+            // Long-offline članovi: refresh neće raditi (njihov FGS sigurno ne radi 24h+),
+            // disable button da user ne čeka uzalud na zahtev koji nikad ne stiže.
+            if (!isPrivate && !isLongOffline) {
                 androidx.compose.material3.Button(
                     onClick = {
                         onRefresh()

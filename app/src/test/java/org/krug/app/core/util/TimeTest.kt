@@ -20,8 +20,8 @@ class TimeTest {
     }
 
     @Test fun `compactLastSeen minutes`() {
-        assertThat(compactLastSeen(now - 5 * 60_000L, now)).isEqualTo("5m")
-        assertThat(compactLastSeen(now - 59 * 60_000L, now)).isEqualTo("59m")
+        assertThat(compactLastSeen(now - 5 * 60_000L, now)).isEqualTo("5min")
+        assertThat(compactLastSeen(now - 59 * 60_000L, now)).isEqualTo("59min")
     }
 
     @Test fun `compactLastSeen hours`() {
