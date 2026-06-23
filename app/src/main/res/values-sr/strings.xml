@@ -45,6 +45,7 @@
     <!-- Map -->
     <string name="map_title">Krug</string>
     <string name="map_members_empty">Pozovite nekoga da se pridruži krugu</string>
+    <string name="map_members_alone_hint">Sam si u ovom krugu. Otvori Detalji kruga da generišeš pozivnicu i dodaš članove.</string>
     <string name="map_action_circles">Krugovi</string>
     <string name="map_pill_multi_circles">%1$d krugova</string>
     <string name="map_circle_picker_title">Prebaci se u krug</string>
@@ -250,4 +251,46 @@
     <!-- Privacy: child mode -->
     <string name="privacy_child_lock_title">Roditeljska kontrola aktivna</string>
     <string name="privacy_child_lock_body">Vlasnik kruga je označio tvoj nalog kao dete. Ne možeš pauzirati deljenje lokacije ni obrisati nalog</string>
+
+    <!-- Account -->
+    <string name="account_anonymous">Anonimno</string>
+
+    <!-- Auth: errors + debug -->
+    <string name="auth_error_cancelled">Prijava otkazana</string>
+    <string name="auth_error_no_google_account">Nije pronađen Google nalog na uređaju</string>
+    <string name="auth_error_network">Mrežna greška, pokušaj ponovo</string>
+    <string name="auth_error_provider_disabled">Anonimna prijava nije omogućena u Firebase Console-u</string>
+    <string name="auth_error_account_disabled">Ovaj nalog je onemogućen ili obrisan. Kontaktiraj podršku</string>
+    <string name="auth_error_invalid_credential">Prijava je istekla. Pokušaj ponovo</string>
+    <string name="auth_error_unknown">Nešto je pošlo po zlu. Pokušaj ponovo</string>
+    <string name="auth_debug_anonymous">Debug: anonimna prijava</string>
+    <string name="auth_email_coming_soon">Email prijava dolazi uskoro</string>
+
+    <!-- About: toasts -->
+    <string name="about_toast_invalid_link">Link je neispravan</string>
+    <string name="about_toast_cannot_open_link">Nije moguće otvoriti link</string>
+
+    <!-- Circle detail (extras) -->
+    <string name="circle_detail_edit_circle_cd">Izmeni krug</string>
+    <string name="circle_detail_child_locked_body">Roditeljska kontrola: vlasnik kruga je označio tvoj nalog kao dete. Kontaktiraj ga ako želiš da izađeš iz kruga.</string>
+    <string name="circle_detail_invite_error">Greška pri pozivanju</string>
+
+    <!-- Member: child indicator -->
+    <string name="member_child_cd">Dete</string>
+
+    <!-- Circle icon labels (icon picker) -->
+    <string name="icon_label_family">Porodica</string>
+    <string name="icon_label_friends">Drustvo</string>
+    <string name="icon_label_work">Posao</string>
+    <string name="icon_label_school">Škola</string>
+    <string name="icon_label_home">Komšiluk</string>
+    <string name="icon_label_sports">Sport</string>
+    <string name="icon_label_travel">Putovanje</string>
+    <string name="icon_label_event">Događaj</string>
+
+    <!-- Diagnostics (debug-only screen) -->
+    <string name="diagnostics_title">Dijagnostika</string>
+    <string name="diagnostics_section_permissions">Dozvole</string>
+    <string name="diagnostics_section_identity">Identitet</string>
+    <string name="diagnostics_section_device">Uređaj</string>
 </resources>

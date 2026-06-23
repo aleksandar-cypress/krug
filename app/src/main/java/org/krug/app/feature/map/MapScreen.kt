@@ -69,6 +69,7 @@ import coil.request.SuccessResult
 import androidx.compose.foundation.border
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
@@ -964,7 +965,7 @@ private fun SosBanner(
                         ) {
                             Text(
                                 text = MapMarkers.computeInitials(
-                                    m.displayName.ifBlank { if (m.uid == selfUid) "Ti" else "?" },
+                                    m.displayName.ifBlank { if (m.uid == selfUid) stringResource(R.string.member_label_you) else "?" },
                                 ),
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontWeight = FontWeight.Bold,
@@ -1163,6 +1164,10 @@ private fun MapboxContainer(
     holder: MapViewHolder,
 ) {
     val context = LocalContext.current
+    // Pre-resolve strings here (Composable scope) — AndroidView update lambda nije
+    // @Composable pa ne može direktno da poziva stringResource() iz petlje.
+    val labelYou = stringResource(R.string.member_label_you)
+    val labelMember = stringResource(R.string.member_label_member)
 
     androidx.compose.ui.viewinterop.AndroidView(
         modifier = Modifier.fillMaxSize(),
@@ -1268,7 +1273,7 @@ private fun MapboxContainer(
                 val photo = member.photoUrl?.let { photoCache[it] }
                 val initials = MapMarkers.computeInitials(member.displayName)
                 val label = member.displayName
-                    .ifBlank { if (member.isSelf) "Ti" else "Član" }
+                    .ifBlank { if (member.isSelf) labelYou else labelMember }
                     .take(18)
                 val batteryPct = member.location.batteryPct.takeIf { it in 0..100 }
                 // Long-offline member (>24h) dobija 40% alpha pin ("ghost") — vizuelno
@@ -1538,6 +1543,15 @@ private fun MembersSheet(
     photoCache: Map<String, Bitmap>,
     onMemberClick: (String) -> Unit,
 ) {
+    // Sort: self prvi, pa SOS, pa active (recent updatedAt), pa long-offline ghost.
+    // Bez ovog redosled je nepredvidiv (Firestore snapshot order) — user mora da
+    // skroluje da bi našao sebe ili člana u nevolji.
+    val sortedMembers = members.sortedWith(
+        compareByDescending<MemberWithLocation> { it.isSelf }
+            .thenByDescending { it.sos != null }
+            .thenBy { it.isLongOffline() }
+            .thenByDescending { it.location?.updatedAt ?: 0L },
+    )
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1561,12 +1575,34 @@ private fun MembersSheet(
                 contentPadding = PaddingValues(bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(members, key = { it.uid }) { m ->
+                items(sortedMembers, key = { it.uid }) { m ->
                     MemberRow(
                         member = m,
                         photo = m.photoUrl?.let { photoCache[it] },
                         onClick = { onMemberClick(m.uid) },
                     )
+                }
+                // Hint kad je user sam u krugu — pomaže novom user-u da shvati šta dalje
+                // (otvori Detalji kruga → generiši pozivnicu).
+                if (members.size == 1 && members.first().isSelf) {
+                    item {
+                        Spacer(Modifier.size(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                                )
+                                .padding(16.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.map_members_alone_hint),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1584,13 +1620,19 @@ private fun MemberRow(
         member.isSelf -> MaterialTheme.colorScheme.primary
         else -> Color(android.graphics.Color.parseColor(MapMarkers.colorForUid(member.uid)))
     }
+    // Long-offline članovi (24h+ bez publish-a) imaju ghost prikaz — pomaže user-u da
+    // odmah vizuelno razlikuje aktivne od potencijalno-uninstalled članova bez čitanja
+    // "poslednje viđen" labele.
+    val isLongOffline = member.isLongOffline()
+    val rowAlpha = if (isLongOffline) 0.55f else 1f
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable(onClick = onClick)
-            .padding(14.dp),
+            .pressScaleClickable(pressedScale = 0.98f, onClick = onClick)
+            .padding(14.dp)
+            .alpha(rowAlpha),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -1628,7 +1670,7 @@ private fun MemberRow(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = member.displayName.ifBlank { if (member.isSelf) "Ti" else "Član" },
+                    text = member.displayName.ifBlank { if (member.isSelf) stringResource(R.string.member_label_you) else stringResource(R.string.member_label_member) },
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -1636,7 +1678,7 @@ private fun MemberRow(
                     Spacer(Modifier.width(6.dp))
                     Icon(
                         imageVector = Icons.Outlined.ChildCare,
-                        contentDescription = "Dete",
+                        contentDescription = stringResource(R.string.member_child_cd),
                         tint = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.size(16.dp),
                     )
@@ -1786,14 +1828,14 @@ private fun MemberDetailSheet(
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = member.displayName.ifBlank { if (member.isSelf) "Ti" else "Član" },
+                        text = member.displayName.ifBlank { if (member.isSelf) stringResource(R.string.member_label_you) else stringResource(R.string.member_label_member) },
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
                     )
                     if (member.isChild) {
                         Spacer(Modifier.width(8.dp))
                         Icon(
                             imageVector = Icons.Outlined.ChildCare,
-                            contentDescription = "Dete",
+                            contentDescription = stringResource(R.string.member_child_cd),
                             tint = MaterialTheme.colorScheme.secondary,
                             modifier = Modifier.size(20.dp),
                         )
@@ -1830,7 +1872,7 @@ private fun MemberDetailSheet(
                     Icon(Icons.Filled.Warning, contentDescription = null, tint = Color.White)
                     Spacer(Modifier.width(10.dp))
                     val sosName = member.displayName
-                        .ifBlank { if (member.isSelf) "Ti" else "Član" }
+                        .ifBlank { if (member.isSelf) stringResource(R.string.member_label_you) else stringResource(R.string.member_label_member) }
                     Text(
                         text = if (member.isSelf) "SOS aktivan — tvoji krugovi su obavešteni"
                         else "$sosName traži hitnu pomoć",

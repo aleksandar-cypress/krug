@@ -68,7 +68,7 @@ fun AccountScreen(
             Avatar(photoUrl = state.photoUrl)
             Spacer(Modifier.size(16.dp))
             Text(
-                text = state.displayName.ifBlank { state.email.ifBlank { "Anonimno" } },
+                text = state.displayName.ifBlank { state.email.ifBlank { stringResource(R.string.account_anonymous) } },
                 style = MaterialTheme.typography.titleLarge,
             )
             if (state.displayName.isNotBlank() && state.email.isNotBlank()) {

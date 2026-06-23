@@ -265,7 +265,7 @@ private fun IconPicker(
         CirclePresets.icons.forEach { key ->
             val isSelected = key == selected
             val icon = CircleIconAssets.forKey(key)
-            val label = CircleIconAssets.labelForKey(key)
+            val label = stringResource(CircleIconAssets.labelResForKey(key))
             // Bez scale animacije + bez clip-a na Column-u — scale-up na 1.08x je
             // overflow-ovao Column-ov clip i sekao ivice ikone. Selected state se sada
             // signalizira samo bojom + border-om, što je dovoljno jasno.

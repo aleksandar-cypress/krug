@@ -1,5 +1,6 @@
 package org.krug.app.feature.circle
 
+import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.FamilyRestroom
@@ -10,6 +11,7 @@ import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.SportsBasketball
 import androidx.compose.material.icons.outlined.Work
 import androidx.compose.ui.graphics.vector.ImageVector
+import org.krug.app.R
 
 /** Mapira iconKey iz CirclePresets na konkretnu Material ikonu. */
 object CircleIconAssets {
@@ -26,15 +28,20 @@ object CircleIconAssets {
         else -> Icons.Outlined.Groups
     }
 
-    fun labelForKey(key: String): String = when (key) {
-        "family" -> "Porodica"
-        "friends" -> "Drustvo"
-        "work" -> "Posao"
-        "school" -> "Škola"
-        "home" -> "Komšiluk"
-        "sports" -> "Sport"
-        "travel" -> "Putovanje"
-        "event" -> "Događaj"
-        else -> key.replaceFirstChar { it.uppercaseChar() }
+    /**
+     * Vraća resource ID labele — caller resolvuje sa stringResource() ili context.getString().
+     * Promenjeno sa hardcoded String-a u @StringRes za multi-locale support.
+     */
+    @StringRes
+    fun labelResForKey(key: String): Int = when (key) {
+        "family" -> R.string.icon_label_family
+        "friends" -> R.string.icon_label_friends
+        "work" -> R.string.icon_label_work
+        "school" -> R.string.icon_label_school
+        "home" -> R.string.icon_label_home
+        "sports" -> R.string.icon_label_sports
+        "travel" -> R.string.icon_label_travel
+        "event" -> R.string.icon_label_event
+        else -> R.string.icon_label_family // fallback
     }
 }

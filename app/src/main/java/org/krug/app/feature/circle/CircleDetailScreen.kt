@@ -98,7 +98,7 @@ fun CircleDetailScreen(
                 actions = {
                     if (state.isOwner) {
                         IconButton(onClick = { showEditSheet = true }) {
-                            Icon(Icons.Outlined.Edit, contentDescription = "Izmeni krug")
+                            Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.circle_detail_edit_circle_cd))
                         }
                     }
                 },
@@ -200,7 +200,7 @@ fun CircleDetailScreen(
                         )
                         Spacer(Modifier.size(10.dp))
                         Text(
-                            text = "Roditeljska kontrola: vlasnik kruga je označio tvoj nalog kao dete. Kontaktiraj ga ako želiš da izađeš iz kruga.",
+                            text = stringResource(R.string.circle_detail_child_locked_body),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                         )

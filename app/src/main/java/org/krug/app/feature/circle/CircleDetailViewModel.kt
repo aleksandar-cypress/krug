@@ -1,10 +1,12 @@
 package org.krug.app.feature.circle
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import org.krug.app.R
 import org.krug.app.core.auth.AuthRepository
 import org.krug.app.core.circle.CircleModel
 import org.krug.app.core.circle.CircleRepository
@@ -57,6 +60,7 @@ class CircleDetailViewModel @Inject constructor(
     private val circleRepository: CircleRepository,
     private val inviteRepository: InviteRepository,
     private val firestore: FirebaseFirestore,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val circleId: String = savedState.get<String>("circleId")
@@ -150,7 +154,7 @@ class CircleDetailViewModel @Inject constructor(
             _state.value = _state.value.copy(
                 generatingInvite = false,
                 pendingInviteCode = code.getOrNull(),
-                errorMessage = code.exceptionOrNull()?.let { "Greška pri pozivanju" },
+                errorMessage = code.exceptionOrNull()?.let { appContext.getString(R.string.circle_detail_invite_error) },
             )
         }
     }

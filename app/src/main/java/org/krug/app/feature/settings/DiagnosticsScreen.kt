@@ -30,11 +30,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.location.DetectedActivity
 import com.google.firebase.auth.FirebaseAuth
+import org.krug.app.R
 import org.krug.app.core.location.LocationTrackingService
 import org.krug.app.core.permissions.PermissionUtils
 import org.krug.app.core.util.DeviceNames
@@ -64,7 +66,7 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
     var refreshTick by remember { mutableIntStateOf(0) }
     val snapshot = remember(refreshTick) { collectSnapshot(context) }
 
-    SettingsSubScaffold(title = "Dijagnostika", onBack = onBack) { _ ->
+    SettingsSubScaffold(title = stringResource(R.string.diagnostics_title), onBack = onBack) { _ ->
         Column(
             modifier = Modifier.fillMaxSize(),
         ) {
@@ -91,13 +93,13 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                     onClick = { refreshTick++ },
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("Osveži")
+                    Text(stringResource(R.string.action_refresh))
                 }
                 Button(
                     onClick = { copyToClipboard(context, snapshot.toClipboardText()) },
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("Kopiraj sve")
+                    Text(stringResource(R.string.action_copy_all))
                 }
             }
         }
@@ -174,7 +176,7 @@ private fun collectSnapshot(context: Context): DiagSnapshot {
                 ),
             ),
             DiagSection(
-                title = "Permissions",
+                title = context.getString(R.string.diagnostics_section_permissions),
                 rows = listOf(
                     "foregroundLocation" to PermissionUtils.hasForegroundLocation(context).toString(),
                     "backgroundLocation" to PermissionUtils.hasBackgroundLocation(context).toString(),
@@ -184,7 +186,7 @@ private fun collectSnapshot(context: Context): DiagSnapshot {
                 ),
             ),
             DiagSection(
-                title = "Identity",
+                title = context.getString(R.string.diagnostics_section_identity),
                 rows = listOf(
                     "uid" to (user?.uid?.take(12)?.plus("…") ?: "-"),
                     "providerId" to (user?.providerId ?: "-"),
@@ -193,7 +195,7 @@ private fun collectSnapshot(context: Context): DiagSnapshot {
                 ),
             ),
             DiagSection(
-                title = "Uređaj",
+                title = context.getString(R.string.diagnostics_section_device),
                 rows = listOf(
                     "rawModel" to rawDevice,
                     "friendlyName" to friendlyDevice,

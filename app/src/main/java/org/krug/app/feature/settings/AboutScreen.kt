@@ -152,7 +152,7 @@ private fun openExternalUrl(context: Context, url: String) {
     val uri = runCatching { Uri.parse(url) }.getOrNull()
     if (uri == null) {
         Timber.w("openExternalUrl: failed to parse $url")
-        Toast.makeText(context, "Link je neispravan", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.about_toast_invalid_link), Toast.LENGTH_SHORT).show()
         return
     }
     // Custom Tabs path — najbolji UX, ali zahteva da postoji bar jedan browser sa CCT podrškom.
@@ -174,7 +174,7 @@ private fun openExternalUrl(context: Context, url: String) {
         }
 
     // Fallback 2: nema browsera uopšte.
-    Toast.makeText(context, "Nije moguće otvoriti link", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, context.getString(R.string.about_toast_cannot_open_link), Toast.LENGTH_SHORT).show()
 }
 
 @Composable

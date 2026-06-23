@@ -45,6 +45,7 @@
     <!-- Map -->
     <string name="map_title">Krug</string>
     <string name="map_members_empty">Invite someone to join your circle</string>
+    <string name="map_members_alone_hint">You\'re alone in this circle. Open Circle details to generate an invite code and add members.</string>
     <string name="map_action_circles">Circles</string>
     <string name="map_pill_multi_circles">%1$d circles</string>
     <string name="map_circle_picker_title">Switch circle</string>
@@ -250,4 +251,46 @@
     <!-- Privacy: child mode -->
     <string name="privacy_child_lock_title">Parental control active</string>
     <string name="privacy_child_lock_body">The circle owner marked your account as a child. You can\'t pause location sharing or delete the account</string>
+
+    <!-- Account -->
+    <string name="account_anonymous">Anonymous</string>
+
+    <!-- Auth: errors + debug -->
+    <string name="auth_error_cancelled">Sign-in cancelled</string>
+    <string name="auth_error_no_google_account">No Google account found on the device</string>
+    <string name="auth_error_network">Network error, try again</string>
+    <string name="auth_error_provider_disabled">This sign-in method is currently unavailable</string>
+    <string name="auth_error_account_disabled">This account is disabled or deleted. Contact support</string>
+    <string name="auth_error_invalid_credential">Sign-in expired. Try again</string>
+    <string name="auth_error_unknown">Something went wrong. Try again</string>
+    <string name="auth_debug_anonymous">Debug: anonymous sign-in</string>
+    <string name="auth_email_coming_soon">Email sign-in coming soon</string>
+
+    <!-- About: toasts -->
+    <string name="about_toast_invalid_link">Link is invalid</string>
+    <string name="about_toast_cannot_open_link">Can\'t open link</string>
+
+    <!-- Circle detail (extras) -->
+    <string name="circle_detail_edit_circle_cd">Edit circle</string>
+    <string name="circle_detail_child_locked_body">Parental control: the circle owner marked your account as a child. Contact them if you want to leave the circle.</string>
+    <string name="circle_detail_invite_error">Invite generation failed</string>
+
+    <!-- Member: child indicator -->
+    <string name="member_child_cd">Child</string>
+
+    <!-- Circle icon labels (icon picker) -->
+    <string name="icon_label_family">Family</string>
+    <string name="icon_label_friends">Friends</string>
+    <string name="icon_label_work">Work</string>
+    <string name="icon_label_school">School</string>
+    <string name="icon_label_home">Neighborhood</string>
+    <string name="icon_label_sports">Sports</string>
+    <string name="icon_label_travel">Travel</string>
+    <string name="icon_label_event">Event</string>
+
+    <!-- Diagnostics (debug-only screen) -->
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_section_permissions">Permissions</string>
+    <string name="diagnostics_section_identity">Identity</string>
+    <string name="diagnostics_section_device">Device</string>
 </resources>

@@ -180,7 +180,7 @@ private fun SheetIconRow(selected: String, accentColor: Color, onSelect: (String
                 ) {
                     Icon(
                         imageVector = CircleIconAssets.forKey(key),
-                        contentDescription = CircleIconAssets.labelForKey(key),
+                        contentDescription = stringResource(CircleIconAssets.labelResForKey(key)),
                         tint = if (isSelected) Color.White
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(28.dp),
@@ -188,7 +188,7 @@ private fun SheetIconRow(selected: String, accentColor: Color, onSelect: (String
                 }
                 Spacer(Modifier.size(4.dp))
                 Text(
-                    text = CircleIconAssets.labelForKey(key),
+                    text = stringResource(CircleIconAssets.labelResForKey(key)),
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                     ),

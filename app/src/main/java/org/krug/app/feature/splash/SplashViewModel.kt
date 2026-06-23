@@ -52,9 +52,18 @@ class SplashViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            decide()
-            // Pusti sistemski splash da se dismiss-uje sad kad imamo decision.
-            SplashGate.ready.set(true)
+            // try/finally — defensive: ako decide() throw-uje neuhvaćen exception (npr.
+            // korumpiran SharedPrefs ili neka neočekivana NPE), SplashGate.ready bi ostao
+            // false zauvek → user zaglavljen na beloj splash strani. Sa finally, gate se
+            // uvek oslobađa, a fallback decision (SignedOut) vodi user-a u Auth flow.
+            try {
+                decide()
+            } catch (e: Throwable) {
+                Timber.e(e, "Splash decide failed — fallback to SignedOut")
+                _decision.value = SplashDecision.SignedOut
+            } finally {
+                SplashGate.ready.set(true)
+            }
         }
     }
 

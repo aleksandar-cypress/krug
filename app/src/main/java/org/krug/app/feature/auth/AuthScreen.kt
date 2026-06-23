@@ -130,7 +130,7 @@ fun AuthScreen(
                     enabled = !state.isSigningIn,
                 ) {
                     Text(
-                        text = "Debug: anonimna prijava",
+                        text = stringResource(R.string.auth_debug_anonymous),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelLarge,
                     )
