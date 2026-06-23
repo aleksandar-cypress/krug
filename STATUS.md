@@ -2,15 +2,105 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-22, dvanaesta sesija — UI polish + Samsung S24 dodato u flotu)
+## Gde smo stali (2026-06-23, kraj dvanaeste sesije — 4 bug fixes + Life360 strateški plan)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `8c53d49`.
-Firebase rules: Firestore + RTDB deployovane.
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `422368a`.
+Firebase rules: Firestore + RTDB deployovane (RTDB rules ažurirane sa `bearing` + `speed` validatorima u ovoj sesiji).
 **Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — sve tri sa najnovijim build-om.
 
 **Health stanja**: build i dalje uredan (debug + release), 36 unit testova zelenih, FGS + Crashlytics arhitektura nepromenjena.
 
-## Dvanaesta sesija (2026-06-22) — UI polish + brand sheets + bug fixes
+## Plan za sledeću sesiju — Settings polish + English lokalizacija
+
+### Sledeća sesija ima dva glavna deliverable-a:
+
+**1) Settings hierarchy polish** (UI consistency final touch)
+- Trenutno: flat list rows u SettingsRootScreen
+- Cilj: grupisati po kategorijama (Profil / Privatnost / Performanse / O app) sa branded card stilovima, color accents
+- Effort: ~1h
+
+**2) English lokalizacija** (global ready)
+- Trenutno: srpski hardcoded u `res/values/strings.xml` + neki stringovi direktno u Kotlin kodu
+- Cilj:
+  - Preimenuj `values/strings.xml` (srpski) → `values-sr/strings.xml`
+  - Napravi novi `values/strings.xml` sa engleskim prevodom (default fallback)
+  - Audit + ekstrakcija hardcoded srpskog iz Kotlin-a u oba `strings.xml` (~30 stringova kao "Napravi prvi krug", "Imam pozivnicu →", "Ti", "Član", "sad", "Privatni mod", "Otvori u Google Maps", itd.)
+  - Test sa English locale (`adb shell setprop persist.sys.locale en-US` + force-stop)
+- Effort: ~3-4h
+- **Distribucija**: JEDAN AAB sadrži sve locale-ove. Play Store automatski daje per-locale split APK-ove pri download-u. Sve transparentno.
+
+### Strateški plan ka Play Store i monetizaciji
+
+**Trenutno stanje feature parity sa Life360**: ~30-40% (free tier), ~15% (premium).
+
+**Free / Basic tier (trenutno) — za Play Store launch:**
+- Krugovi (multi), real-time location, battery, putna distance
+- Privacy mode, SOS lokal (foreground recipient)
+- Activity-aware battery efficiency, brand polish
+- **Predloženi free limiti** (da bismo imali razlog za upgrade):
+  - Max 3 kruga, max 8 članova po krugu
+  - Location history vidljiva samo 24h
+  - SOS samo lokal (recipient mora biti foreground)
+
+**Krug Pro tier — kasniji rollout (posle Play Store basic launch + beta):**
+- **Places + Geofencing** ⭐ ("Dete je stiglo u školu") — najveća vrednost
+- Location history 30 dana — trasa kretanja
+- **SOS background push** preko Cloud Functions (radi i kad je primalac sa zatvorenim app-om)
+- Unlimited krugova + članova
+- Trip reports (km/min/max speed za dan)
+- Crash detection (kasnije, ML)
+- Priority support, early access
+
+**Pricing model (dogovoreno)**: **Family Plan annual** — jedan plaća, ceo krug ima Pro. Najbolja konverzija jer "ne plaćaš za sebe nego za bezbednost porodice". Slično Life360 modelu.
+
+**Cloud Functions / Blaze upgrade**: deferred do "Pro tier" launch-a. Free tier i basic launch ostaje na Spark planu.
+
+### Roadmap redosled posle sledeće sesije
+1. Internal/closed Play Store beta (jedan AAB sa srp + eng) → soft launch
+2. Real-world test sa porodicama (1-2 nedelje)
+3. Public Play Store launch — basic free
+4. Cloud Functions + Blaze upgrade + Places/Geofencing → prvi Pro feature
+5. Pro tier rollout sa Family Plan
+6. Iterate: location history, trip reports, SOS background
+
+## Dvanaesta sesija (2026-06-22 → 2026-06-23) — UI polish + 4 user-reported bugs + strateški plan
+
+### Dan 1 (2026-06-22): UI polish — commits `8a66526`, `8c53d49`
+
+### Dan 2 (2026-06-23): 4 user-reported bug fixes — commit `422368a`
+
+User je tokom korišćenja prijavio 4 problema. Sve rešeno:
+
+**#1 Indigo "plavi krug" track na mapi** (najveći mystery)
+- **Simptom**: kad se član kreće, posle refresh-a niz indigo krugova ostaje na mapi kao "track" prethodnih pozicija. Camera focus na sledeći refresh ide na te krugove, ne na člana.
+- **Pogrešan tropot**: prvo sam mislio da je Mapbox built-in location puck (LiveGPS plavi circle). Aplicirao trostruko disable (`updateSettings { enabled=false; pulsingEnabled=false }` + direktan setter, PRE i POSLE `loadStyle` callback-a). Nije pomoglo jer to nije bio root cause.
+- **Pravi root cause**: `MapViewHolder.runUpdatePulse(lng, lat)` pravi `CircleAnnotation` (indigo `#818CF8`), animira 800ms, briše na kraju. Ali kad se LaunchedEffect cancel-uje pre kraja (član se kreće brzo, novi location update menja key), `mgr.delete(ann)` se NIKAD ne poziva → annotation ostaje zauvek. Više update-a = više leak-ovanih krugova.
+- **Fix**: `try { ... animate ... } finally { runCatching { mgr.delete(ann) } }` — garantuje cleanup čak i pri cancellation-u.
+- Mapbox puck disable ostavljeno kao defensive (ne škodi ako stvarno postoji u nekoj situaciji).
+
+**#2 Course-up navigation** (driving mode)
+- **User wish**: "kada sam isao u Banjicu put bi trebao da se refrehuje uvek ka severu, isto kao kada radi navigacija za voznju" — direction of travel uvek "gore" na ekranu kad se vozi.
+- **Implementacija**:
+  - `LocationModel` dobio polja `bearing: Float` (0..360°) + `speed: Float` (m/s).
+  - `LocationTrackingService.publishLocation` čita `loc.bearing` + `loc.speed` iz Android Location objekta (sa `hasBearing()` / `hasSpeed()` checks — 0f fallback ako GPS još nije fix-ovao smer).
+  - `LocationRepository.publish` prosleđuje u RTDB; rules ažurirane sa `bearing` (0..360) i `speed` (>=0) validatorima. RTDB rules deploy-ovano.
+  - `MapScreen` LaunchedEffect na `selfBearing` + `selfSpeed`: kad `speed >= 2.78 m/s` (10 km/h driving threshold), `mapView.easeTo(bearing)` rotira kameru. Kad user stane → reset na north-up (0°).
+  - `MapViewHolder.rotateBearing(bearing)` helper sa 400ms ease-in animacijom.
+
+**#3 "5m" → "5min" u compactLastSeen**
+- "m" je dvosmislen (metri vs minute) jer u istom StatChip row-u u MemberDetailSheet stoji distance ("5m" = 5 metara). Sufiks "min" je eksplicitno jasan.
+- `core/util/Time.kt` ažuriran + unit test fix. **36/36 testova zelenih.**
+
+**#4 Ghost member (član obriše app)**
+- **Problem**: ako član obriše app, njegov FGS prestaje da publish-uje. Lokacija ostaje stale, "Osveži lokaciju" zahtev nikad ne dobije odgovor. Prvi user vidi člana kao "stuck" zauvek.
+- **Rešenje (klijent-side, bez Cloud Functions-a)**:
+  - Helper `MemberWithLocation.isLongOffline()` — true ako `updatedAt > 24h`.
+  - Pin na mapi 40% alpha (`withIconOpacity(0.4)` + `withTextOpacity(0.4)`) za long-offline članove — "ghost" visual.
+  - Banner u `MemberDetailSheet`: "Nije aktivan ${days}d. Možda je obrisao app... Vlasnik kruga može ga ukloniti iz Detalji kruga." Days izračunato iz `updatedAt`.
+  - "Osveži lokaciju" button **disabled** za long-offline članove (refresh request svakako ne stiže do uništenog FGS-a, ne treba čekanje).
+- Cloud Functions varijanta (server-side auto-cleanup) razmotrena ali deferred — Spark plan dovoljno za sada.
+
+### Dan 1 (2026-06-22): UI polish — commits `8a66526`, `8c53d49`
 
 ### Onboarding (commit `8a66526`)
 - **PageScaffold**: bela krug-kontejner za icon zamenjena **brand gradient kontejnerom** (`LogoBlue50` → `LogoPink50`) sa pulse animacijom (`infiniteRepeatable` 1.0 ↔ 1.04 / 3.2s, `FastOutSlowInEasing`, `RepeatMode.Reverse`).
