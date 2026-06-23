@@ -201,6 +201,7 @@
 
     <!-- Map: empty/CTA -->
     <string name="map_create_first_circle">Create your first circle</string>
+    <string name="map_have_invite_cta">I have an invite →</string>
     <string name="map_active_circle">Active circle</string>
 
     <!-- Map: SOS -->

@@ -201,6 +201,7 @@
 
     <!-- Map: empty/CTA -->
     <string name="map_create_first_circle">Napravi prvi krug</string>
+    <string name="map_have_invite_cta">Imam pozivnicu →</string>
     <string name="map_active_circle">Aktivan krug</string>
 
     <!-- Map: SOS -->

@@ -1,5 +1,7 @@
 package org.krug.app.navigation
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -24,9 +26,38 @@ import org.krug.app.feature.splash.SplashScreen
 @Composable
 fun KrugNavHost() {
     val nav = rememberNavController()
+    // Default screen transitions — horizontal slide za forward/back navigaciju.
+    // Default Compose Nav je fade-only (200ms), što je tih ali ne signalizira hierarchy.
+    // Slide-left za "uđi dublje", slide-right za "vrati se nazad" daje user-u intuitivni
+    // model "stack-a screen-ova" (kao iOS i većina modernih Android app-ova).
+    val slideDurationMs = 280
     NavHost(
         navController = nav,
         startDestination = Splash,
+        enterTransition = {
+            slideIntoContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.Left,
+                animationSpec = tween(slideDurationMs),
+            )
+        },
+        exitTransition = {
+            slideOutOfContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.Left,
+                animationSpec = tween(slideDurationMs),
+            )
+        },
+        popEnterTransition = {
+            slideIntoContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                animationSpec = tween(slideDurationMs),
+            )
+        },
+        popExitTransition = {
+            slideOutOfContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                animationSpec = tween(slideDurationMs),
+            )
+        },
     ) {
         composable<Splash> {
             SplashScreen(

@@ -549,36 +549,127 @@ fun MapScreen(
         }
 
         if (sosConfirmVisible) {
-            AlertDialog(
-                onDismissRequest = { sosConfirmVisible = false },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Filled.Warning,
-                        contentDescription = null,
-                        tint = SosRed,
-                    )
-                },
-                title = { Text(stringResource(R.string.map_sos_confirm_title)) },
-                text = {
-                    Text(stringResource(R.string.map_sos_confirm_body))
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            viewModel.triggerSos()
-                            // Boost FGS na BURST profil 30min — peers prate najsvežiju
-                            // lokaciju tokom hitne situacije.
-                            LocationTrackingService.triggerSosBoost(context)
-                            sosConfirmVisible = false
-                        },
-                    ) {
-                        Text(stringResource(R.string.map_sos_confirm_send), color = SosRed, fontWeight = FontWeight.Bold)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { sosConfirmVisible = false }) { Text(stringResource(R.string.action_cancel)) }
+            SosConfirmDialog(
+                onDismiss = { sosConfirmVisible = false },
+                onConfirm = {
+                    viewModel.triggerSos()
+                    // Boost FGS na BURST profil 30min — peers prate najsvežiju lokaciju
+                    // tokom hitne situacije.
+                    LocationTrackingService.triggerSosBoost(context)
+                    sosConfirmVisible = false
                 },
             )
+        }
+    }
+}
+
+/**
+ * Custom SOS confirm dialog — brand-styled umesto generic Material `AlertDialog`.
+ * SOS je najteža akcija u app-u (urgent, irreversible without explicit clear); zaslužuje
+ * vizuelno težak dialog koji eksplicitno signalizira "ovo je hitno". Crveni gradient
+ * background + veliki Warning icon u krugu + brand button-i.
+ */
+@Composable
+private fun SosConfirmDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(28.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // Veliki warning icon u SOS red gradient krugu sa pulsing shadow halom —
+            // vizuelno odmah signalizira "alarm".
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .shadow(
+                        elevation = 16.dp,
+                        shape = CircleShape,
+                        clip = false,
+                        ambientColor = SosRed,
+                        spotColor = SosRed,
+                    )
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(colors = listOf(SosRed, SosRedDark)),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(40.dp),
+                )
+            }
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = stringResource(R.string.map_sos_confirm_title),
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = stringResource(R.string.map_sos_confirm_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            Spacer(Modifier.height(28.dp))
+            // Primary CTA — solid SOS red sa press scale. "Pošalji SOS" je destruktivna
+            // akcija, ne sme da liči na običan button — boja + bold tekst signaliziraju težinu.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(SosRed)
+                    .pressScaleClickable(onClick = onConfirm)
+                    .height(56.dp)
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.map_sos_confirm_send),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            // Otkaži je secondary — outlined, ne forsira boju, lakše vizuelno.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = RoundedCornerShape(16.dp),
+                    )
+                    .pressScaleClickable(onClick = onDismiss)
+                    .height(56.dp)
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.action_cancel),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
     }
 }
@@ -684,7 +775,7 @@ private fun TopFloatingBar(
                     .pressScaleClickable(onClick = onJoinByCode),
             ) {
                 Text(
-                    text = "Imam pozivnicu →",
+                    text = stringResource(R.string.map_have_invite_cta),
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
