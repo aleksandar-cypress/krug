@@ -82,6 +82,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import org.krug.app.ui.brand.pressScaleClickable
+import timber.log.Timber
 import android.view.HapticFeedbackConstants
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -214,6 +215,41 @@ fun MapScreen(
         val pending = pendingRefocus ?: return@LaunchedEffect
         kotlinx.coroutines.delay(30_000)
         if (pendingRefocus == pending) pendingRefocus = null
+    }
+
+    // Initial flyTo na self — radi i kad user nema krugove (state.members prazno) jer
+    // koristi state.selfLocation direktno iz FGS publish-a. Bez ovog, novi user koji još
+    // nije kreirao/se pridružio krugu ostaje "zaglavljen" na default Belgrade Topčider
+    // koordinati dok ne kreira krug. didFlyToSelf flag sprečava ponavljanje pri svakom
+    // location update-u (FGS publish-uje na ~30s) — user može da pomera mapu po želji.
+    LaunchedEffect(state.selfLocation?.lat, state.selfLocation?.lng) {
+        val loc = state.selfLocation ?: return@LaunchedEffect
+        Timber.d("FlyTo trigger: lat=${loc.lat}, lng=${loc.lng}, didFlyToSelf=${mapViewState.didFlyToSelf}")
+        if (mapViewState.didFlyToSelf) return@LaunchedEffect
+        // Sačekaj i da factory završi (mapView != null) i da style završi load
+        // (styleLoaded = true). Bez čekanja na style, flyTo poziv pre style-loaded
+        // se "izgubi" — Mapbox queue-uje camera op-ove ali setCamera u factory (Belgrade)
+        // dolazi na red KASNIJE i prebrisuje naš flyTo. Otuda user vidi Belgrade i posle
+        // log-a "FlyTo: Čačak". setCamera (instant, ne flyTo animacija) jer je ovo "initial
+        // jump" — animacija nema smisao kad mapa nikad nije ni prikazana usera.
+        var attempts = 0
+        while ((mapViewState.mapView == null || !mapViewState.styleLoaded) && attempts < 100) {
+            kotlinx.coroutines.delay(50)
+            attempts++
+        }
+        val mv = mapViewState.mapView
+        if (mv == null || !mapViewState.styleLoaded) {
+            Timber.w("FlyTo skip: mapView=${mv != null} style=${mapViewState.styleLoaded} posle ${attempts * 50}ms")
+            return@LaunchedEffect
+        }
+        Timber.i("setCamera self: lat=${loc.lat}, lng=${loc.lng} (waited ${attempts * 50}ms)")
+        mv.mapboxMap.setCamera(
+            CameraOptions.Builder()
+                .center(Point.fromLngLat(loc.lng, loc.lat))
+                .zoom(14.0)
+                .build(),
+        )
+        mapViewState.didFlyToSelf = true
     }
 
     // Course-up navigation: kada se self kreće brže od 2.78 m/s (10 km/h ≈ vožnja),
@@ -1306,6 +1342,10 @@ private fun MapboxContainer(
                     marginRight = 0f
                     isMetricUnits = true
                 }
+                // Initial camera samo dok stil ne učita — bez ovog flash bi bio crn ekran.
+                // MapScreen LaunchedEffect overrid-uje ovo na pravu self lokaciju čim
+                // styleLoaded postane true. Belgrade ostaje samo ako user NEMA GPS fix
+                // (no permission, gašen GPS).
                 mv.mapboxMap.setCamera(
                     CameraOptions.Builder()
                         .center(Point.fromLngLat(DEFAULT_LNG, DEFAULT_LAT))
@@ -1331,6 +1371,10 @@ private fun MapboxContainer(
                         pulsingEnabled = false
                     }
                     mv.location.enabled = false
+                    // Signal MapScreen LaunchedEffect-u da je sada bezbedno da setCamera-uje
+                    // na user-ovu lokaciju. Pre style-loaded, camera op-ovi se mogu "izgubiti"
+                    // tako što ih factory's initial setCamera prebrisuje.
+                    holder.styleLoaded = true
                 }
             }
         },
@@ -1385,17 +1429,9 @@ private fun MapboxContainer(
                 )
                 holder.annotationToUid[annotation.id] = member.uid
             }
-            val self = members.firstOrNull { it.isSelf }?.location
-            if (self != null && !holder.didFlyToSelf) {
-                holder.mapView?.mapboxMap?.flyTo(
-                    CameraOptions.Builder()
-                        .center(Point.fromLngLat(self.lng, self.lat))
-                        .zoom(14.0)
-                        .build(),
-                    MapAnimationOptions.mapAnimationOptions { duration(1500L) },
-                )
-                holder.didFlyToSelf = true
-            }
+            // FlyTo na self je preseljen u MapScreen LaunchedEffect (vidi
+            // `LaunchedEffect(state.selfLocation, ...)`) — radi i kad user nema krugove
+            // (members je prazna) jer koristi `state.selfLocation` direktno iz FGS publish-a.
         },
     )
 }
@@ -1405,6 +1441,8 @@ private class MapViewHolder {
     var annotationManager: PointAnnotationManager? = null
     var circleManager: CircleAnnotationManager? = null
     var didFlyToSelf: Boolean = false
+    /** True nakon prvog `loadStyle` callback-a — gate za camera op-ove iz LaunchedEffect-a. */
+    var styleLoaded: Boolean = false
     val annotationToUid = mutableMapOf<String, String>()
     /** SOS ripple — per-UID circle annotation (radar pulse oko SOS markera). */
     val sosRipples = mutableMapOf<String, CircleAnnotation>()
