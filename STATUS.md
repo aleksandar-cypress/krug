@@ -2,32 +2,82 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-23, kraj dvanaeste sesije — 4 bug fixes + Life360 strateški plan)
+## Gde smo stali (2026-06-23, kraj trinaeste sesije — English lokalizacija + polish v2 + map camera fix)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `422368a`.
-Firebase rules: Firestore + RTDB deployovane (RTDB rules ažurirane sa `bearing` + `speed` validatorima u ovoj sesiji).
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `bdaa45d`.
+Firebase rules: Firestore + RTDB deployovane (RTDB rules sadrže `bearing` + `speed` validatore).
 **Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — sve tri sa najnovijim build-om.
 
-**Health stanja**: build i dalje uredan (debug + release), 36 unit testova zelenih, FGS + Crashlytics arhitektura nepromenjena.
+**Health stanja**: build i dalje uredan (debug + release), 36 unit testova zelenih, FGS + Crashlytics arhitektura nepromenjena. Baseline profile aktivan (cold-start hot path-ovi za ART precompile).
 
-## Plan za sledeću sesiju — Settings polish + English lokalizacija
+## Trinaesta sesija (2026-06-23) — English lokalizacija + UI polish v2 + critical map camera bug
 
-### Sledeća sesija ima dva glavna deliverable-a:
+Dan posvećen finalnoj polish fazi pred Play Store basic launch.
 
-**1) Settings hierarchy polish** (UI consistency final touch)
-- Trenutno: flat list rows u SettingsRootScreen
-- Cilj: grupisati po kategorijama (Profil / Privatnost / Performanse / O app) sa branded card stilovima, color accents
-- Effort: ~1h
+### A) English lokalizacija + multi-locale infrastruktura
+- `values/strings.xml` postao engleski default fallback, `values-sr/strings.xml` srpski
+- ~230 stringova prevedenih u oba locale-a; audit hardcoded srpskog iz Kotlin-a
+- `CircleIconAssets.labelForKey: String` → `labelResForKey: @StringRes Int` (call site-ovi koriste `stringResource(...)`)
+- `AuthViewModel` (ViewModel ne može `stringResource`) dobio `@ApplicationContext` injection + `appContext.getString(...)`
+- JEDAN AAB sadrži sve locale-ove; Play Store automatski isporučuje per-locale split
 
-**2) English lokalizacija** (global ready)
-- Trenutno: srpski hardcoded u `res/values/strings.xml` + neki stringovi direktno u Kotlin kodu
-- Cilj:
-  - Preimenuj `values/strings.xml` (srpski) → `values-sr/strings.xml`
-  - Napravi novi `values/strings.xml` sa engleskim prevodom (default fallback)
-  - Audit + ekstrakcija hardcoded srpskog iz Kotlin-a u oba `strings.xml` (~30 stringova kao "Napravi prvi krug", "Imam pozivnicu →", "Ti", "Član", "sad", "Privatni mod", "Otvori u Google Maps", itd.)
-  - Test sa English locale (`adb shell setprop persist.sys.locale en-US` + force-stop)
-- Effort: ~3-4h
-- **Distribucija**: JEDAN AAB sadrži sve locale-ove. Play Store automatski daje per-locale split APK-ove pri download-u. Sve transparentno.
+### B) UI polish v2
+- **Settings hierarchy**: 4 brand-color sekcije (Profil / Privatnost / Performanse / Aplikacija), `SettingsItem` sa title + subtitle + icon + accent color
+- **EnterCode keypad**: 6-box dizajn (transparent `BasicTextField` + `CodeBox` Row), auto-focus + keyboard on launch
+- **MembersSheet**: sort + alpha + hint kad je user sam u krugu (`map_members_alone_hint`)
+- **NavHost slide transitions**: 280ms slide-in/out left, slide-out right on pop
+- **Custom SOS confirm dialog**: brand-styled umesto sistemskog AlertDialog-a
+- **Splash logo rotacija**: 360° (bilo 180°), entrance sa strana → orbit-style formation
+- **About logo crop fix**: padding adjust da gornji deo nije odsečen
+- **Settings ikona**: vraćena na obični gear (probali A/B/C variant-e, sve ružne)
+
+### C) Critical bugs fix
+- **Indigo "plavi krug" leak** (već fix-ovano u 12. sesiji, ali polish nastavljen): puck disable PRE + POSLE `loadStyle` ostavljen kao defensive belt-and-suspenders
+- **Pulse animacija polish**: 360° rotation umesto smanjivanja
+- **Crashlytics fix S24**: splash zakucao na loading — `decide()` wrap-ovan u try/catch sa fallback na `SignedOut` + `finally { SplashGate.ready.set(true) }` (garantovan exit)
+- **🔥 Map camera stuck on Belgrade default** (najveći — commit `bdaa45d`): user bez krugova viđao Belgrade Topčider umesto svoje GPS lokacije iako log potvrdio `flyTo(Čačak)`.
+  - **Root cause**: race između `factory.setCamera(Belgrade)` + async `loadStyle()` + `LaunchedEffect.flyTo(self)`. Kad flyTo padne PRE style-loaded, Mapbox ga "izgubi", a factory-jev setCamera prevlada.
+  - **Fix**: `MapViewHolder.styleLoaded` flag postavlja se iz `loadStyle` callback-a. `LaunchedEffect` čeka i `mapView != null` i `styleLoaded == true`, zatim `setCamera` (instant, ne flyTo — initial jump ne traži animaciju). Verifikovano vizuelno na A37 u Čačku.
+
+### D) Baseline profile setup
+- `app/src/main/baseline-prof.txt` sa hand-crafted hot path-ovima (Application, MainActivity, Splash, NavHost, KrugLogo, Compose runtime)
+- `androidx.profileinstaller` dodat — ART precompile pri install-u, ~10-30% brži cold start
+- Macrobenchmark module nije setup-ovan (deferred); hand-crafted profile pokriva startup
+
+### E) Eksperiment — rebrand u "Orbit" (odbačen)
+- Probali Earth-in-center splash + "Orbit" naming
+- Ne sviđa se vizuelno, vraćeno na "Krug" — ostaje kao radno ime do Play Store launch-a
+
+### F) Mock location debugging (Samsung A37)
+- Xiaomi pokazivao 229km distance — discovery: Appium Settings app (`io.appium.settings`) imao MOCK_LOCATION permission, feed-ovao Pančevo koordinate
+- Privremeno disable-ovan, pa restored (user mora Appium za testing)
+
+## Plan za sledeću sesiju — Faza 2: Play Store priprema
+
+Polish faza je gotova. Sledeća sesija ide ka **Play Store internal/closed beta**.
+
+### Deliverables:
+
+**1) Signing keystore + signed AAB** (~1h)
+- Generisati release keystore (`keytool -genkeypair`), backup-ovati offline
+- `app/build.gradle.kts` → signing config sa kredencijalima iz `local.properties` (nikad u git)
+- Build `:app:bundleRelease` → AAB ready za upload
+
+**2) Data safety form** (~1h)
+- Play Console deklaracija: SHARING (Firebase Auth email, Firestore lokacija + display name, RTDB lokacija)
+- Permission rationale: foreground service, background location, notifications, post notifications
+
+**3) Screenshots** (~1h)
+- 4-5 screenshot-a za listing (Mapa sa krugom / CreateCircle / MembersSheet / Settings / About)
+- Po dva locale-a (sr + en); device frame opcional
+
+**4) Store listing copy** (~30min)
+- Short description (80 chars) + full description (4000 chars max)
+- "What's new" za prvi release
+
+**5) Internal track upload + invite 5-10 testera**
+- Real-world test sa porodicama 1-2 nedelje
+- Crashlytics monitoring + feedback loop
 
 ### Strateški plan ka Play Store i monetizaciji
 
