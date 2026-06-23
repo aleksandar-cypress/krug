@@ -30,8 +30,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.krug.app.R
 import org.krug.app.core.circle.CirclePresets
 
 @Composable
@@ -56,14 +58,14 @@ internal fun EditCircleSheet(
             .padding(bottom = 24.dp),
     ) {
         Text(
-            text = "Izmeni krug",
+            text = stringResource(R.string.edit_circle_title),
             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
             modifier = Modifier.padding(bottom = 12.dp),
         )
         OutlinedTextField(
             value = name,
             onValueChange = { name = it.take(20) },
-            label = { Text("Ime kruga") },
+            label = { Text(stringResource(R.string.edit_circle_name_label)) },
             singleLine = true,
             isError = nameError || duplicateError,
             supportingText = {
@@ -73,8 +75,8 @@ internal fun EditCircleSheet(
                 ) {
                     Text(
                         text = when {
-                            duplicateError -> "Već imaš krug sa tim imenom"
-                            nameError -> "Ime ne može biti prazno"
+                            duplicateError -> stringResource(R.string.edit_circle_error_duplicate)
+                            nameError -> stringResource(R.string.edit_circle_error_empty)
                             else -> ""
                         },
                     )
@@ -85,12 +87,12 @@ internal fun EditCircleSheet(
         )
         Spacer(Modifier.size(20.dp))
 
-        Text("Boja", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.edit_circle_color_label), style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.size(12.dp))
         SheetColorRow(selected = color, onSelect = { color = it })
 
         Spacer(Modifier.size(20.dp))
-        Text("Ikonica", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.edit_circle_icon_label), style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.size(12.dp))
         SheetIconRow(
             selected = icon,
@@ -105,7 +107,7 @@ internal fun EditCircleSheet(
                 enabled = !saving,
                 modifier = Modifier.weight(1f),
             ) {
-                Text("Otkaži")
+                Text(stringResource(R.string.action_cancel))
             }
             Button(
                 onClick = { onSave(name, color, icon) },
@@ -120,7 +122,7 @@ internal fun EditCircleSheet(
                     )
                     Spacer(Modifier.width(8.dp))
                 }
-                Text("Sačuvaj")
+                Text(stringResource(R.string.action_save))
             }
         }
     }

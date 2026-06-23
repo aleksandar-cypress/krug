@@ -148,13 +148,13 @@ private fun ChildModeBanner() {
             Spacer(Modifier.size(10.dp))
             Column {
                 Text(
-                    text = "Roditeljska kontrola aktivna",
+                    text = stringResource(R.string.privacy_child_lock_title),
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
                 Spacer(Modifier.size(2.dp))
                 Text(
-                    text = "Vlasnik kruga je označio tvoj nalog kao dete. Ne možeš pauzirati deljenje lokacije ni obrisati nalog",
+                    text = stringResource(R.string.privacy_child_lock_body),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )

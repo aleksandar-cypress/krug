@@ -84,7 +84,7 @@ fun AuthScreen(
             Spacer(Modifier.height(28.dp))
 
             Text(
-                text = "Krug",
+                text = stringResource(R.string.auth_brand_title),
                 style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
                 color = LogoBlue,
             )
@@ -140,7 +140,7 @@ fun AuthScreen(
             Spacer(Modifier.height(16.dp))
 
             Text(
-                text = "Tvoj krug, tvoja pravila",
+                text = stringResource(R.string.auth_brand_subtitle),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

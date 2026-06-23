@@ -557,12 +557,9 @@ fun MapScreen(
                         tint = SosRed,
                     )
                 },
-                title = { Text("Pošalji SOS?") },
+                title = { Text(stringResource(R.string.map_sos_confirm_title)) },
                 text = {
-                    Text(
-                        "Svi članovi tvojih krugova će dobiti hitno obaveštenje sa tvojom " +
-                            "trenutnom lokacijom. Koristi samo u stvarnoj opasnosti",
-                    )
+                    Text(stringResource(R.string.map_sos_confirm_body))
                 },
                 confirmButton = {
                     TextButton(
@@ -574,11 +571,11 @@ fun MapScreen(
                             sosConfirmVisible = false
                         },
                     ) {
-                        Text("Pošalji SOS", color = SosRed, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.map_sos_confirm_send), color = SosRed, fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { sosConfirmVisible = false }) { Text("Otkaži") }
+                    TextButton(onClick = { sosConfirmVisible = false }) { Text(stringResource(R.string.action_cancel)) }
                 },
             )
         }
@@ -664,7 +661,7 @@ private fun TopFloatingBar(
                     }
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        text = "Napravi prvi krug",
+                        text = stringResource(R.string.map_create_first_circle),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                         color = Color.White,
                     )
@@ -839,7 +836,7 @@ private fun SosFab(
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = "SoS",
+            text = stringResource(R.string.map_sos_button),
             style = MaterialTheme.typography.titleSmall.copy(
                 fontWeight = FontWeight.Black,
                 letterSpacing = 0.5.sp,
@@ -906,11 +903,11 @@ private fun SosBanner(
                     Column(modifier = Modifier.weight(1f)) {
                         val titleText = when {
                             others.size == 1 -> {
-                                val name = others.first().displayName.ifBlank { "Član kruga" }
+                                val name = others.first().displayName.ifBlank { stringResource(R.string.member_label_circle_member) }
                                 "$name traži pomoć"
                             }
                             others.size > 1 -> "${others.size} članova traži pomoć"
-                            else -> "Tvoj SOS je aktivan"
+                            else -> stringResource(R.string.map_sos_self_active)
                         }
                         Text(
                             text = titleText,
@@ -976,7 +973,9 @@ private fun SosBanner(
                             )
                         }
                         Spacer(Modifier.size(12.dp))
-                        val label = if (m.uid == selfUid) "Ti" else m.displayName.ifBlank { "Član kruga" }
+                        val youLabel = stringResource(R.string.member_label_you)
+                        val memberLabel = stringResource(R.string.member_label_circle_member)
+                        val label = if (m.uid == selfUid) youLabel else m.displayName.ifBlank { memberLabel }
                         Text(
                             text = label,
                             style = MaterialTheme.typography.titleSmall.copy(
@@ -990,7 +989,7 @@ private fun SosBanner(
                                 onClick = onCancelSelf,
                             ) {
                                 Text(
-                                    text = "Otkaži",
+                                    text = stringResource(R.string.action_cancel),
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                 )
@@ -1008,7 +1007,7 @@ private fun SosBanner(
                                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                             ) {
                                 Text(
-                                    text = "Pokaži",
+                                    text = stringResource(R.string.action_show),
                                     fontWeight = FontWeight.Bold,
                                 )
                             }
@@ -1516,7 +1515,7 @@ private fun CirclePickerRow(
             )
             if (selected) {
                 Text(
-                    text = "Aktivan krug",
+                    text = stringResource(R.string.map_active_circle),
                     style = MaterialTheme.typography.labelSmall,
                     color = accent,
                     fontWeight = FontWeight.SemiBold,
@@ -1644,9 +1643,11 @@ private fun MemberRow(
                 }
             }
             val priv = member.isPrivate()
+            val sosLabel = stringResource(R.string.member_state_sos_help)
+            val privateLabel = stringResource(R.string.member_state_private)
             val statusLine = when {
-                member.sos != null -> "SOS: traži pomoć"
-                priv -> "Privatni mod"
+                member.sos != null -> sosLabel
+                priv -> privateLabel
                 else -> lastSeenLabel(member.location?.updatedAt)
             }
             // Ako je displayName već device naziv (anon user bez nicknamea), ne ponavljaj
@@ -1853,14 +1854,13 @@ private fun MemberDetailSheet(
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "Nije aktivan ${daysOffline}d",
+                        text = stringResource(R.string.member_state_long_offline_title, daysOffline),
                         color = PrivateGray,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "Možda je obrisao app ili je telefon ugašen. Refresh neće " +
-                            "raditi. Vlasnik kruga može ga ukloniti iz Detalji kruga.",
+                        text = stringResource(R.string.member_state_long_offline_body),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -1875,14 +1875,13 @@ private fun MemberDetailSheet(
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "Privatni mod",
+                        text = stringResource(R.string.member_state_private),
                         color = PrivateGray,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "Član trenutno ne deli lokaciju ili je offline. " +
-                            "Prikazana je poslednja poznata pozicija",
+                        text = stringResource(R.string.member_state_private_body),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -1897,7 +1896,7 @@ private fun MemberDetailSheet(
             if (!isPrivate && batt != null && batt in 0..100) {
                 val charging = member.location.charging
                 StatChip(
-                    label = if (charging) "Puni se" else "Baterija",
+                    label = if (charging) stringResource(R.string.member_chip_battery_charging) else stringResource(R.string.member_chip_battery),
                     value = "$batt%",
                     accentColor = batteryColor(batt),
                     icon = if (charging) Icons.Filled.BatteryChargingFull
@@ -1915,7 +1914,7 @@ private fun MemberDetailSheet(
                         member.location.lat, member.location.lng,
                     )
                 StatChip(
-                    label = if (drivingMeters != null) "Udaljenost" else "Udalj. (vazd.)",
+                    label = if (drivingMeters != null) stringResource(R.string.member_chip_distance) else stringResource(R.string.member_chip_distance_aerial),
                     value = formatDistance(displayMeters),
                     accentColor = MaterialTheme.colorScheme.primary,
                     icon = Icons.Outlined.NearMe,
@@ -1923,7 +1922,7 @@ private fun MemberDetailSheet(
                 )
             }
             StatChip(
-                label = "Poslednje",
+                label = stringResource(R.string.member_chip_last_seen),
                 value = compactLastSeen(member.location?.updatedAt),
                 accentColor = if (isPrivate) PrivateGray else MaterialTheme.colorScheme.primary,
                 icon = Icons.Outlined.AccessTime,
@@ -1941,7 +1940,7 @@ private fun MemberDetailSheet(
                 enabled = !refreshTriggered,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (refreshTriggered) "Osveženo…" else "Osveži moju lokaciju")
+                Text(if (refreshTriggered) stringResource(R.string.member_refresh_self_done) else stringResource(R.string.member_refresh_self))
             }
             if (member.location != null) {
                 Spacer(Modifier.height(8.dp))
@@ -1949,7 +1948,7 @@ private fun MemberDetailSheet(
                     onClick = onOpenInMaps,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Otvori u Google Maps")
+                    Text(stringResource(R.string.action_open_in_google_maps))
                 }
             }
         } else if (member.location != null) {
@@ -1964,7 +1963,7 @@ private fun MemberDetailSheet(
                     enabled = !refreshTriggered,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (refreshTriggered) "Zahtev poslat…" else "Osveži lokaciju")
+                    Text(if (refreshTriggered) stringResource(R.string.member_refresh_other_sent) else stringResource(R.string.member_refresh_other))
                 }
                 Spacer(Modifier.height(8.dp))
             }
@@ -1972,7 +1971,7 @@ private fun MemberDetailSheet(
                 onClick = onOpenInMaps,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Otvori u Google Maps")
+                Text(stringResource(R.string.action_open_in_google_maps))
             }
         }
     }
@@ -2094,13 +2093,15 @@ private fun PermissionWarningBanner(onOpenSettings: () -> Unit) {
             Spacer(Modifier.size(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Nedostaje dozvola",
+                    text = stringResource(R.string.permission_banner_missing),
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
                 Text(
-                    text = missingPermissions.joinToString(" · ") +
-                        " — članovi kruga ne vide tvoju lokaciju. Tapni za podešavanja.",
+                    text = stringResource(
+                        R.string.permission_banner_body,
+                        missingPermissions.joinToString(" · "),
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
@@ -2112,17 +2113,17 @@ private fun PermissionWarningBanner(onOpenSettings: () -> Unit) {
 private fun computeMissingPermissions(context: android.content.Context): List<String> {
     val missing = mutableListOf<String>()
     if (!org.krug.app.core.permissions.PermissionUtils.hasForegroundLocation(context)) {
-        missing += "Lokacija"
+        missing += context.getString(R.string.permission_missing_location)
     }
     if (org.krug.app.core.permissions.PermissionUtils.needsBackgroundLocationPermission &&
         !org.krug.app.core.permissions.PermissionUtils.hasBackgroundLocation(context)
     ) {
-        missing += "Lokacija u pozadini"
+        missing += context.getString(R.string.permission_missing_location_background)
     }
     if (org.krug.app.core.permissions.PermissionUtils.needsNotificationsPermission &&
         !org.krug.app.core.permissions.PermissionUtils.hasNotifications(context)
     ) {
-        missing += "Obaveštenja"
+        missing += context.getString(R.string.permission_missing_notifications)
     }
     return missing
 }

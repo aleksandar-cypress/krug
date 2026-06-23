@@ -144,7 +144,7 @@ fun CircleDetailScreen(
                 ) {
                     Icon(Icons.Outlined.ChildCare, contentDescription = null)
                     Spacer(Modifier.size(8.dp))
-                    Text("Pozovi dete (roditeljska kontrola)")
+                    Text(stringResource(R.string.circle_detail_invite_child))
                 }
             } else {
                 Button(
