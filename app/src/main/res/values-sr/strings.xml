@@ -30,7 +30,7 @@
     <string name="onb_bg_open_settings">Otvori sistemska podešavanja</string>
 
     <string name="activity_rec_title">Pametno praćenje aktivnosti</string>
-    <string name="activity_rec_body">Krug može da prepozna kada hodate, vozite ili mirujete — i prilagodi koliko često deli vašu lokaciju. Bolja preciznost u pokretu, duža baterija kad ste stali.</string>
+    <string name="activity_rec_body">Krug može da prepozna kada hodate, vozite ili mirujete, i prilagodi koliko često deli vašu lokaciju. Bolja preciznost u pokretu, duža baterija kad ste stali.</string>
     <string name="activity_rec_allow">Dozvoli</string>
     <string name="activity_rec_not_now">Ne sada</string>
 
@@ -234,7 +234,7 @@
 
     <!-- Permission banner -->
     <string name="permission_banner_missing">Nedostaje dozvola</string>
-    <string name="permission_banner_body">%1$s — članovi kruga ne vide tvoju lokaciju. Tapni za podešavanja.</string>
+    <string name="permission_banner_body">%1$s. Članovi kruga ne vide tvoju lokaciju. Tapni za podešavanja.</string>
     <string name="permission_missing_location">Lokacija</string>
     <string name="permission_missing_location_background">Lokacija u pozadini</string>
     <string name="permission_missing_notifications">Obaveštenja</string>

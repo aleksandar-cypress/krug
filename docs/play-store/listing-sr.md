@@ -1,4 +1,4 @@
-# Play Store listing — Serbian locale (sr)
+# Play Store listing: Serbian locale (sr)
 
 > Direktno kopiraj u Play Console → Store presence → Main store listing → Serbian.
 > Limiti su iz Play Console-a. Datum poslednjeg ažuriranja: 2026-06-25.
@@ -32,17 +32,17 @@ Lokacija porodice u realnom vremenu. SOS. Bez reklama i prodaje podataka.
 ## Full description (max 4000 znakova)
 
 ```
-Krug je jednostavna aplikacija za deljenje lokacije sa porodicom i prijateljima u realnom vremenu — kreiraš mali "krug" ljudi kojima veruješ i vidite jedni druge na mapi.
+Krug je jednostavna aplikacija za deljenje lokacije sa porodicom i prijateljima u realnom vremenu. Kreiraš mali "krug" ljudi kojima veruješ i vidite jedni druge na mapi.
 
 Bez reklama. Bez prodaje podataka. Bez nepotrebnih funkcija.
 
 🗺  ŠTA RADI
 
-• Lokacija u realnom vremenu — vidi gde su članovi tvog kruga na mapi, sa nivoom baterije i statusom kretanja
-• SOS dugme — pošalji hitan signal sa lokacijom svim članovima jednim klikom
-• Privatni krugovi — kreiraš krug, šalješ pozivnicu, samo članovi vide jedni druge
-• Pauza kad ti treba privatnost — isključiš deljenje lokacije jednim klikom, član ostaje u krugu ali tvoja pozicija nije vidljiva
-• Putna razdaljina — koliko ti treba kolima do nekog člana
+• Lokacija u realnom vremenu: vidi gde su članovi tvog kruga na mapi, sa nivoom baterije i statusom kretanja
+• SOS dugme: pošalji hitan signal sa lokacijom svim članovima jednim klikom
+• Privatni krugovi: kreiraš krug, šalješ pozivnicu, samo članovi vide jedni druge
+• Pauza kad ti treba privatnost: isključiš deljenje lokacije jednim klikom, član ostaje u krugu ali tvoja pozicija nije vidljiva
+• Putna razdaljina: koliko ti treba kolima do nekog člana
 
 🔋 PAMETNO ZA BATERIJU
 
@@ -54,7 +54,7 @@ Foreground service garantuje da deljenje radi i kad je telefon zaključan, ali b
 
 🔒 PRIVATNOST PRE SVEGA
 
-• Tvoju lokaciju vide ISKLJUČIVO članovi tvojih krugova — niko drugi
+• Tvoju lokaciju vide ISKLJUČIVO članovi tvojih krugova, niko drugi
 • Bez reklama, bez praćenja, bez prodaje podataka oglašivačima ili data brokerima
 • Podaci se čuvaju u EU regionu (Google Firebase, region Belgija + multi-region EU)
 • HTTPS/TLS za svu komunikaciju
@@ -68,30 +68,30 @@ Foreground service garantuje da deljenje radi i kad je telefon zaključan, ali b
 3. Pozovi članove sa 6-cifrenim kodom ili linkom
 4. Vidite se na mapi
 
-🆘 SOS — VAŽNO
+🆘 SOS: VAŽNO
 
 SOS dugme šalje signal ČLANOVIMA TVOG KRUGA, ne hitnim službama. U slučaju stvarne opasnosti pozovi 112 (jedinstveni broj za hitne situacije) ili 192/193/194 (policija/vatrogasci/hitna pomoć).
 
 ✨ ZAŠTO KRUG, A NE NEKA DRUGA APLIKACIJA
 
-• Nema reklama — projekat je posvećen privatnosti, ne monetizaciji preko podataka
+• Nema reklama: projekat je posvećen privatnosti, ne monetizaciji preko podataka
 • Pravljen u Srbiji, srpski jezik kao prvi (i engleski podržan)
-• Minimalan dizajn — fokus na lokaciju, ne na 50 dodatnih funkcija koje ti ne trebaju
-• Pametna baterija — aktivnost-aware tracking koji ne troši bateriju kad nema potrebe
-• Open development — kod je javno vidljiv na GitHub-u
+• Minimalan dizajn: fokus na lokaciju, ne na 50 dodatnih funkcija koje ti ne trebaju
+• Pametna baterija: aktivnost-aware tracking koji ne troši bateriju kad nema potrebe
+• Open development: kod je javno vidljiv na GitHub-u
 
 📋 PERMISIJE I ZAŠTO
 
-• Lokacija (precizna i u pozadini) — osnovna funkcija deljenja lokacije
-• Obaveštenja — SOS signali članova i status deljenja
-• Prepoznavanje aktivnosti — opciono, za pametniju potrošnju baterije
-• Izuzeće od optimizacije baterije — da OEM telefon ne ubije deljenje lokacije
+• Lokacija (precizna i u pozadini): osnovna funkcija deljenja lokacije
+• Obaveštenja: SOS signali članova i status deljenja
+• Prepoznavanje aktivnosti: opciono, za pametniju potrošnju baterije
+• Izuzeće od optimizacije baterije: da OEM telefon ne ubije deljenje lokacije
 
 Sve permisije se mogu povući u sistemskim podešavanjima Android-a.
 
 🧪 BETA STATUS
 
-Ovo je rana verzija (v0.1.0). Funkcije se aktivno razvijaju. Tvoja povratna informacija je dragocena — javi nam šta ti se sviđa, šta ne radi, i šta ti fali.
+Ovo je rana verzija (v0.1.0). Funkcije se aktivno razvijaju. Tvoja povratna informacija je dragocena, javi nam šta ti se sviđa, šta ne radi, i šta ti fali.
 
 📧 KONTAKT
 
@@ -107,7 +107,7 @@ Uslovi korišćenja: https://krugapp.com/terms
 
 ---
 
-## What's new (max 500 znakova) — za v0.1.0
+## What's new (max 500 znakova) za v0.1.0
 
 ```
 Prva javna verzija Krug aplikacije.
@@ -128,9 +128,9 @@ Javite nam šta vam fali ili šta treba popraviti: aleksandarr@gmail.com
 
 ## Translation notes
 
-- "Krug" se NE prevodi — to je brand
+- "Krug" se NE prevodi (to je brand)
 - "Circle" → "krug" (slobodno u tekstu)
-- "Tracker" izbegavamo — negativna konotacija; koristimo "deljenje lokacije"
+- "Tracker" izbegavamo (negativna konotacija); koristimo "deljenje lokacije"
 - "Family" → "porodica" (osnovno); "loved ones" → "voljeni ljudi" (retko)
 
 ## Keywords koje treba da se pojave u tekstu (za Play Store SEO)

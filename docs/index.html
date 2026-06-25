@@ -3,89 +3,1311 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Krug · Pravne informacije</title>
+<title>Krug · Deljenje lokacije sa porodicom i prijateljima</title>
+<meta name="description" content="Krug je privatna Android aplikacija za deljenje lokacije sa porodicom i bliskim prijateljima. Bez reklama. Bez prodaje podataka.">
+<meta property="og:title" content="Krug. Tvoji ljudi na mapi.">
+<meta property="og:description" content="Privatno deljenje lokacije sa porodicom i prijateljima. Bez reklama, bez prodaje podataka.">
+<meta property="og:image" content="app-icon.png">
+<link rel="icon" type="image/png" href="app-icon.png">
+<link rel="apple-touch-icon" href="app-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #ffffff;
-    --fg: #0f172a;
-    --muted: #475569;
-    --accent: #6366f1;
-    --border: #e2e8f0;
+    /* Brand from logo */
+    --blue: #3A86C8;
+    --blue-light: #5BA0DC;
+    --blue-50: #E5F0FA;
+    --pink: #E56B8F;
+    --pink-50: #FCE7EE;
+    --teal: #48B09B;
+    --teal-50: #E0F2EE;
+    --orange: #F3B250;
+    --orange-50: #FDF1DE;
+
+    /* Neutrals */
+    --bg: #FFFFFF;
+    --bg-soft: #F8FAFC;
+    --fg: #0F172A;
+    --muted: #64748B;
+    --border: #E2E8F0;
+    --border-strong: #CBD5E1;
+
+    --shadow-sm: 0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.06);
+    --shadow-md: 0 4px 6px -1px rgba(15,23,42,0.05), 0 10px 20px -5px rgba(15,23,42,0.08);
+    --shadow-lg: 0 10px 15px -3px rgba(15,23,42,0.05), 0 25px 50px -12px rgba(58,134,200,0.15);
+    --shadow-glow: 0 20px 60px -20px rgba(58,134,200,0.35);
+
+    --radius-sm: 10px;
+    --radius-md: 16px;
+    --radius-lg: 24px;
+    --radius-xl: 32px;
   }
+
   * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  /* Anchor scroll: naslov sekcije sleti tačno ispod sticky topbar-a (~64px), bez
+   * gomile praznog prostora iznad. Negativna vrednost kompenzuje 100px padding-top
+   * koju .container ima — bez ovog, naslov bi bio 100px niže nego što treba. */
+  #features, #pricing { scroll-margin-top: -36px; }
   body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--fg);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    overflow-x: hidden;
+  }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  img { display: block; max-width: 100%; }
+
+  /* ============ TOP BAR ============ */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.78);
+    backdrop-filter: saturate(180%) blur(16px);
+    -webkit-backdrop-filter: saturate(180%) blur(16px);
+    border-bottom: 1px solid rgba(226,232,240,0.7);
+  }
+  .topbar::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: -1px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(58,134,200,0.25) 25%, rgba(229,107,143,0.25) 50%, rgba(72,176,155,0.25) 75%, transparent 100%);
+    pointer-events: none;
+  }
+  .topbar-inner {
+    max-width: 1160px;
+    margin: 0 auto;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--fg);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: -0.4px;
+  }
+  .brand img {
+    width: 36px;
+    height: 36px;
+  }
+  .brand:hover { text-decoration: none; }
+
+  .nav-right { display: flex; align-items: center; gap: 16px; }
+  .nav-links { display: flex; gap: 24px; }
+  .nav-links a {
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 0.15s;
+  }
+  .nav-links a:hover { color: var(--fg); text-decoration: none; }
+
+  .lang-switch {
+    display: inline-flex;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+  }
+  .lang-switch button {
+    background: transparent;
+    border: 0;
+    padding: 6px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    color: var(--muted);
+    font: inherit;
+    transition: all 0.18s;
+  }
+  .lang-switch button.active {
+    background: #fff;
+    color: var(--fg);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ============ HERO ============ */
+  .hero {
+    position: relative;
+    padding: 80px 24px 100px;
+    text-align: center;
+    overflow: hidden;
+  }
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.45;
+    animation: float 16s ease-in-out infinite;
+    will-change: transform;
+  }
+  .blob-blue   { top: -120px; left: -80px;   width: 480px; height: 480px; background: var(--blue);   animation-delay: 0s; }
+  .blob-pink   { top: 40px;   right: -120px; width: 420px; height: 420px; background: var(--pink);   animation-delay: -4s; }
+  .blob-teal   { bottom: -160px; left: 20%;  width: 460px; height: 460px; background: var(--teal);   animation-delay: -7s; }
+  .blob-orange { bottom: -100px; right: 10%; width: 380px; height: 380px; background: var(--orange); animation-delay: -10s; }
+  @keyframes float {
+    0%, 100% { transform: translate(0,0) scale(1); }
+    33%      { transform: translate(40px,-30px) scale(1.08); }
+    66%      { transform: translate(-30px,20px) scale(0.95); }
+  }
+
+  .hero-inner { position: relative; z-index: 1; max-width: 880px; margin: 0 auto; }
+  .hero-logo-wrap {
+    position: relative;
+    width: 128px;
+    height: 128px;
+    margin: 0 auto 28px;
+    display: block;
+  }
+  .hero-logo-wrap::before {
+    content: '';
+    position: absolute;
+    left: 50%; top: 60%;
+    width: 140%; height: 80%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(closest-side, rgba(58,134,200,0.18), rgba(58,134,200,0) 70%);
+    z-index: -1;
+    pointer-events: none;
+  }
+  .hero-logo {
+    width: 128px;
+    height: 128px;
+    display: block;
+    transform-origin: center;
+    overflow: visible;
+    will-change: transform;
+    shape-rendering: geometricPrecision;
+  }
+  .hero-logo.ready {
+    animation: heroFinalSpin 1.05s cubic-bezier(0.5, 0, 0.25, 1) 1.75s both;
+  }
+  @keyframes heroFinalSpin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  .hero-logo .person {
+    transform-box: fill-box;
+    transform-origin: center;
+    opacity: 0;
+    --start-x: 0px;
+    --start-y: 0px;
+    --start-rot: 0deg;
+    --start-scale: 0.5;
+    --delay: 0s;
+  }
+  .hero-logo.ready .person {
+    animation: gather 1.25s cubic-bezier(0.22, 0.85, 0.28, 1) var(--delay) both;
+  }
+  @keyframes gather {
+    0% {
+      transform: translate(var(--start-x), var(--start-y)) rotate(var(--start-rot)) scale(var(--start-scale));
+      opacity: 0;
+    }
+    40%  { opacity: 1; }
+    100% {
+      transform: translate(0, 0) rotate(0deg) scale(1);
+      opacity: 1;
+    }
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 6px 14px 6px 10px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-sm);
+    animation: fadeUp 0.7s 0.1s ease-out both;
+  }
+  .badge .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 0 4px rgba(72,176,155,0.25);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 4px rgba(72,176,155,0.25);} 50% { box-shadow: 0 0 0 8px rgba(72,176,155,0);} }
+
+  .hero h1 {
+    font-size: clamp(40px, 6vw, 72px);
+    line-height: 1.02;
+    letter-spacing: -2.2px;
+    font-weight: 800;
+    margin: 0 0 24px;
+    animation: fadeUp 0.7s 0.15s ease-out both;
+  }
+  .hero h1 .gradient-text {
+    background: linear-gradient(95deg, var(--blue) 0%, var(--teal) 35%, var(--orange) 70%, var(--pink) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-size: 200% auto;
+    animation: shine 6s ease-in-out infinite;
+  }
+  @keyframes shine { 0%,100% { background-position: 0% 50%;} 50% { background-position: 100% 50%;} }
+
+  .hero .lede {
+    font-size: clamp(17px, 2vw, 20px);
+    color: var(--muted);
+    max-width: 620px;
+    margin: 0 auto 40px;
+    animation: fadeUp 0.7s 0.25s ease-out both;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; animation: fadeUp 0.7s 0.35s ease-out both; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 26px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 15px;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--blue) 0%, var(--blue-light) 100%);
+    color: #fff;
+    box-shadow: var(--shadow-glow);
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 24px 70px -20px rgba(58,134,200,0.5); text-decoration: none; }
+  .btn-primary.disabled {
+    background: linear-gradient(135deg, var(--blue) 0%, var(--blue-light) 100%);
+    opacity: 0.85;
+    cursor: default;
+  }
+  .btn-primary.disabled:hover { transform: none; box-shadow: var(--shadow-glow); }
+  .btn-secondary {
+    background: #fff;
+    color: var(--fg);
+    border-color: var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+  .btn-secondary:hover { border-color: var(--border-strong); transform: translateY(-2px); text-decoration: none; }
+
+
+  /* ============ SECTIONS ============ */
+  section { position: relative; }
+  .container { max-width: 1160px; margin: 0 auto; padding: 100px 24px; }
+  .section-head { text-align: center; margin-bottom: 64px; max-width: 720px; margin-left: auto; margin-right: auto; }
+  .eyebrow {
+    display: inline-block;
+    color: var(--blue);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .section-head h2 {
+    font-size: clamp(30px, 4vw, 44px);
+    letter-spacing: -1.2px;
+    margin: 0 0 16px;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+  .section-head p {
+    color: var(--muted);
+    font-size: 18px;
+    margin: 0;
+  }
+
+  /* ============ FEATURES ============ */
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  .feature {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 36px 32px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .feature::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 3px;
+    background: var(--feat-color, var(--blue));
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .feature:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: transparent;
+  }
+  .feature:hover::before { opacity: 1; }
+  .feature .ico {
+    width: 56px; height: 56px;
+    border-radius: var(--radius-md);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 24px;
+    background: var(--feat-bg, var(--blue-50));
+    color: var(--feat-color, var(--blue));
+  }
+  .feature .ico svg { width: 28px; height: 28px; }
+  .feature h3 { margin: 0 0 8px; font-size: 20px; font-weight: 700; letter-spacing: -0.4px; }
+  .feature p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.6; }
+
+  .f-blue   { --feat-color: var(--blue);   --feat-bg: var(--blue-50); }
+  .f-pink   { --feat-color: var(--pink);   --feat-bg: var(--pink-50); }
+  .f-teal   { --feat-color: var(--teal);   --feat-bg: var(--teal-50); }
+  .f-orange { --feat-color: var(--orange); --feat-bg: var(--orange-50); }
+
+  /* ============ HOW IT WORKS ============ */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    position: relative;
+  }
+  .steps::before {
+    content: '';
+    position: absolute;
+    top: 32px;
+    left: 8%;
+    right: 8%;
+    height: 2px;
+    background: linear-gradient(90deg, var(--blue) 0%, var(--pink) 33%, var(--teal) 66%, var(--orange) 100%);
+    opacity: 0.25;
+    z-index: 0;
+  }
+  .step {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    background: var(--bg);
+    padding: 0 12px;
+  }
+  .step-num {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 20px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--fg);
+    transition: all 0.3s;
+    box-shadow: var(--shadow-sm);
+  }
+  .step:nth-child(1) .step-num { border-color: var(--blue);   color: var(--blue); }
+  .step:nth-child(2) .step-num { border-color: var(--pink);   color: var(--pink); }
+  .step:nth-child(3) .step-num { border-color: var(--teal);   color: var(--teal); }
+  .step:nth-child(4) .step-num { border-color: var(--orange); color: var(--orange); }
+  .step:hover .step-num { transform: translateY(-3px) scale(1.04); box-shadow: var(--shadow-md); }
+  .step-body h4 {
+    margin: 0 0 8px;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+  .step-body p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
     line-height: 1.55;
   }
-  main {
+
+  /* ============ WHY KRUG ============ */
+  .why {
+    background: var(--bg-soft);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .why-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  .why-card {
+    background: #fff;
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    border: 1px solid var(--border);
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    transition: all 0.3s;
+  }
+  .why-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: transparent; }
+  .why-card .ico {
+    width: 44px; height: 44px;
+    flex-shrink: 0;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800;
+    font-size: 17px;
+    color: #fff;
+  }
+  .why-card:nth-child(1) .ico { background: var(--blue); }
+  .why-card:nth-child(2) .ico { background: var(--pink); }
+  .why-card:nth-child(3) .ico { background: var(--teal); }
+  .why-card:nth-child(4) .ico { background: var(--orange); }
+  .why-card h4 { margin: 0 0 6px; font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+  .why-card p  { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
+
+  /* ============ PRICING ============ */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  .price {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: 40px;
+    position: relative;
+    transition: all 0.3s;
+  }
+  .price:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+  .price.featured {
+    background:
+      linear-gradient(180deg, #fff 0%, rgba(229,240,250,0.45) 100%);
+    border: 2px solid var(--blue);
+    box-shadow: var(--shadow-glow);
+    position: relative;
+  }
+  .price.featured::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: var(--radius-xl);
+    background: linear-gradient(135deg, var(--blue), var(--teal), var(--orange));
+    z-index: -1;
+    opacity: 0.18;
+    filter: blur(14px);
+    pointer-events: none;
+  }
+  .price.featured:hover { transform: translateY(-4px); box-shadow: 0 24px 70px -20px rgba(58,134,200,0.45); }
+  .price-tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    margin-bottom: 14px;
+  }
+  .price.featured .price-tag { background: var(--blue); color: #fff; }
+  .price.muted .price-tag    { background: var(--bg-soft); color: var(--muted); border: 1px solid var(--border); }
+  .price h3 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.6px; }
+  .price .amount {
+    margin: 16px 0 4px;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .price .amount .num { font-size: 48px; font-weight: 800; letter-spacing: -2px; }
+  .price .amount .cur { font-size: 24px; font-weight: 700; color: var(--muted); }
+  .price.muted .amount .num { font-size: 24px; color: var(--muted); font-weight: 700; letter-spacing: -0.4px; }
+  .price .amount-sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+  .price ul { list-style: none; padding: 0; margin: 0; }
+  .price li {
+    padding: 10px 0 10px 32px;
+    position: relative;
+    font-size: 15px;
+    color: var(--fg);
+    line-height: 1.5;
+  }
+  .price li::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 12px;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--teal-50);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2348B09B' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>");
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+  .price.muted li::before {
+    background-color: var(--bg-soft);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>");
+  }
+  .pricing-note {
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+    margin-top: 36px;
+    max-width: 540px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .pricing-note strong { color: var(--fg); font-weight: 600; }
+
+  /* ============ REASSURE ============ */
+  .reassure-section { padding-bottom: 100px; }
+  .reassure-panel {
+    max-width: 880px;
+    margin: 0 auto;
+    background: linear-gradient(135deg, var(--blue) 0%, var(--teal) 60%, var(--orange) 130%);
+    border-radius: var(--radius-xl);
+    padding: 64px 48px;
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+  }
+  .reassure-panel::before, .reassure-panel::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    pointer-events: none;
+  }
+  .reassure-panel::before { width: 360px; height: 360px; top: -120px; right: -80px; }
+  .reassure-panel::after  { width: 240px; height: 240px; bottom: -80px; left: -40px; }
+  .reassure-panel > * { position: relative; z-index: 1; }
+  .reassure-panel h2 {
+    font-size: clamp(28px, 4vw, 38px);
+    letter-spacing: -1px;
+    margin: 0 0 16px;
+    font-weight: 800;
+  }
+  .reassure-panel p.intro { font-size: 17px; opacity: 0.92; margin: 0 0 32px; max-width: 560px; }
+  .reassure-list {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 36px;
+  }
+  .reassure-item {
+    background: rgba(255,255,255,0.13);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.22);
+    padding: 22px 20px;
+    border-radius: 16px;
+    font-size: 14.5px;
+    font-weight: 500;
+    line-height: 1.5;
+    transition: all 0.25s ease;
+  }
+  .reassure-item:hover {
+    background: rgba(255,255,255,0.18);
+    transform: translateY(-2px);
+    border-color: rgba(255,255,255,0.35);
+  }
+  .reassure-item .ico {
+    display: inline-flex;
+    width: 42px; height: 42px;
+    align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 12px;
+    margin-bottom: 16px;
+  }
+  .reassure-item .ico svg {
+    width: 22px; height: 22px;
+    stroke: #fff;
+  }
+  .reassure-item h5 {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+  }
+  .reassure-item p { margin: 0; font-size: 14px; opacity: 0.95; line-height: 1.5; }
+  .reassure-link {
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.4);
+    background: rgba(255,255,255,0.1);
+    padding: 12px 22px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 14px;
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    transition: all 0.2s;
+  }
+  .reassure-link:hover { background: rgba(255,255,255,0.2); text-decoration: none; transform: translateY(-1px); }
+
+  /* ============ CONTACT ============ */
+  .contact-panel {
     max-width: 720px;
     margin: 0 auto;
-    padding: 48px 24px;
-  }
-  header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 32px;
-  }
-  .logo {
-    width: 56px;
-    height: 56px;
-    border-radius: 16px;
-    background: var(--accent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    font-weight: 800;
-    font-size: 28px;
-    letter-spacing: -1px;
-  }
-  h1 { margin: 0; font-size: 28px; letter-spacing: -0.5px; }
-  p.tag { margin: 4px 0 0; color: var(--muted); font-size: 15px; }
-  nav { display: grid; gap: 12px; margin-top: 24px; }
-  nav a {
-    display: block;
-    padding: 20px;
+    text-align: center;
+    background: #fff;
     border: 1px solid var(--border);
-    border-radius: 12px;
-    text-decoration: none;
-    color: var(--fg);
-    transition: border-color 0.15s ease, transform 0.15s ease;
+    border-radius: var(--radius-xl);
+    padding: 56px 40px;
+    box-shadow: var(--shadow-md);
+    position: relative;
+    overflow: hidden;
   }
-  nav a:hover { border-color: var(--accent); transform: translateY(-1px); }
-  nav a strong { display: block; font-size: 17px; }
-  nav a span { color: var(--muted); font-size: 14px; }
-  footer { margin-top: 48px; color: var(--muted); font-size: 13px; text-align: center; }
+  .contact-panel::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: linear-gradient(135deg, var(--blue), var(--pink), var(--orange), var(--teal));
+    z-index: -1;
+    border-radius: var(--radius-xl);
+    opacity: 0.4;
+    filter: blur(20px);
+  }
+  .contact-panel h2 {
+    font-size: clamp(26px, 3.6vw, 36px);
+    letter-spacing: -0.8px;
+    margin: 0 0 14px;
+    font-weight: 800;
+  }
+  .contact-panel p { color: var(--muted); font-size: 17px; margin: 0 auto 28px; max-width: 480px; }
+  .contact-panel .btn-primary { background: linear-gradient(135deg, var(--blue) 0%, var(--teal) 100%); }
+
+  /* ============ FOOTER ============ */
+  footer {
+    border-top: 1px solid var(--border);
+    background: var(--bg-soft);
+    padding: 48px 24px 32px;
+  }
+  .footer-inner {
+    max-width: 1160px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: center;
+  }
+  .footer-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--fg);
+  }
+  .footer-brand img {
+    width: 36px;
+    height: 36px;
+  }
+  .footer-brand .name { font-weight: 700; font-size: 16px; }
+  .footer-brand .tag { color: var(--muted); font-size: 13px; }
+  .footer-links { display: flex; gap: 24px; }
+  .footer-links a { color: var(--muted); font-size: 14px; font-weight: 500; }
+  .footer-links a:hover { color: var(--fg); text-decoration: none; }
+  .footer-bottom {
+    max-width: 1160px;
+    margin: 32px auto 0;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 13px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  /* ============ i18n ============ */
+  .t-en { display: none; }
+  html[lang="en"] .t-en { display: inline; }
+  html[lang="en"] .t-sr { display: none; }
+
+  /* ============ REVEAL ON SCROLL ============ */
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reveal.in {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width: 880px) {
+    .nav-links { display: none; }
+    .grid-3, .why-grid, .pricing-grid { grid-template-columns: 1fr; }
+    .reassure-list { grid-template-columns: 1fr; }
+    .steps { grid-template-columns: repeat(2, 1fr); gap: 28px 16px; }
+    .steps::before { display: none; }
+    .container { padding: 72px 20px; }
+    .hero { padding: 60px 20px 80px; }
+    .reassure-panel { padding: 48px 28px; }
+    .contact-panel { padding: 44px 28px; }
+    .footer-inner { grid-template-columns: 1fr; text-align: center; justify-items: center; }
+    .footer-bottom { justify-content: center; text-align: center; }
+  }
+  @media (max-width: 480px) {
+    .steps { grid-template-columns: 1fr; }
+  }
+
+  /* ============ FOCUS ============ */
+  .btn:focus-visible,
+  .lang-switch button:focus-visible,
+  .nav-links a:focus-visible,
+  .reassure-link:focus-visible,
+  .footer-links a:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 3px;
+    border-radius: 999px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .blob,
+    .gradient-text,
+    .badge .dot { animation: none !important; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    html { scroll-behavior: auto; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <div class="logo">K</div>
-    <div>
-      <h1>Krug</h1>
-      <p class="tag">Deljenje lokacije sa porodicom i prijateljima</p>
+
+<!-- ============ TOP BAR ============ -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html">
+      <img src="logo.svg" alt="Krug logo" width="36" height="36">
+      <span>Krug</span>
+    </a>
+    <div class="nav-right">
+      <nav class="nav-links">
+        <a href="#features">
+          <span class="t-sr">Funkcije</span><span class="t-en">Features</span>
+        </a>
+        <a href="#pricing">
+          <span class="t-sr">Cene</span><span class="t-en">Pricing</span>
+        </a>
+        <a href="privacy.html">
+          <span class="t-sr">Privatnost</span><span class="t-en">Privacy</span>
+        </a>
+      </nav>
+      <div class="lang-switch" role="tablist" aria-label="Language">
+        <button type="button" data-lang="sr" class="active">SR</button>
+        <button type="button" data-lang="en">EN</button>
+      </div>
     </div>
-  </header>
+  </div>
+</div>
 
-  <nav>
-    <a href="privacy.html">
-      <strong>Politika privatnosti</strong>
-      <span>Koje podatke prikupljamo, gde ih čuvamo i vaša prava</span>
-    </a>
-    <a href="terms.html">
-      <strong>Uslovi korišćenja</strong>
-      <span>Pravila i uslovi pod kojima koristite Krug</span>
-    </a>
-  </nav>
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="hero-bg" aria-hidden="true">
+    <div class="blob blob-blue"></div>
+    <div class="blob blob-pink"></div>
+    <div class="blob blob-teal"></div>
+    <div class="blob blob-orange"></div>
+  </div>
+  <div class="hero-inner">
+    <div class="hero-logo-wrap"><svg class="hero-logo" viewBox="0 0 911.83 909.26" width="128" height="128" role="img" aria-label="Krug logo" xmlns="http://www.w3.org/2000/svg">
+      <g class="person person-top">
+        <path fill="#3A86C8" d="M256.62,256.45c2.07-3.81,3.37-7.49,5.72-10.29,13.56-16.2,29.67-29.59,47-41.55a366.46,366.46,0,0,1,89.92-45.26c5.9-2,6.75-1.53,8.89,4.67,10.57,30.48,30.75,51.52,61.25,62.57,49.11,17.78,105.22-9.22,122.71-58.74,4.1-11.63,4.2-11.63,15.63-7.61,40.81,14.36,78.31,34.66,111.17,63,7.78,6.7,14.74,14.45,21.5,22.22,5.76,6.61,5.1,12.36-1.19,18.41q-17.64,17-35.44,33.8c-5.24,5-10,4.84-15.78-.43-18.69-16.93-38.9-31.67-61.67-42.69-12.76-6.17-12.64-6.08-19.87,6.07-18.3,30.78-45.27,49.63-80.3,56.12-44.61,8.27-82.33-5.78-113.35-38.1-7.05-7.35-12.44-16.38-18-25-2.27-3.52-4.06-4.5-7.94-3-21.16,8.46-40.31,20.33-58.29,34.18-5.4,4.17-10.5,8.71-15.8,13-5.48,4.45-10.06,4.59-15.17,0q-18.15-16.41-36-33.19C259.54,262.59,258.45,259.49,256.62,256.45Z" transform="translate(-44.8 -47.77)"/>
+        <path fill="#3A86C8" d="M581,130.71c1.82,39.11-25.22,70.39-56,80.07-37.8,11.87-77.56-5.37-96.05-40.85a85.1,85.1,0,0,1-9-30.25C415,96.59,445.17,57.27,484.47,49.42c33.59-6.72,70.1,7.1,87.61,41.16A80,80,0,0,1,581,130.71Z" transform="translate(-44.8 -47.77)"/>
+      </g>
+      <g class="person person-bottom">
+        <path fill="#F3B250" d="M745.38,754.92c-2.42,4-4.11,8-6.81,11.09-15.5,17.7-34.18,31.6-54.08,43.88a373.87,373.87,0,0,1-81.86,37.54c-6.61,2.14-7.27,1.6-9.51-5.06-11.62-34.56-34.89-57.47-70.39-65.67-47.82-11.05-95.66,13.51-113.12,61.93-.62,1.72-1.29,3.44-1.74,5.2-1.12,4.37-3.59,5.36-7.82,3.94A382.09,382.09,0,0,1,318.82,810c-20.29-12.63-39.12-27.13-55.18-45-7.76-8.62-7.75-13.32.33-21.35q16.84-16.71,34-33.1c5.18-5,10.23-5,15.41-.21a260.94,260.94,0,0,0,54.28,38.74c6.29,3.36,12.91,6.06,19.33,9.18,4,1.94,6.25.58,8.56-3C415.85,724,443.74,703,480.65,695.89c33.69-6.5,64.2,2.44,91.78,22.22a126.13,126.13,0,0,1,34.5,37c2.58,4.22,5.24,4.7,9.45,2.94,23.23-9.71,44.16-23.1,63.36-39.3,3.18-2.68,6.24-5.5,9.35-8.26,5-4.49,9.86-4.74,14.65-.17q18.59,17.79,36.82,36C742.6,748.36,743.53,751.51,745.38,754.92Z" transform="translate(-44.8 -47.77)"/>
+        <path fill="#F3B250" d="M420,874c-.57-36.58,26-72.67,64.43-80.65,41.66-8.66,84.64,18.32,94.05,60.13,6.91,30.68.33,58.19-22.53,80.63-12.41,12.19-27.47,19.29-44.91,22-36.65,5.71-71-16.86-84.22-47.82A81.58,81.58,0,0,1,420,874Z" transform="translate(-44.8 -47.77)"/>
+      </g>
+      <g class="person person-left">
+        <path fill="#E46B8F" d="M290.14,319.18c-2.22,3.26-4,6.52-6.4,9.33-15.95,18.92-29.71,39.18-39.37,62.11-2,4.63-1.08,6.91,3.1,9.67,31.72,21,50.26,50.66,54.16,88.26,4.35,42-8.84,78.38-40.35,107.33a107.59,107.59,0,0,1-14.65,11.18c-3.75,2.41-4.22,4.68-2.56,8.63,10.43,24.76,25.11,46.81,42.37,67.25,4.43,5.25,4.22,8.88-.73,13.84q-16.45,16.43-33,32.78c-8.79,8.69-13.68,8.84-23,.29-13.45-12.32-24.81-26.46-35.11-41.45a342.21,342.21,0,0,1-41.42-82.62c-2.31-6.68-1.88-7.23,5-9.55,39.26-13.3,61.87-41,67.95-81.5C233.22,467.18,204,421,157.73,407.58c-6.1-1.77-6.62-2.64-4.51-8.34,15.52-41.87,37.91-79.47,69.6-111.22a107.11,107.11,0,0,1,11.63-10.19c5.44-4.08,10.39-3.8,15.4.75q18.32,16.6,36.31,33.55C287.81,313.69,288.53,316.24,290.14,319.18Z" transform="translate(-44.8 -47.77)"/>
+        <path fill="#E46B8F" d="M210,501.48c.38,46.12-37,83.16-83.64,83.1-45.15-.06-80.22-36.23-81.53-80.26-1.27-43.08,33.05-84.05,82-84.18S210.75,459.36,210,501.48Z" transform="translate(-44.8 -47.77)"/>
+      </g>
+      <g class="person person-right">
+        <path fill="#48B09B" d="M759.63,272.55c4,2.39,8.13,3.82,10.79,6.62,11.23,11.8,22.78,23.43,32.83,36.21,19.69,25,34.23,53.07,45.18,83,2.18,5.94,2,6.27-3.8,8.09C810,417.27,788,440.69,778.32,475.16a96.81,96.81,0,0,0,61.07,117.75c1.57.55,3.18,1,4.78,1.41,6.37,1.74,7.46,3.13,5,9.44-6.51,16.54-12.6,33.31-20.37,49.25a270.42,270.42,0,0,1-46,66.5c-4.32,4.6-9,8.84-13.81,13-5.56,4.87-11.05,4.66-16.41-.5q-17.46-16.78-34.76-33.74c-6.55-6.41-6.54-9.85-.51-17a260.26,260.26,0,0,0,35.22-53.08c2.05-4.17,3.61-8.58,5.69-12.73,1.86-3.73.85-6-2.5-8.29-26.14-18-43.58-42.42-50.66-73.33-11.69-51,4.48-93,43.26-127a40.17,40.17,0,0,1,7.14-5.45c4.29-2.3,4.17-5.26,2.49-9.13-9.53-22-23-41.55-38.18-60-.32-.39-.69-.73-1-1.1-9.51-10.65-9.48-13.19.66-23.07s20.28-19.77,30.63-29.43C752.57,276.31,756,274.85,759.63,272.55Z" transform="translate(-44.8 -47.77)"/>
+        <path fill="#48B09B" d="M877.37,582.07c-47.54-1.62-81.26-31.74-85-72.74-4.94-53.79,38.09-91,82.9-90.19,46.19.87,76.85,33.6,80.85,72.81,2.61,25.53-4.07,48.16-22.83,66.55C917.12,574.32,897.3,580.93,877.37,582.07Z" transform="translate(-44.8 -47.77)"/>
+      </g>
+    </svg></div>
+    <div class="badge">
+      <span class="dot"></span>
+      <span class="t-sr">Trenutno u zatvorenoj beti</span>
+      <span class="t-en">Currently in closed beta</span>
+    </div>
+    <h1>
+      <span class="t-sr">Tvoji ljudi. Tvoj krug.<br><span class="gradient-text">Uvek blizu.</span></span>
+      <span class="t-en">Your people. Your circle.<br><span class="gradient-text">Always close.</span></span>
+    </h1>
+    <p class="lede">
+      <span class="t-sr">Krug je privatna aplikacija za deljenje lokacije sa porodicom i bliskim prijateljima. Bez reklama. Bez prodaje podataka. Bez društvene mreže.</span>
+      <span class="t-en">Krug is a private location-sharing app for family and close friends. No ads. No data selling. No social feed.</span>
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary disabled" aria-disabled="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.609 1.814 13.79 12 3.61 22.186a.996.996 0 0 1-.61-.92V2.734a1 1 0 0 1 .609-.92zm10.89 10.893 2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.198 2.807 1.626a1 1 0 0 1 0 1.73l-2.808 1.626L15.206 12l2.492-2.491zM5.864 2.658 16.802 8.99l-2.302 2.303L5.864 2.658z"/></svg>
+        <span class="t-sr">Uskoro na Google Play</span>
+        <span class="t-en">Coming soon to Google Play</span>
+      </a>
+      <a class="btn btn-secondary" href="#pricing">
+        <span class="t-sr">Pogledaj cene</span>
+        <span class="t-en">See pricing</span>
+      </a>
+    </div>
+  </div>
+</section>
 
-  <footer>
-    &copy; Krug · <a href="mailto:aleksandarr@gmail.com" style="color:var(--muted)">Kontakt</a>
-  </footer>
-</main>
+<!-- ============ FEATURES ============ -->
+<section id="features" class="container">
+  <div class="section-head reveal">
+    <span class="eyebrow">
+      <span class="t-sr">Funkcije</span><span class="t-en">Features</span>
+    </span>
+    <h2>
+      <span class="t-sr">Tri stvari. Dobro odrađene.</span>
+      <span class="t-en">Three things. Done well.</span>
+    </h2>
+    <p>
+      <span class="t-sr">Bez funkcija koje su tu samo da pune ekran. Samo ono što stvarno koristiš.</span>
+      <span class="t-en">No features just to fill the screen. Only what you'll actually use.</span>
+    </p>
+  </div>
+
+  <div class="grid-3">
+    <div class="feature f-blue reveal">
+      <div class="ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      </div>
+      <h3>
+        <span class="t-sr">Uživo lokacija</span>
+        <span class="t-en">Live location</span>
+      </h3>
+      <p>
+        <span class="t-sr">Vidi gde su tvoji ljudi u realnom vremenu na preciznoj Mapbox mapi. Uključuje status baterije i putnu distancu.</span>
+        <span class="t-en">See where your people are in real time on an accurate Mapbox map. Includes battery status and driving distance.</span>
+      </p>
+    </div>
+
+    <div class="feature f-pink reveal">
+      <div class="ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <h3>
+        <span class="t-sr">SOS dugme</span>
+        <span class="t-en">SOS button</span>
+      </h3>
+      <p>
+        <span class="t-sr">Jedan dodir šalje tvoju trenutnu lokaciju svim članovima kruga. Bez složenih menija u kriznoj situaciji.</span>
+        <span class="t-en">One tap sends your current location to everyone in your circle. No complex menus when it matters most.</span>
+      </p>
+    </div>
+
+    <div class="feature f-teal reveal">
+      <div class="ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </div>
+      <h3>
+        <span class="t-sr">Privatni krugovi</span>
+        <span class="t-en">Private circles</span>
+      </h3>
+      <p>
+        <span class="t-sr">Pravi posebne krugove za porodicu i prijatelje. Pozovi ljude jednostavnim kodom. Nema javnog profila, nema feed-a.</span>
+        <span class="t-en">Build separate circles for family and friends. Invite with a simple code. No public profile, no social feed.</span>
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section class="container how-section">
+  <div class="section-head reveal">
+    <span class="eyebrow">
+      <span class="t-sr">Kako radi</span><span class="t-en">How it works</span>
+    </span>
+    <h2>
+      <span class="t-sr">Četiri koraka do prvog kruga.</span>
+      <span class="t-en">Four steps to your first circle.</span>
+    </h2>
+    <p>
+      <span class="t-sr">Bez složenih podešavanja, bez pravljenja javnog profila. Direktno na cilj.</span>
+      <span class="t-en">No complex setup, no public profile. Straight to the point.</span>
+    </p>
+  </div>
+
+  <div class="steps">
+    <div class="step reveal">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h4><span class="t-sr">Instaliraj i prijavi se</span><span class="t-en">Install &amp; sign in</span></h4>
+        <p><span class="t-sr">Preuzmi sa Google Play-a, prijavi se Google nalogom ili anonimno. Bez forme, bez SMS verifikacije.</span><span class="t-en">Download from Google Play, sign in with Google or anonymously. No forms, no SMS verification.</span></p>
+      </div>
+    </div>
+    <div class="step reveal">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h4><span class="t-sr">Napravi krug</span><span class="t-en">Create your circle</span></h4>
+        <p><span class="t-sr">Imenuj krug („Porodica", „Prijatelji"), izaberi boju. Tvoj krug, tvoja pravila.</span><span class="t-en">Name your circle ("Family", "Friends"), pick a color. Your circle, your rules.</span></p>
+      </div>
+    </div>
+    <div class="step reveal">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h4><span class="t-sr">Pozovi članove</span><span class="t-en">Invite members</span></h4>
+        <p><span class="t-sr">Pošalji 6-cifren kod ili link. Pozvani ne vide podatke pre nego što prihvate poziv.</span><span class="t-en">Share a 6-digit code or link. Invitees see no data until they accept.</span></p>
+      </div>
+    </div>
+    <div class="step reveal">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h4><span class="t-sr">Vidite se na mapi</span><span class="t-en">See each other on the map</span></h4>
+        <p><span class="t-sr">Lokacija u realnom vremenu, status baterije, putna distanca. SOS uvek na dohvat ruke.</span><span class="t-en">Real-time location, battery status, driving distance. SOS always at hand.</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHY KRUG ============ -->
+<section class="why">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow">
+        <span class="t-sr">Zašto Krug</span><span class="t-en">Why Krug</span>
+      </span>
+      <h2>
+        <span class="t-sr">Deljenje lokacije bez kompromisa po privatnosti.</span>
+        <span class="t-en">Location sharing without privacy compromises.</span>
+      </h2>
+      <p>
+        <span class="t-sr">Pravljen u Srbiji, hostovan u EU, bez monetizacije tvojih kretanja.</span>
+        <span class="t-en">Built in Serbia, hosted in the EU, never monetizing your movement.</span>
+      </p>
+    </div>
+
+    <div class="why-grid">
+      <div class="why-card reveal">
+        <div class="ico">01</div>
+        <div>
+          <h4>
+            <span class="t-sr">Privacy-first</span>
+            <span class="t-en">Privacy-first</span>
+          </h4>
+          <p>
+            <span class="t-sr">Lokacija se čuva samo dok je deliš. Vidljiva je isključivo članovima tvog kruga. Nikome više.</span>
+            <span class="t-en">Your location is stored only while you share it. Visible only to your circle. No one else.</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="why-card reveal">
+        <div class="ico">02</div>
+        <div>
+          <h4>
+            <span class="t-sr">Bez reklama, bez prodaje podataka</span>
+            <span class="t-en">No ads, no data selling</span>
+          </h4>
+          <p>
+            <span class="t-sr">Krug nije ad-tech biznis. Tvoja kretanja nisu proizvod koji se prodaje brokerima.</span>
+            <span class="t-en">Krug is not an ad-tech business. Your movements aren't a product sold to data brokers.</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="why-card reveal">
+        <div class="ico">03</div>
+        <div>
+          <h4>
+            <span class="t-sr">EU hosting</span>
+            <span class="t-en">EU hosting</span>
+          </h4>
+          <p>
+            <span class="t-sr">Podaci se čuvaju na Firebase serverima u Evropskoj uniji (Frankfurt, Belgija). Ne napuštaju EU.</span>
+            <span class="t-en">Data is stored on Firebase servers in the EU (Frankfurt, Belgium). Never leaves the EU.</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="why-card reveal">
+        <div class="ico">04</div>
+        <div>
+          <h4>
+            <span class="t-sr">Srpski first-class</span>
+            <span class="t-en">Serbian first-class</span>
+          </h4>
+          <p>
+            <span class="t-sr">Aplikacija, podrška i pravna dokumenta: sve prvo na srpskom. English je tu, ali srpski nije naknadna ideja.</span>
+            <span class="t-en">App, support, and legal docs: all written in Serbian first. English is here, but Serbian isn't an afterthought.</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRICING ============ -->
+<section id="pricing" class="container">
+  <div class="section-head reveal">
+    <span class="eyebrow">
+      <span class="t-sr">Cene</span><span class="t-en">Pricing</span>
+    </span>
+    <h2>
+      <span class="t-sr">Verzija 1. Sve besplatno.</span>
+      <span class="t-en">Version 1. Everything free.</span>
+    </h2>
+    <p>
+      <span class="t-sr">Premium funkcije stižu u v1.1. Sve safety funkcije ostaju zauvek besplatne.</span>
+      <span class="t-en">Premium features arrive in v1.1. All safety features stay free forever.</span>
+    </p>
+  </div>
+
+  <div class="pricing-grid">
+    <div class="price featured reveal">
+      <span class="price-tag">
+        <span class="t-sr">Trenutno</span><span class="t-en">Available now</span>
+      </span>
+      <h3>Free</h3>
+      <div class="amount">
+        <span class="num">0</span>
+        <span class="cur">€</span>
+      </div>
+      <div class="amount-sub">
+        <span class="t-sr">zauvek, za sve v1 korisnike</span>
+        <span class="t-en">forever, for all v1 users</span>
+      </div>
+      <ul>
+        <li><span class="t-sr">1 krug, do 6 članova</span><span class="t-en">1 circle, up to 6 members</span></li>
+        <li><span class="t-sr">Uživo lokacija sa statusom baterije</span><span class="t-en">Live location with battery status</span></li>
+        <li><span class="t-sr">Putna distanca (vožnja)</span><span class="t-en">Driving distance</span></li>
+        <li><span class="t-sr">SOS lokalno: push primaocu sa otvorenom app</span><span class="t-en">Local SOS: push to recipients with the app open</span></li>
+        <li><span class="t-sr">Pametno praćenje aktivnosti (manje praznjenje baterije)</span><span class="t-en">Activity-aware tracking (less battery drain)</span></li>
+        <li><span class="t-sr">Bez reklama, zauvek</span><span class="t-en">No ads, ever</span></li>
+      </ul>
+    </div>
+
+    <div class="price muted reveal">
+      <span class="price-tag">
+        <span class="t-sr">Stiže u v1.1</span><span class="t-en">Coming in v1.1</span>
+      </span>
+      <h3>Premium</h3>
+      <div class="amount">
+        <span class="num">
+          <span class="t-sr">Cena uskoro</span>
+          <span class="t-en">Price soon</span>
+        </span>
+      </div>
+      <div class="amount-sub">
+        <span class="t-sr">pretplata preko Google Play</span>
+        <span class="t-en">subscription via Google Play</span>
+      </div>
+      <ul>
+        <li><span class="t-sr">Neograničeno krugova i članova</span><span class="t-en">Unlimited circles and members</span></li>
+        <li><span class="t-sr">SOS push i kad je app primaoca zatvorena</span><span class="t-en">SOS push even when the recipient's app is closed</span></li>
+        <li><span class="t-sr">Mesta i geofence („Marko stigao u školu")</span><span class="t-en">Places &amp; geofence ("Marko arrived at school")</span></li>
+        <li><span class="t-sr">Istorija lokacije 30 dana</span><span class="t-en">30-day location history</span></li>
+        <li><span class="t-sr">Izveštaji putovanja (km, prosečna brzina)</span><span class="t-en">Trip reports (km, average speed)</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="pricing-note">
+    <span class="t-sr"><strong>SOS nije iza paywall-a.</strong> Sve bezbednosne funkcije ostaju zauvek besplatne, bez obzira na plan.</span>
+    <span class="t-en"><strong>SOS is never behind a paywall.</strong> All safety features stay free forever, regardless of plan.</span>
+  </p>
+</section>
+
+<!-- ============ REASSURANCE ============ -->
+<section class="container reassure-section">
+  <div class="reassure-panel reveal">
+    <h2>
+      <span class="t-sr">Tvoji podaci, tvoja kontrola.</span>
+      <span class="t-en">Your data, your control.</span>
+    </h2>
+    <p class="intro">
+      <span class="t-sr">Krug je dizajniran tako da ti, ne mi, držiš sve poluge. Bez skrivenih podešavanja, bez „pristajem na sve"  ekrana.</span>
+      <span class="t-en">Krug is designed so that you, not us, hold every lever. No hidden settings, no "agree to everything" screens.</span>
+    </p>
+    <div class="reassure-list">
+      <div class="reassure-item">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </span>
+        <h5>
+          <span class="t-sr">Transparentno</span>
+          <span class="t-en">Transparent</span>
+        </h5>
+        <p>
+          <span class="t-sr">Vidiš ko vidi tebe, u svakom trenutku.</span>
+          <span class="t-en">You see who can see you, at every moment.</span>
+        </p>
+      </div>
+      <div class="reassure-item">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="5" width="22" height="14" rx="7"/><circle cx="8" cy="12" r="3" fill="currentColor" stroke="none"/></svg>
+        </span>
+        <h5>
+          <span class="t-sr">Pauziraj odmah</span>
+          <span class="t-en">Pause instantly</span>
+        </h5>
+        <p>
+          <span class="t-sr">Isključi deljenje lokacije jednim tapom.</span>
+          <span class="t-en">Turn off location sharing with a single tap.</span>
+        </p>
+      </div>
+      <div class="reassure-item">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+        </span>
+        <h5>
+          <span class="t-sr">Briši kad god</span>
+          <span class="t-en">Delete anytime</span>
+        </h5>
+        <p>
+          <span class="t-sr">Briši nalog kad god želiš. Sve se obriše sa naših servera.</span>
+          <span class="t-en">Delete your account anytime. Everything wiped from our servers.</span>
+        </p>
+      </div>
+    </div>
+    <a class="reassure-link" href="privacy.html">
+      <span class="t-sr">Pročitaj Politiku privatnosti</span>
+      <span class="t-en">Read the Privacy Policy</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </a>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img src="logo.svg" alt="" width="32" height="32">
+      <div>
+        <div class="name">Krug</div>
+        <div class="tag">
+          <span class="t-sr">Privatno deljenje lokacije, pravljeno u Srbiji</span>
+          <span class="t-en">Private location sharing, made in Serbia</span>
+        </div>
+      </div>
+    </div>
+    <div class="footer-links">
+      <a href="privacy.html">
+        <span class="t-sr">Privatnost</span><span class="t-en">Privacy</span>
+      </a>
+      <a href="terms.html">
+        <span class="t-sr">Uslovi</span><span class="t-en">Terms</span>
+      </a>
+      <a href="mailto:aleksandarr@gmail.com">
+        <span class="t-sr">Kontakt</span><span class="t-en">Contact</span>
+      </a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div>© 2026 Krug</div>
+    <div>
+      <span class="t-sr">Pravljeno u Beogradu · Hostovano u EU</span>
+      <span class="t-en">Made in Belgrade · Hosted in the EU</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // ============ LANGUAGE SWITCH ============
+  var STORAGE_KEY = "krug-lang";
+  var html = document.documentElement;
+  var buttons = document.querySelectorAll(".lang-switch button");
+
+  function setLang(lang) {
+    if (lang !== "sr" && lang !== "en") lang = "sr";
+    html.setAttribute("lang", lang);
+    buttons.forEach(function (b) {
+      b.classList.toggle("active", b.dataset.lang === lang);
+    });
+    try { localStorage.setItem(STORAGE_KEY, lang); } catch (e) {}
+  }
+
+  var urlLang = new URLSearchParams(location.search).get("lang");
+  var saved = null;
+  try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+  var browser = (navigator.language || "sr").toLowerCase().startsWith("sr") ? "sr" : "en";
+  setLang(urlLang || saved || browser);
+
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () { setLang(b.dataset.lang); });
+  });
+
+  // ============ HERO LOGO RANDOM GATHER ============
+  var heroLogo = document.querySelector(".hero-logo");
+  if (heroLogo) {
+    var persons = heroLogo.querySelectorAll(".person");
+    // Scale gather distance to viewport so it looks right on phone & desktop.
+    var vw       = Math.max(window.innerWidth || 0, document.documentElement.clientWidth || 0);
+    var vh       = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
+    var vmin     = Math.min(vw, vh);
+    var minDist  = Math.max(120, vmin * 0.35);   // closer in on phones
+    var maxDist  = Math.max(220, vmin * 0.70);
+    persons.forEach(function (p) {
+      var angle    = Math.random() * Math.PI * 2;
+      var distance = minDist + Math.random() * (maxDist - minDist);
+      var x        = Math.cos(angle) * distance;
+      var y        = Math.sin(angle) * distance;
+      var rot      = (Math.random() - 0.5) * 540;     // -270 to +270 deg tumble
+      var scale    = 0.35 + Math.random() * 0.4;      // 0.35 to 0.75
+      var delay    = Math.random() * 0.35;            // 0 to 0.35 s
+      p.style.setProperty("--start-x", x.toFixed(1) + "px");
+      p.style.setProperty("--start-y", y.toFixed(1) + "px");
+      p.style.setProperty("--start-rot", rot.toFixed(1) + "deg");
+      p.style.setProperty("--start-scale", scale.toFixed(2));
+      p.style.setProperty("--delay", delay.toFixed(2) + "s");
+    });
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { heroLogo.classList.add("ready"); });
+    });
+  }
+
+  // ============ REVEAL ON SCROLL ============
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          e.target.classList.add("in");
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -40px 0px" });
+    document.querySelectorAll(".reveal").forEach(function (el) { io.observe(el); });
+  } else {
+    document.querySelectorAll(".reveal").forEach(function (el) { el.classList.add("in"); });
+  }
+})();
+</script>
+
 </body>
 </html>

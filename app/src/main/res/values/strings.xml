@@ -30,7 +30,7 @@
     <string name="onb_bg_open_settings">Open system settings</string>
 
     <string name="activity_rec_title">Battery-smart activity tracking</string>
-    <string name="activity_rec_body">Krug can detect when you\'re walking, driving, or still — and adjust how often it shares your location. Better accuracy in motion, longer battery when you\'re parked.</string>
+    <string name="activity_rec_body">Krug can detect when you\'re walking, driving, or still, and adjust how often it shares your location. Better accuracy in motion, longer battery when you\'re parked.</string>
     <string name="activity_rec_allow">Allow</string>
     <string name="activity_rec_not_now">Not now</string>
 
@@ -234,7 +234,7 @@
 
     <!-- Permission banner -->
     <string name="permission_banner_missing">Permission missing</string>
-    <string name="permission_banner_body">%1$s — circle members can\'t see your location. Tap for settings.</string>
+    <string name="permission_banner_body">%1$s. Circle members can\'t see your location. Tap for settings.</string>
     <string name="permission_missing_location">Location</string>
     <string name="permission_missing_location_background">Background location</string>
     <string name="permission_missing_notifications">Notifications</string>
