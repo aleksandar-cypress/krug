@@ -2,13 +2,151 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-23, kraj trinaeste sesije — English lokalizacija + polish v2 + map camera fix)
+## Gde smo stali (2026-06-25, kraj četrnaeste sesije — Faza 2 Play Store priprema: release signing + smoke test + bug fix-evi)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `bdaa45d`.
-Firebase rules: Firestore + RTDB deployovane (RTDB rules sadrže `bearing` + `speed` validatore).
-**Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — sve tri sa najnovijim build-om.
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `dbc3fce`.
+Firebase: Firestore + RTDB rules deployovane. **Release SHA-1 dodat u Firebase Console** (`21:6A:94:24:64:98:08:4A:42:02:D6:4F:13:77:40:26:3C:A8:E0:36`) — Google sign-in radi i u release build-u.
+**Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — release build verifikovan na S24 (`R5CWC1F9FND`).
 
-**Health stanja**: build i dalje uredan (debug + release), 36 unit testova zelenih, FGS + Crashlytics arhitektura nepromenjena. Baseline profile aktivan (cold-start hot path-ovi za ART precompile).
+**Health stanja**: debug + release oba build-uju uredno, 36 unit testova zelenih. **Prvi signed AAB napravljen** (34.5 MB, jarsigner verified). Smoke test na S24 prošao — sign-in, mapa, Firebase, Mapbox, baseline profile sve OK pod R8 minify-jem.
+
+## Četrnaesta sesija (2026-06-25) — Faza 2 Play Store priprema (release signing + 2 bug fix-a + strateške odluke)
+
+Sesija fokusirana na pripremi za Play Store internal beta. Iz Faze 2 plana završeno: **#1 signing keystore + signed AAB** + smoke test. Otkriveni i fix-ovani usput dva bug-a (map follow + Activity Recognition rationale). Strateške odluke za pricing + i18n + domain.
+
+### A) Release signing + AAB pipeline
+
+- **Keystore generisan**: `release-keystore.jks` (PKCS12, RSA 2048, 25 god validity, `CN=Aleksandar Vasilic, O=Krug, L=Cacak, C=RS`, alias `krug-release`)
+- Lozinka i credentials sačuvani van git-a (`release-keystore-credentials.txt` gitignored — TODO ručno backup u mail/Notes, posle obrisati)
+- SHA-1: `21:6A:94:24:64:98:08:4A:42:02:D6:4F:13:77:40:26:3C:A8:E0:36`
+- SHA-256: `67:FE:3A:7B:7C:43:6F:FB:DC:E0:97:EC:F0:87:22:38:CD:CA:41:E1:C5:FB:E1:31:8A:A5:5F:09:49:5F:88:6B`
+- **`app/build.gradle.kts`**: čita `KRUG_KEYSTORE_PATH/PASSWORD/KEY_ALIAS/KEY_PASSWORD` iz `local.properties` (gitignored), gracefully fallback-uje na unsigned ako keystore fali (drugi developer / CI)
+- **`baseline-prof.txt` format fix**: AGP 8.7 wildcard expansion odbijao `HSP` flag-ove na class-only linijama — skinuti flagovi sa class refs, zadržani na method linijama
+- **`google-services.json` updated** — release SHA-1 dodat u Firebase Console, novi json downloadovan i ubačen u `app/`
+- **Prvi signed AAB**: `./gradlew :app:bundleRelease` → `app-release.aab` (34.5 MB). `jarsigner -verify` prošao, cert SHA-1 inside AAB-a se poklapa sa keystore-om
+- **Smoke test na S24** kroz `bundletool build-apks --connected-device` + `install-apks`: app proces pokrenut, Firebase Crashlytics/Sessions inicijalizovani, Mapbox native libs (`libmapbox-maps.so`, `libmapbox-common.so`) učitani, baseline profile installer odradio, **nema FATAL/ClassNotFoundException** → ProGuard pravila pokrivaju ceo stack (Firebase + Mapbox + Compose + Hilt). Google sign-in radi posle SHA-1 dodavanja u Firebase Console.
+
+### B) Bug fix-evi (oba commit-ovana)
+
+**1. Map camera follow focused member** (commit `4b9a371`)
+- Bug: kad je član u kretanju i app ode u background → posle resume-a fresh location stigne ali kamera ostaje na staroj poziciji, pin "izvlači" iz vidnog polja.
+- Fix: `MapViewHolder.easeFollow(lng, lat)` (pan-only easeTo 800ms, bez zoom change-a) + novi `LaunchedEffect` koji prati `updatedAt` fokusiranog člana dok je `detailUid != null`. Reset baseline-a na detailUid change. Ne sukobljava se sa postojećim `pendingRefocus` (refresh button) path-om.
+
+**2. Activity Recognition rationale dialog** (commit `dbc3fce`)
+- Bug: pri prvom ulasku na Mapu, system permission dialog za `ACTIVITY_RECOGNITION` iskakao bez konteksta → user vidi golu poruku "Allow Krug to access physical activity?" bez objašnjenja zašto je tražimo.
+- Fix: brand-styled rationale dialog (`LogoBlue` gradient + `DirectionsRun` ikona) sa naslovom + body + Dozvoli/Ne sada button-ima. `LocalPrefs.activityRecPromptShown` flag sprečava re-prompt — pokazuje se jednom, posle samo kroz sistemska podešavanja.
+- Strings dodati u `values/` i `values-sr/`: `activity_rec_title/body/allow/not_now`.
+
+### C) Strateške odluke (sačuvane u memory + ovde)
+
+**Pricing & feature tier plan (free vs premium):**
+
+- **Free tier (v1 launch — sve uključeno besplatno za internal beta)**:
+  - 1 krug max, max 6 članova
+  - SOS local (recipient mora biti foreground/notification-ready)
+  - Real-time location, battery, putna distance, activity-aware tracking, polish
+- **Premium tier (planirano za v1.1+)**:
+  - Unlimited krugovi, unlimited članovi
+  - SOS background push (preko Cloud Functions — Blaze plan)
+  - Places + geofencing
+  - Location history 30 dana
+  - Trip reports
+- **Razlog**: SOS ostaje u free zbog ethical/safety razloga + Play Store guidelines (Life360 takođe drži SOS u free). 6 članova (ne 4) — prosečna porodica 4-5 ljudi, limit 4 udara u zid pre nego što user vidi vrednost. v1 launches free da skupimo signal o vrednosti pre nego što gradimo billing infra (Play Billing + paywall + premium flag + Cloud Functions = 1-2 nedelje rada + Blaze plan upgrade).
+
+**Internacionalizacija — "Krug" ostaje brand:**
+
+- Play Console podržava **per-locale store listing** (različit title + description po jeziku)
+- SR locale: čist "Krug"; EN locale: "Krug: Family Circle" ili sa explanatory tagline u opisu
+- Bez rename-a — 13 sesija rada uloženo u brand, logo, strings, repo, domain hunt. Word of mouth radi i sa meaningless brand imenima (Life360, Strava, Slack — sve "meaningless" reči koje su izgrađene kroz brand).
+- Target tržišta: SR/HR/BA/MNE/SLO (~15M govornika), diaspora (US/DE/AT/CH), sa per-locale listing-om ka ostatku sveta.
+
+**Domain odluka:**
+
+- Glavni `krug.X` domeni (.com, .app, .io, .co, .rs) svi zauzeti. `krug.com` je **Krug Champagne** (francuska kuća šampanjca, nedostupna) — različita kategorija pa nije problem za Play Store, ali bare `.com` je trajno nedostupan.
+- **Izabran: `krugapp.com`** (~$10-12/god, 100% dostupan — Verisign whois "No match" + DNS NXDOMAIN + RDAP 404 + HTTP 000 — sva 4 izvora potvrđuju)
+- Razlog vs `krug.family` (~$35/god): `.com` univerzalno prepoznatljiv, 3x jeftiniji, brand fleksibilnost (može za prijatelje/kolege/tim, ne lock-uje u "family")
+- Predložen registrar: **Porkbun** (besplatan WHOIS privacy + SSL, manje upsell-a). Backup: Namecheap.
+- TODO: korisnik kupuje, posle DNS → Firebase Hosting → deploy privacy/terms
+
+### D) Preostalo iz Faze 2
+
+- ✅ #1 Signed AAB — gotovo
+- ⏳ #2 **Data safety form** — audit kompletiran (vidi tabelu ispod), čekaš Play Console submit
+- ⏳ #3 Screenshots — TODO (4-5 listing screenshot-a po locale-u)
+- ⏳ #4 Store listing copy — TODO (short + full description sr + en)
+- ⏳ #5 Internal track upload + 5-10 testera — blokirano dok ne kupiš domain za privacy URL
+
+### E) Data safety form audit (za Play Console)
+
+Glavna tabela — šta Krug skuplja i kuda ide:
+
+| Data type (Google Play taxonomy) | Collected | Shared | Optional | Purpose | Retention |
+|---|---|---|---|---|---|
+| Name | Yes | No | No | App functionality, Account mgmt | Until account deletion |
+| Email | Yes | No | No | Firebase Auth + profile | Until account deletion |
+| User IDs (Firebase UID) | Yes | No | No | App functionality | Until account deletion |
+| Precise location (lat/lng/accuracy/bearing/speed) | Yes | Service provider (Mapbox za Directions API) | **Yes** (toggle u app-u) | App functionality (real-time location sharing) | Live overwrite, no archival |
+| Approximate location | Yes (derived) | No | Yes | App functionality | Real-time only |
+| Photos | Yes (URL ref samo) | No | Yes | Profile avatar (Google Sign-In photoUrl) | Until account deletion |
+| App interactions (Crashlytics breadcrumbs) | Yes | Yes (Google Firebase) | No | Analytics | 30+ dana |
+| Crash logs | Yes | Yes (Google Firebase) | No | Analytics | 30+ dana |
+| Diagnostics | Yes | Yes (Google) | No | Analytics | 30+ dana |
+| Device IDs (model, OS, App Check attestation) | Yes | Yes (Google, Mapbox) | No | App functionality, Fraud prevention | Until uninstall |
+| FCM token | Yes | Yes (Google FCM) | No | App functionality (planirano za push, trenutno samo storage) | Updated on app start |
+
+**NE skuplja**: phone, address, payment, health/fitness, contacts, calendar, messages, audio, files, web history, advertising IDs.
+
+**3rd party distinction**:
+- **Service providers** (data processors, ne "sharing" u Google smislu): Google (Firebase Auth/Firestore/RTDB/Crashlytics/App Check/FCM), Mapbox (Directions API + style fetch)
+- **Not shared sa**: oglašivačima, data brokerima, drugim 3rd party stranama
+
+**Korisničke kontrole**:
+- Location sharing: toggle per circle
+- Activity Recognition: sistemska permisija (može da revoke-uje)
+- Notifications: sistemska permisija
+- Account deletion: Settings → Delete Account (GDPR fan-out kroz Firestore + RTDB + Auth.delete())
+
+**Top-level toggles za Play Console**:
+- Does your app collect or share required user data? → **YES**
+- All data encrypted in transit? → **YES** (TLS preko Firebase + Mapbox HTTPS)
+- Users can request data deletion? → **YES** (Delete Account flow postoji)
+
+### F) Permissions manifest (rationale-i za Play Console)
+
+| Permission | Rationale |
+|---|---|
+| `INTERNET` | Firebase + Mapbox APIs |
+| `ACCESS_NETWORK_STATE` | Network connectivity check pre API poziva |
+| `ACCESS_FINE_LOCATION` | Real-time GPS koordinate za location sharing |
+| `ACCESS_COARSE_LOCATION` | Fallback ako GPS ne radi |
+| `ACCESS_BACKGROUND_LOCATION` | FGS LocationTrackingService update-uje lokaciju u background-u |
+| `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_LOCATION` | FGS za kontinualno location tracking |
+| `POST_NOTIFICATIONS` | SOS + location tracking ongoing notifications |
+| `VIBRATE` | SOS alarm haptic |
+| `ACTIVITY_RECOGNITION` | Activity-aware GPS profil (hodanje/vožnja/mirovanje) za bolju bateriju |
+| `USE_FULL_SCREEN_INTENT` | SOS notifikacije bude zaključan ekran (Android 14+) |
+| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | FGS reliability protiv agresivnih OEM battery optimizer-a |
+| `RECEIVE_BOOT_COMPLETED` | FGS auto-restart posle reboot-a + WorkManager keepalive |
+
+### G) Sledeća sesija — preostale Play Store stvari
+
+**Bez domain-a (možemo odmah):**
+1. **Privacy Policy + Terms draft** — markdown fajlovi u `docs/` (ili sličnom folderu), ready za deploy čim domain stigne
+2. **Store listing copy** — short description (80 chars) + full description (4000 chars max) za SR i EN locale + "What's new" za v0.1.0
+3. **Screenshots** — 4-5 listing screenshot-ova sa S24 (možda i emulator za EN locale)
+
+**Sa domain-om (kad kupiš `krugapp.com`):**
+4. DNS konfiguracija → Firebase Hosting (besplatno)
+5. Deploy privacy + terms na `krugapp.com/privacy` + `krugapp.com/terms`
+6. About ekran u app-u — proveri da link-ovi pokazuju na nove URL-ove
+7. Play Console submit svih Data Safety odgovora
+8. Internal track upload AAB-a, invite 5-10 testera
+
+**Buduće (posle Play Store launch-a):**
+- GDPR delete account flow — postoji ali audit kaže "v1 limitation server-side enforcement" → proveri da li je client-side dovoljan za Play Store policy ili treba Cloud Functions
+- Premium tier (v1.1) — Play Billing Library + paywall + premium flag + SOS background push (Cloud Functions, Blaze plan)
+
+---
 
 ## Trinaesta sesija (2026-06-23) — English lokalizacija + UI polish v2 + critical map camera bug
 
