@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ChildCare
+import androidx.compose.material.icons.outlined.DirectionsRun
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.NearMe
 import androidx.compose.material.icons.outlined.Person
@@ -330,9 +331,12 @@ fun MapScreen(
         }
     }
 
-    // Lazy prompt za Activity Recognition — ako još nije granted, jedanput kad user uđe
-    // u Map. Bez tog grant-a, FGS koristi static LOW profil; sa grant-om, aktivnost-aware
-    // (vožnja = češći fix, mirovanje = ređi → bolja preciznost + manje baterije).
+    // Lazy prompt za Activity Recognition — pokazujemo brand rationale dijalog pre
+    // sistemskog dialog-a. Bez ovog, user vidi golu sistemsku poruku "Allow Krug to
+    // access physical activity?" bez konteksta zašto. Flag u LocalPrefs sprečava da
+    // se rationale ponovo prikazuje pri svakom ulasku u Mapu — pokaže se jednom (allow
+    // ili dismiss), posle se može uključiti samo kroz sistemska podešavanja.
+    var activityRecRationaleVisible by remember { mutableStateOf(false) }
     val activityRecLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -343,9 +347,10 @@ fun MapScreen(
     }
     LaunchedEffect(Unit) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q &&
-            !org.krug.app.core.permissions.PermissionUtils.hasActivityRecognition(context)
+            !org.krug.app.core.permissions.PermissionUtils.hasActivityRecognition(context) &&
+            viewModel.shouldShowActivityRecPrompt()
         ) {
-            activityRecLauncher.launch(android.Manifest.permission.ACTIVITY_RECOGNITION)
+            activityRecRationaleVisible = true
         }
     }
 
@@ -625,6 +630,122 @@ fun MapScreen(
                     sosConfirmVisible = false
                 },
             )
+        }
+
+        if (activityRecRationaleVisible) {
+            ActivityRecognitionRationaleDialog(
+                onAllow = {
+                    activityRecRationaleVisible = false
+                    viewModel.markActivityRecPromptShown()
+                    activityRecLauncher.launch(android.Manifest.permission.ACTIVITY_RECOGNITION)
+                },
+                onDismiss = {
+                    activityRecRationaleVisible = false
+                    viewModel.markActivityRecPromptShown()
+                },
+            )
+        }
+    }
+}
+
+/**
+ * Activity Recognition rationale — pokazuje se umesto da puca sistemski dialog "Allow
+ * Krug to access physical activity?" bez konteksta. Brand-styled (LogoBlue gradient
+ * krug + DirectionsRun ikona) objašnjava zašto tražimo permisiju — pametna baterija
+ * (vožnja = češći fix, mirovanje = ređi). Manje agresivan od SOS dialog-a: bez pulsing
+ * shadow-a, jer rationale nije urgent već informativan.
+ */
+@Composable
+private fun ActivityRecognitionRationaleDialog(
+    onAllow: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(28.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(colors = listOf(LogoBlue, LogoBlueLight)),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.DirectionsRun,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(40.dp),
+                )
+            }
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = stringResource(R.string.activity_rec_title),
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = stringResource(R.string.activity_rec_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            Spacer(Modifier.height(28.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        Brush.linearGradient(colors = listOf(LogoBlue, LogoBlueLight)),
+                    )
+                    .pressScaleClickable(onClick = onAllow)
+                    .height(56.dp)
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.activity_rec_allow),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = RoundedCornerShape(16.dp),
+                    )
+                    .pressScaleClickable(onClick = onDismiss)
+                    .height(56.dp)
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.activity_rec_not_now),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
     }
 }

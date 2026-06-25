@@ -29,6 +29,11 @@
     <string name="onb_bg_body">Da biste bili vidljivi i kada je aplikacija zatvorena, izaberite \"Uvek dozvoli\" u sistemskim podešavanjima</string>
     <string name="onb_bg_open_settings">Otvori sistemska podešavanja</string>
 
+    <string name="activity_rec_title">Pametno praćenje aktivnosti</string>
+    <string name="activity_rec_body">Krug može da prepozna kada hodate, vozite ili mirujete — i prilagodi koliko često deli vašu lokaciju. Bolja preciznost u pokretu, duža baterija kad ste stali.</string>
+    <string name="activity_rec_allow">Dozvoli</string>
+    <string name="activity_rec_not_now">Ne sada</string>
+
     <string name="onb_notif_title">Obaveštenja</string>
     <string name="onb_notif_body">Obaveštenja su obavezna. Bez njih nećete dobiti SOS od člana kruga koji traži hitnu pomoć</string>
     <string name="onb_notif_grant">Dozvoli obaveštenja</string>

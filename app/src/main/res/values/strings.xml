@@ -29,6 +29,11 @@
     <string name="onb_bg_body">To stay visible even when the app is closed, choose \"Allow all the time\" in system settings</string>
     <string name="onb_bg_open_settings">Open system settings</string>
 
+    <string name="activity_rec_title">Battery-smart activity tracking</string>
+    <string name="activity_rec_body">Krug can detect when you\'re walking, driving, or still — and adjust how often it shares your location. Better accuracy in motion, longer battery when you\'re parked.</string>
+    <string name="activity_rec_allow">Allow</string>
+    <string name="activity_rec_not_now">Not now</string>
+
     <string name="onb_notif_title">Notifications</string>
     <string name="onb_notif_body">Notifications are required. Without them you won\'t receive SOS alerts from circle members in need of help</string>
     <string name="onb_notif_grant">Allow notifications</string>

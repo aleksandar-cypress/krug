@@ -153,6 +153,18 @@ class MapViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Activity Recognition pre-prompt — pokazujemo brand dijalog sa rationale-om pre nego
+     * što system permission dialog iskoči. Bez ovog, user vidi golu sistemsku poruku
+     * "Allow Krug to access physical activity?" bez konteksta zašto je tražimo. Flag se
+     * trajno set-uje čim user reaguje (allow ili dismiss) — ne nudi se ponovo.
+     */
+    fun shouldShowActivityRecPrompt(): Boolean = !localPrefs.activityRecPromptShown
+
+    fun markActivityRecPromptShown() {
+        localPrefs.activityRecPromptShown = true
+    }
+
     fun refreshMember(targetUid: String) {
         val selfUid = authRepository.currentUser?.uid ?: return
         if (targetUid == selfUid) return

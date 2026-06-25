@@ -80,10 +80,21 @@ class LocalPrefs @Inject constructor(
             else putString(KEY_PENDING_DELETE_UID, value)
         }
 
+    /**
+     * Activity Recognition (ACTIVITY_RECOGNITION) rationale prompt — flag se postavlja
+     * čim user vidi naš pre-prompt dialog (bilo "Dozvoli" ili "Ne sada"). Sprečava da se
+     * dijalog ponovo pojavljuje pri svakom ulasku na Mapu. Ako user kasnije hoće da
+     * uključi, ide kroz sistemska podešavanja (Settings → Apps → Krug → Permissions).
+     */
+    var activityRecPromptShown: Boolean
+        get() = prefs.getBoolean(KEY_ACTIVITY_REC_PROMPT_SHOWN, false)
+        set(value) = prefs.edit(commit = false) { putBoolean(KEY_ACTIVITY_REC_PROMPT_SHOWN, value) }
+
     private companion object {
         const val KEY_ONBOARDING_DONE = "onboarding_completed"
         const val KEY_ACTIVE_CIRCLE = "active_circle_id"
         const val KEY_SOS_NOTIFIED = "sos_notified_ts"
         const val KEY_PENDING_DELETE_UID = "pending_delete_uid"
+        const val KEY_ACTIVITY_REC_PROMPT_SHOWN = "activity_rec_prompt_shown"
     }
 }
