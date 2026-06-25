@@ -60,7 +60,7 @@
   <a class="back" href="index.html">← Nazad</a>
 
   <h1>Politika privatnosti</h1>
-  <p class="updated">Poslednja izmena: 17. jun 2026.</p>
+  <p class="updated">Poslednja izmena: 25. jun 2026.</p>
 
   <p>Krug je Android aplikacija koja omogućava deljenje lokacije unutar privatnih krugova porodice i prijatelja. Ova politika privatnosti opisuje koje lične podatke prikupljamo, zašto ih prikupljamo, kako ih čuvamo i koja prava imate u vezi sa njima.</p>
 
@@ -82,9 +82,10 @@
   <ul>
     <li>Ime za prikaz (iz Google naloga ili koje vi unesete)</li>
     <li>Email adresa (samo ako se prijavite preko Google naloga)</li>
-    <li>URL profilne fotografije (samo ako koristite Google nalog)</li>
+    <li>URL profilne fotografije iz Google naloga — čuva se samo kao referenca (link), aplikacija ne preuzima ni ne čuva kopiju fotografije na našim serverima</li>
     <li>Model uređaja (npr. „Samsung SM-A376B") za identifikaciju u listi članova</li>
     <li>Jedinstveni Firebase UID (interni identifikator)</li>
+    <li>Firebase Cloud Messaging (FCM) token uređaja — koristi se za buduće push notifikacije (trenutno se samo čuva, ne šaljemo push poruke)</li>
   </ul>
 
   <h3>2.3. Podaci o krugovima</h3>
@@ -105,7 +106,10 @@
   </ul>
 
   <h3>2.6. Dijagnostički podaci</h3>
-  <p>Prikupljamo anonimne izveštaje o padovima aplikacije i tehničke greške putem Firebase Crashlytics-a. Ovi izveštaji ne sadrže vašu lokaciju niti druge lične podatke.</p>
+  <p>Prikupljamo izveštaje o padovima aplikacije i tehničke greške putem Firebase Crashlytics-a. Izveštaj sadrži stack trace greške, model uređaja, verziju Android sistema, verziju aplikacije i kratke „breadcrumb" događaje (npr. „Sign-in", „Krug kreiran", „SOS aktiviran"). Uz to se beleže pomoćni identifikatori — vaš Firebase UID, ID aktivnog kruga i status (anonimna prijava / sa email-om). Ne čuva se vaša GPS lokacija ni sadržaj SOS poruka.</p>
+
+  <h3>2.7. Sigurnosna verifikacija aplikacije (App Check)</h3>
+  <p>Firebase App Check (Google Play Integrity API) proverava da je instalacija aplikacije ispravna i nije izmenjena. Sistemska komponenta vraća atestat koji uključuje informacije o uređaju i Play Protect statusu. Ne sadrži lične podatke i koristi se isključivo za sprečavanje neautorizovanih API poziva ka našim serverima.</p>
 
   <h2>3. Zašto prikupljamo ove podatke</h2>
   <ul>
@@ -120,8 +124,14 @@
 
   <h3>Tehnički saradnici (sub-procesori)</h3>
   <ul>
-    <li><strong>Google Firebase</strong> (Google LLC / Google Ireland Ltd): autentifikacija, baza podataka, push obaveštenja, dijagnostika. Podaci se čuvaju u EU regionu (multi-region <span class="pill">eur3</span> za Firestore, <span class="pill">europe-west1</span> za Realtime Database).</li>
-    <li><strong>Mapbox</strong> (Mapbox, Inc.): renderovanje mape. Vaša lokacija se NE šalje Mapbox-u, aplikacija samo preuzima slojeve mape sa njihovih servera.</li>
+    <li><strong>Google Firebase</strong> (Google LLC / Google Ireland Ltd): autentifikacija, baza podataka, push obaveštenja, dijagnostika, App Check. Podaci se čuvaju u EU regionu (multi-region <span class="pill">eur3</span> za Firestore, <span class="pill">europe-west1</span> za Realtime Database).</li>
+    <li><strong>Mapbox</strong> (Mapbox, Inc.): renderovanje mape i izračunavanje putne razdaljine (Directions API). Mapbox prima vaše koordinate u sledećim slučajevima:
+      <ul style="margin-top:4px">
+        <li>Kada aplikacija učitava deo mape (Mapbox vidi koordinate vidnog polja, ne tačnu vašu lokaciju);</li>
+        <li>Kada otvorite detalj člana kruga, aplikacija šalje par koordinata (vaša i njegova, zaokruženih na oko 100m granularnosti) ka Mapbox Directions API-ju da izračuna kilometražu vožnje.</li>
+      </ul>
+      Mapbox je naš sub-procesor i podatke koristi isključivo za isporuku tih usluga; ne deli ih sa oglašivačima ni trećim stranama. Detaljnije u <a href="https://www.mapbox.com/legal/privacy">Mapbox Privacy Policy</a>.
+    </li>
   </ul>
 
   <h2>5. Bezbednost</h2>
@@ -137,7 +147,8 @@
     <li><strong>Lokacija (RTDB):</strong> samo poslednja poznata lokacija, prepiše se svakim novim ažuriranjem. Istorija se ne čuva.</li>
     <li><strong>SOS:</strong> automatski se briše nakon 30 minuta ili kada ga otkažete.</li>
     <li><strong>Nalog i krugovi:</strong> čuvaju se dok je vaš nalog aktivan.</li>
-    <li><strong>Dijagnostika:</strong> 90 dana (standardna Crashlytics retencija).</li>
+    <li><strong>Dijagnostika (Crashlytics):</strong> 90 dana neobrađenih izveštaja po standardnoj Google retenciji; agregirane statistike (broj padova po verziji) bez ličnih identifikatora čuvaju se duže.</li>
+    <li><strong>FCM token:</strong> dok god aplikacija postoji na uređaju i šalje token na server; obriše se pri brisanju naloga ili deinstalaciji aplikacije.</li>
   </ul>
   <p>Kada obrišete nalog (vidi tačku 7.2), svi vaši podaci se trajno brišu u roku od 30 dana.</p>
 
@@ -152,7 +163,16 @@
   <h3>7.3. Povlačenje pristanka</h3>
   <p>Možete u svakom trenutku isključiti deljenje lokacije u Podešavanja → Privatnost. Nakon toga vaša lokacija se više neće slati.</p>
 
-  <h3>7.4. Žalba nadzornom organu</h3>
+  <h3>7.4. Sistemske permisije koje možete povući</h3>
+  <p>Sve permisije aplikaciji možete povući kroz sistemska podešavanja Android-a (Postavke → Aplikacije → Krug → Dozvole):</p>
+  <ul>
+    <li><strong>Lokacija</strong> — povlačenjem ove dozvole prestaje deljenje lokacije; aplikacija nastavlja da radi ali bez ažuriranja vaše pozicije.</li>
+    <li><strong>Prepoznavanje aktivnosti</strong> (opciono) — koristi se za pametniju potrošnju baterije (češći GPS u vožnji, ređi u mirovanju). Bez nje aplikacija koristi statičan profil; bez funkcionalne razlike za delenje lokacije.</li>
+    <li><strong>Obaveštenja</strong> — bez ove dozvole nećete dobiti SOS obaveštenja ni sistemsku notifikaciju o aktivnom deljenju lokacije.</li>
+    <li><strong>Optimizacija baterije</strong> — bez izuzeća uređaj može da prekine deljenje lokacije u pozadini.</li>
+  </ul>
+
+  <h3>7.5. Žalba nadzornom organu</h3>
   <p>Imate pravo da podnesete žalbu Povereniku za informacije od javnog značaja i zaštitu podataka o ličnosti Republike Srbije (<a href="https://www.poverenik.rs">poverenik.rs</a>).</p>
 
   <h2>8. Korisnici mlađi od 13 godina</h2>
