@@ -217,6 +217,36 @@ fun MapScreen(
         if (pendingRefocus == pending) pendingRefocus = null
     }
 
+    // Follow focused member: dok je MemberDetailSheet otvoren, kamera prati svaki nov
+    // location update tog člana. Bez ovog, korisnik koji posmatra člana u kretanju (ili
+    // se vrati iz background-a posle što se član pomerio) vidi pin koji se izvlači iz
+    // vidnog polja — kamera stoji na staroj poziciji dok pin "klizi" dalje.
+    //
+    // Baseline = updatedAt u trenutku otvaranja sheet-a (taj snapshot je već flyTo-van
+    // u onPinClick / onMemberClick). Pratimo samo update-ove POSLE otvaranja, da ne
+    // dupliramo onaj initial flyTo. Reset baseline-a kad se detailUid promeni.
+    var followBaseline by remember { mutableStateOf<Pair<String, Long>?>(null) }
+    LaunchedEffect(detailUid) {
+        followBaseline = detailUid?.let { uid ->
+            val ts = state.members.firstOrNull { it.uid == uid }?.location?.updatedAt ?: 0L
+            uid to ts
+        }
+    }
+    LaunchedEffect(detailUid, state.members) {
+        val uid = detailUid ?: return@LaunchedEffect
+        val (baseUid, baseTs) = followBaseline ?: return@LaunchedEffect
+        if (baseUid != uid) return@LaunchedEffect
+        // Refresh path (pendingRefocus) koristi flyTo sa zoom 16.5 — pusti njega da odradi
+        // svoj posao kad je aktivan; bez ovog, oba LaunchedEffect-a bi se borila za istu
+        // kameru i easeTo (pan-only) bi gazio flyTo zoom.
+        if (pendingRefocus?.first == uid) return@LaunchedEffect
+        val loc = state.members.firstOrNull { it.uid == uid }?.location ?: return@LaunchedEffect
+        if (loc.updatedAt > baseTs) {
+            mapViewState.easeFollow(loc.lng, loc.lat)
+            followBaseline = uid to loc.updatedAt
+        }
+    }
+
     // Initial flyTo na self — radi i kad user nema krugove (state.members prazno) jer
     // koristi state.selfLocation direktno iz FGS publish-a. Bez ovog, novi user koji još
     // nije kreirao/se pridružio krugu ostaje "zaglavljen" na default Belgrade Topčider
@@ -1456,6 +1486,21 @@ private class MapViewHolder {
                 .zoom(16.5)
                 .build(),
             MapAnimationOptions.mapAnimationOptions { duration(1200L) },
+        )
+    }
+
+    /**
+     * Continuous follow — pan-only easeTo, bez zoom change-a. Koristi se dok je
+     * MemberDetailSheet otvoren i član se kreće: na svaki svež location update kamera
+     * pomeri se na novu poziciju. flyTo nije pogodan ovde jer pravi arc + zoom reset
+     * na svaki update; korisnik koji posmatra člana koji se kreće bi imao agresivnu
+     * kameru. easeTo bez zoom-a daje smooth "kamera ga prati" osećaj.
+     */
+    fun easeFollow(lng: Double, lat: Double) {
+        val mv = mapView ?: return
+        mv.mapboxMap.easeTo(
+            CameraOptions.Builder().center(Point.fromLngLat(lng, lat)).build(),
+            MapAnimationOptions.mapAnimationOptions { duration(800L) },
         )
     }
 
