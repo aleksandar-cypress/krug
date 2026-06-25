@@ -16,6 +16,20 @@ val krugLocalProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// Release signing — vrednosti se čitaju iz local.properties (gitignored). Ako bilo koja
+// vrednost fali ili keystore fajl ne postoji (npr. drugi developer / CI bez secrets-a),
+// release build se pravi unsigned umesto da pukne. To omogućava da non-owner može da
+// kompajlira projekat dok release potpisivanje ostaje vezano za ownerov keystore.
+val keystoreRelPath = krugLocalProps.getProperty("KRUG_KEYSTORE_PATH")
+val keystorePassword = krugLocalProps.getProperty("KRUG_KEYSTORE_PASSWORD")
+val releaseKeyAlias = krugLocalProps.getProperty("KRUG_KEY_ALIAS")
+val releaseKeyPassword = krugLocalProps.getProperty("KRUG_KEY_PASSWORD")
+val releaseKeystoreFile = keystoreRelPath?.let { rootProject.file(it) }
+val hasReleaseKeystore = releaseKeystoreFile?.exists() == true &&
+    !keystorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
+
 android {
     namespace = "org.krug.app"
     compileSdk = 36
@@ -38,6 +52,17 @@ android {
         buildConfigField("String", "MAPBOX_PUBLIC_TOKEN", "\"$mapboxPublicToken\"")
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = releaseKeystoreFile
+                storePassword = keystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -51,6 +76,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

@@ -25,6 +25,7 @@ secrets.properties
 # Keystore
 *.jks
 *.keystore
+release-keystore-credentials.txt
 
 # Logs
 *.log
