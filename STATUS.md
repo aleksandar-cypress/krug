@@ -71,10 +71,17 @@ Sesija fokusirana na pripremi za Play Store internal beta. Iz Faze 2 plana zavr�
 ### D) Preostalo iz Faze 2
 
 - ✅ #1 Signed AAB — gotovo
-- ⏳ #2 **Data safety form** — audit kompletiran (vidi tabelu ispod), čekaš Play Console submit
-- ⏳ #3 Screenshots — TODO (4-5 listing screenshot-a po locale-u)
-- ⏳ #4 Store listing copy — TODO (short + full description sr + en)
+- ✅ #2 **Data safety form** — audit kompletiran, odgovori spremni za Play Console submit (vidi tabelu ispod)
+- ⏳ #3 Screenshots — odloženo (započet plan: 5 scena × 2 locale-a + feature graphic). App icon 512x512 generisan (`docs/play-store/assets/app-icon-512.png`). Feature graphic 1024x500 TODO.
+- ✅ #4 **Store listing copy** — gotovo (`docs/play-store/listing-sr.md` + `listing-en.md`, sve unutar Play Console limita)
 - ⏳ #5 Internal track upload + 5-10 testera — blokirano dok ne kupiš domain za privacy URL
+
+**Privacy + Terms HTML** (`docs/privacy.html` + `docs/terms.html`) ažurirani 25. jun:
+- Ispravka Mapbox tvrdnje (DOES šalje koordinate ka Directions API, ne samo style)
+- Dodato: FCM token, App Check sekcija, Activity Recognition opt-out u sistemskim podešavanjima, Crashlytics custom keys nuansa
+- Datum osvežen
+
+**AboutScreen.kt URL-ovi (`PRIVACY_URL` / `TERMS_URL`)** trenutno pokazuju `aleksandar-cypress.github.io/krug/...` — TODO update na `krugapp.com/...` kad domain stigne.
 
 ### E) Data safety form audit (za Play Console)
 
