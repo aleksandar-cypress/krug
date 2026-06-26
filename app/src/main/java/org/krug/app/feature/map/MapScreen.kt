@@ -1201,6 +1201,7 @@ private fun SosBanner(
     onClickMember: (MemberWithLocation) -> Unit,
     onCancelSelf: () -> Unit,
 ) {
+    val context = LocalContext.current
     val others = members.filter { it.uid != selfUid }
     // Pulse 0..1 (cosine) — drži glow ritmičan umesto sawtooth linearnog flicker-a.
     // Sinhron sa map ripple animacijom (isti pulsePhase iz rememberInfiniteTransition).
@@ -1265,7 +1266,7 @@ private fun SosBanner(
                         // Subtitle = krug + vreme od najsvežijeg SOS-a. Najsvežiji jer ako
                         // ima više SOS-ova, najnoviji je najrelevantniji "pre X min" marker.
                         val freshestSosAt = members.maxOfOrNull { it.sos?.triggeredAt ?: 0L } ?: 0L
-                        val timeLabel = sosRelativeTime(freshestSosAt)
+                        val timeLabel = sosRelativeTime(context, freshestSosAt)
                         val subtitle = buildString {
                             if (!circleName.isNullOrBlank()) {
                                 append("krug „")
@@ -2352,7 +2353,7 @@ private fun MemberDetailSheet(
                     )
                 StatChip(
                     label = if (drivingMeters != null) stringResource(R.string.member_chip_distance) else stringResource(R.string.member_chip_distance_aerial),
-                    value = formatDistance(displayMeters),
+                    value = formatDistance(LocalContext.current, displayMeters),
                     accentColor = MaterialTheme.colorScheme.primary,
                     icon = Icons.Outlined.NearMe,
                     modifier = Modifier.weight(1f),
@@ -2360,7 +2361,7 @@ private fun MemberDetailSheet(
             }
             StatChip(
                 label = stringResource(R.string.member_chip_last_seen),
-                value = compactLastSeen(member.location?.updatedAt),
+                value = compactLastSeen(LocalContext.current, member.location?.updatedAt),
                 accentColor = if (isPrivate) PrivateGray else MaterialTheme.colorScheme.primary,
                 icon = Icons.Outlined.AccessTime,
                 modifier = Modifier.weight(1f),
@@ -2540,8 +2541,9 @@ private fun OfflineBanner(isOnline: Boolean, lastUpdatedAt: Long?) {
             nowTick = System.currentTimeMillis()
         }
     }
+    val context = LocalContext.current
     val ageLabel = if (lastUpdatedAt != null && lastUpdatedAt > 0L) {
-        org.krug.app.core.util.sosRelativeTime(lastUpdatedAt, nowTick)
+        org.krug.app.core.util.sosRelativeTime(context, lastUpdatedAt, nowTick)
     } else null
 
     Spacer(Modifier.size(12.dp))

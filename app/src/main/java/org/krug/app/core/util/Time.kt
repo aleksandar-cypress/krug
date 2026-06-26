@@ -1,35 +1,45 @@
 package org.krug.app.core.util
 
+import android.content.Context
+import org.krug.app.R
+
 /**
- * Kratak relativni timestamp — "sad", "5min", "2h", "1d+".
+ * Kratak relativni timestamp — "sad/now", "5min", "2h", "1d+".
  * Koristi se na map chip-ovima i sličnim mestima gde je važna kompaktnost.
- * Sufiks "min" umesto "m" jer je "m" dvosmisleno (metri vs minute) u kontekstu
- * gde u istom chip row-u stoji distance ("5m" = 5 metara, "5min" = 5 minuta).
+ * Lokalizovan kroz string resources (vidi values/strings.xml + values-sr/strings.xml).
  */
-fun compactLastSeen(updatedAt: Long?, now: Long = System.currentTimeMillis()): String {
-    if (updatedAt == null || updatedAt == 0L) return "-"
+fun compactLastSeen(
+    context: Context,
+    updatedAt: Long?,
+    now: Long = System.currentTimeMillis(),
+): String {
+    if (updatedAt == null || updatedAt == 0L) return context.getString(R.string.time_dash)
     val diffMs = now - updatedAt
     val mins = diffMs / 60_000
     return when {
-        mins < 1 -> "sad"
-        mins < 60 -> "${mins}min"
-        mins < 60 * 24 -> "${mins / 60}h"
-        else -> "1d+"
+        mins < 1 -> context.getString(R.string.time_just_now_short)
+        mins < 60 -> context.getString(R.string.time_minutes_short, mins)
+        mins < 60 * 24 -> context.getString(R.string.time_hours_short, mins / 60)
+        else -> context.getString(R.string.time_day_plus)
     }
 }
 
 /**
- * Verbose relativni timestamp za SOS banner — "upravo sada", "pre 5 min", "pre 2 h".
- * Razlikuje se od compactLastSeen-a po dužini — SOS banner ima više prostora i benefit-uje
- * od jasnog "pre" prefiksa (kompaktni "5m" bi mogao da znači raspon, ne tačku).
+ * Verbose relativni timestamp za SOS banner i offline body — "upravo sada/just now",
+ * "pre 5 min / 5 min ago". Razlikuje se od compactLastSeen-a po dužini — više prostora
+ * + jasno "pre" / "ago" prefiks/sufiks.
  */
-fun sosRelativeTime(triggeredAt: Long, now: Long = System.currentTimeMillis()): String {
+fun sosRelativeTime(
+    context: Context,
+    triggeredAt: Long,
+    now: Long = System.currentTimeMillis(),
+): String {
     if (triggeredAt <= 0L) return ""
     val diffMin = (now - triggeredAt) / 60_000L
     return when {
-        diffMin < 1 -> "upravo sada"
-        diffMin < 60 -> "pre $diffMin min"
-        diffMin < 60 * 24 -> "pre ${diffMin / 60} h"
-        else -> "pre ${diffMin / (60 * 24)} d"
+        diffMin < 1 -> context.getString(R.string.time_just_now_long)
+        diffMin < 60 -> context.getString(R.string.time_minutes_ago, diffMin)
+        diffMin < 60 * 24 -> context.getString(R.string.time_hours_ago, diffMin / 60)
+        else -> context.getString(R.string.time_days_ago, diffMin / (60 * 24))
     }
 }

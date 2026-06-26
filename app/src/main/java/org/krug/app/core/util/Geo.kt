@@ -1,9 +1,11 @@
 package org.krug.app.core.util
 
+import android.content.Context
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
+import org.krug.app.R
 
 /**
  * Vazdušna (great-circle) udaljenost između dve geo tačke, u metrima.
@@ -25,13 +27,13 @@ fun haversineMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Dou
 
 /**
  * Formatira metre u korisniku-čitljiv string:
- * - < 50m: "blizu"
+ * - < 50m: "blizu" / "near" (lokalizovano)
  * - < 1km: "123 m"
  * - < 10km: "1.5 km"
  * - else: "23 km"
  */
-fun formatDistance(meters: Double): String = when {
-    meters < 50 -> "blizu"
+fun formatDistance(context: Context, meters: Double): String = when {
+    meters < 50 -> context.getString(R.string.distance_nearby)
     meters < 1000 -> "${meters.toInt()} m"
     meters < 10_000 -> String.format("%.1f km", meters / 1000.0)
     else -> "${(meters / 1000.0).toInt()} km"

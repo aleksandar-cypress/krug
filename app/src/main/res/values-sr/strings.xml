@@ -250,6 +250,20 @@
     <string name="powersave_banner_title">Štedljivi režim aktivan</string>
     <string name="powersave_banner_body">Lokacija se ažurira ređe radi uštede baterije.</string>
 
+    <!-- Distance -->
+    <string name="distance_nearby">blizu</string>
+
+    <!-- Time labels (compact + verbose) -->
+    <string name="time_dash">-</string>
+    <string name="time_just_now_short">sad</string>
+    <string name="time_minutes_short">%dmin</string>
+    <string name="time_hours_short">%dh</string>
+    <string name="time_day_plus">1d+</string>
+    <string name="time_just_now_long">upravo sada</string>
+    <string name="time_minutes_ago">pre %d min</string>
+    <string name="time_hours_ago">pre %d h</string>
+    <string name="time_days_ago">pre %d d</string>
+
     <!-- Edit circle sheet -->
     <string name="edit_circle_title">Izmeni krug</string>
     <string name="edit_circle_name_label">Ime kruga</string>

@@ -250,6 +250,20 @@
     <string name="powersave_banner_title">Battery saver active</string>
     <string name="powersave_banner_body">Location updates run less often to save battery.</string>
 
+    <!-- Distance -->
+    <string name="distance_nearby">near</string>
+
+    <!-- Time labels (compact + verbose) -->
+    <string name="time_dash">-</string>
+    <string name="time_just_now_short">now</string>
+    <string name="time_minutes_short">%dmin</string>
+    <string name="time_hours_short">%dh</string>
+    <string name="time_day_plus">1d+</string>
+    <string name="time_just_now_long">just now</string>
+    <string name="time_minutes_ago">%d min ago</string>
+    <string name="time_hours_ago">%d h ago</string>
+    <string name="time_days_ago">%d d ago</string>
+
     <!-- Edit circle sheet -->
     <string name="edit_circle_title">Edit circle</string>
     <string name="edit_circle_name_label">Circle name</string>
