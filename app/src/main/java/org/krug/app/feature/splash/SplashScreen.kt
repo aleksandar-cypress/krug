@@ -66,4 +66,4 @@ fun SplashScreen(
 
 // Spin (1.2s, starts at 0.3s) → ukupno ~1.5s; dajemo 1.6s.
 private const val MIN_DISPLAY_MS = 1_600L
-private const val LOGO_SIZE_DP = 192
+private const val LOGO_SIZE_DP = 208
