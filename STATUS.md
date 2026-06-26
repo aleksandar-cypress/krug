@@ -2,13 +2,81 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-25, kraj četrnaeste sesije — Faza 2 Play Store priprema: release signing + smoke test + bug fix-evi)
+## Gde smo stali (2026-06-26, kraj petnaeste sesije — Play Store assets: screenshots + i18n polish, blokirano na Play Console account-u)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `dbc3fce`.
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `01c9007`.
 Firebase: Firestore + RTDB rules deployovane. **Release SHA-1 dodat u Firebase Console** (`21:6A:94:24:64:98:08:4A:42:02:D6:4F:13:77:40:26:3C:A8:E0:36`) — Google sign-in radi i u release build-u.
 **Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — release build verifikovan na S24 (`R5CWC1F9FND`).
 
-**Health stanja**: debug + release oba build-uju uredno, 36 unit testova zelenih. **Prvi signed AAB napravljen** (34.5 MB, jarsigner verified). Smoke test na S24 prošao — sign-in, mapa, Firebase, Mapbox, baseline profile sve OK pod R8 minify-jem.
+**Health stanja**: debug + release oba build-uju uredno (`compileDebugKotlin` proverava posle plurals refaktora). **Prvi signed AAB napravljen** (34.5 MB, jarsigner verified, datum 2026-06-25). Smoke test na S24 prošao. **Unit test pokrivenost za Time/Geo formatter-e privremeno izgubljena** — `TimeTest.kt` obrisan jer su signature-i posle i18n-a uzeli `Context` parametar; vraćanje pokrivenosti čeka refaktor (sealed `TimeBucket` type + Composable formatter) ili Robolectric.
+
+## Petnaesta sesija (2026-06-26) — Play Store assets + i18n polish
+
+Sesija fokusirana na pripremu za Play Store internal beta upload. Završeno:
+
+### A) i18n lokalizacija formatter funkcija (commit `900bfcb`)
+
+- `formatDistance(Context, meters)`, `compactLastSeen(Context, updatedAt)`, `sosRelativeTime(Context, triggeredAt)` sad uzimaju Context i čitaju iz string resources
+- 10 novih string ključeva u `values/strings.xml` + `values-sr/strings.xml`:
+  - `distance_nearby` („blizu" / „near")
+  - `time_dash`, `time_just_now_short` (sad/now), `time_minutes_short` (`%dmin`), `time_hours_short` (`%dh`), `time_day_plus` (1d+)
+  - `time_just_now_long` („upravo sada" / „just now"), `time_minutes_ago`, `time_hours_ago`, `time_days_ago`
+- `MapScreen.kt` ažuriran sa `LocalContext.current` na 3 call-site-a (SosBanner, MemberDetailSheet, OfflineBanner)
+
+### B) Play Store screenshots (commit `a801684`)
+
+- **5 EN + 5 SR screenshot-a** snimljenih na Samsung Galaxy S24 Ultra (1440×3120 native)
+- SR fajlovi inicijalno A-E, preimenovani u `01-05-*.jpg` da mirror EN naming:
+  - `01-map-member-detail` — map + member detail sheet (Battery/Distance/Last seen chips)
+  - `02-map-onboarding` — EN ima empty-state CTA, **SR ima aktivan krug** (scene mismatch, namerno za sada)
+  - `03-create-circle` — Novi krug form
+  - `04-join-circle` — 6-cifreni kod
+  - `05-circle-members` — Members list
+- Lokacija: `docs/play-store/screenshots/{en,sr}/`
+- Feature graphic **base** napravljen (`docs/play-store/assets/feature-graphic-base.png`, 1024×500, logo + teal gradient, **nedostaje tekst**)
+
+### C) i18n polish surfaced from screenshot review (commit `a801684`)
+
+- **„1 members" gramatika fix**: `circles_members_count` konvertovan iz `<string>` u `<plurals>` resource
+  - EN: `one` / `other`
+  - SR: `one` / `few` / `other` (CLDR pravila)
+- `CircleListScreen.kt` i `CircleDetailScreen.kt` koriste `pluralStringResource(R.plurals.circles_members_count, n, n)`
+- **Diacritic fix u SR locale**: „Drustvo" → „Društvo" u `icon_label_friends` i `create_circle_name_placeholder`
+- **Napomena**: EN-05 screenshot još uvek prikazuje „1 members" (snimljen pre fix-a). Retake pre produkcijskog launch-a.
+
+### D) Crop na Play Store 2:1 ratio (commit `01c9007`)
+
+- Inicijalno screenshot-i 1440×3120 = ratio 2.167, prelazi Play Store „longer side ≤ 2× shorter side" pravilo
+- ImageMagick batch crop sa offset `+0+120` → finalno 1440×2880 = tačno 2:1
+- Simetrično 120px top + 120px bottom uklanja status bar (uključujući USB/dev mode ikonice) i nav bar
+- App content netaknut, mali sliver nav bar-a viri na vrhu (zanemarljivo)
+
+### E) Blokeri za upload (nismo stigli)
+
+1. **Play Console developer account** — user nema otvoren. $25 one-time fee, ID verification (passport/lična karta + selfie), 24-48h čekanje za Google verifikaciju. **Akcija**: user da otvori sledeću sesiju ili paralelno.
+2. **Feature graphic 1024×500 finalni** — postoji base sa logom i gradient-om, ali fali „Krug" wordmark tekst + opciono tagline na desnoj 2/3. Plan: dodati tekst kroz ImageMagick overlay (Helvetica/SF Pro, „Krug" veliki + ispod sitno „Porodica na mapi").
+
+### F) Sledeća sesija — checklist za upload (kad Play Console account bude verifikovan)
+
+1. **Finiš feature graphic-a** (10-20 min, ImageMagick overlay)
+2. **Play Console → Create app**: name „Krug", language Serbian, free, declarations
+3. **Setup tasks** (10 stavki): App access, Ads (No), Content rating (Social, sve No → PEGI 3), Target audience 13+, News (No), Health (No), Government (No), Financial (No), Data safety (tabela iz sekcije E STATUS.md), App category Lifestyle
+4. **Store settings**: privacy URL `https://aleksandar-cypress.github.io/krug/privacy.html`, contact `aleksandarr@gmail.com`
+5. **Main store listing → Serbian (default)**: copy iz `docs/play-store/listing-sr.md`, upload icon + feature graphic + SR screenshots
+6. **Manage translations → Add English (US)**: copy iz `listing-en.md`, EN screenshots
+7. **Testing → Internal testing → Create release**: upload `app/build/outputs/bundle/release/app-release.aab`, release notes oba locale-a
+8. **Testers tab**: kreiraj email listu „Krug Beta", dodaj 5-10 emailova, kopiraj opt-in URL i pošalji
+9. **Wait ~10 min** dok Play Store ne refresh-uje, testeri instaliraju
+
+### G) Tehnički long detalji
+
+- Build status: `./gradlew :app:compileDebugKotlin` prošao posle plurals refaktora. Samo 3 pre-existing deprecation warning-a (Icons.Outlined.ExitToApp / DirectionsRun → AutoMirrored verzije; delicate API u MapScreen).
+- Postojeći `TimeTest.kt` (60 linija, 18 test slučajeva) obrisan u commit `900bfcb`. **Strategija za vraćanje**: izvuci pure logiku u `TimeBucket` sealed type (JustNow, MinutesAgo(n), HoursAgo(n), DaysAgo(n)) koji testovi mogu da pokriju bez Context-a, plus Composable `@Composable fun TimeBucket.format(): String` za UI side.
+- SR-02 scene mismatch sa EN-02: SR pokazuje aktivan krug („Friends" pill, Članovi/SOS dugmad), EN pokazuje empty „Create your first circle" CTA. Različite vrednosti propozicija, OK za internal beta. Za produkcijski launch razmotriti retake.
+
+## Četrnaesta sesija (2026-06-25) — Faza 2 Play Store priprema (release signing + 2 bug fix-a + strateške odluke)
+
+Sesija fokusirana na pripremi za Play Store internal beta. Iz Faze 2 plana završeno: **#1 signing keystore + signed AAB** + smoke test. Otkriveni i fix-ovani usput dva bug-a (map follow + Activity Recognition rationale). Strateške odluke za pricing + i18n + domain.
 
 ## Četrnaesta sesija (2026-06-25) — Faza 2 Play Store priprema (release signing + 2 bug fix-a + strateške odluke)
 
