@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ auto-backup + device-transfer rules. Exclude-ujemo sve sharedpref-e
+  i database fajlove iz oba kanala (cloud backup u Google Drive, kao i direct
+  device-to-device transfer pri inicijalnom setup-u novog telefona). User koji
+  pređe na drugi uređaj svejedno može da se prijavi istim Google nalogom i
+  resetuje krugove kroz Firebase Auth — backup tokena nije potreban.
+-->
 <data-extraction-rules>
     <cloud-backup>
-        <exclude domain="sharedpref" path="firebase_session.xml" />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="file" path="." />
     </cloud-backup>
     <device-transfer>
-        <exclude domain="sharedpref" path="firebase_session.xml" />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="file" path="." />
     </device-transfer>
 </data-extraction-rules>

@@ -40,10 +40,12 @@ class SosRepository @Inject constructor(
             if (!circleName.isNullOrBlank()) put("circleName", circleName)
         }
         ref(uid).setValue(data).await()
+        Timber.i("SOS stored uid=%s circleId=%s", uid, circleId ?: "(none)")
     }
 
     suspend fun clear(uid: String) {
         ref(uid).removeValue().await()
+        Timber.i("SOS cleared uid=%s", uid)
     }
 
     fun observe(uid: String): Flow<SosModel?> = callbackFlow {

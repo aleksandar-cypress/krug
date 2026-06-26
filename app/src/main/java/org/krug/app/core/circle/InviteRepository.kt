@@ -138,8 +138,12 @@ class InviteRepository @Inject constructor(
             Timber.w(e, "Failed to accept invite (transaction)")
             return JoinResult.Failure.Network
         }
-        failureReason?.let { return it }
+        failureReason?.let {
+            Timber.i("Invite accept rejected code=%s uid=%s reason=%s", normalized, uid, it.javaClass.simpleName)
+            return it
+        }
         val cid = resolvedCircleId ?: return JoinResult.Failure.Network
+        Timber.i("Invite accepted code=%s uid=%s circleId=%s", normalized, uid, cid)
         return JoinResult.Success(cid, resolvedCircleName)
     }
 

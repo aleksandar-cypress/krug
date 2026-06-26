@@ -31,8 +31,12 @@ data class AccountUiState(
     val saving: Boolean = false,
     val justSaved: Boolean = false,
     val deleting: Boolean = false,
-    /** Set kad Firebase Auth.delete() traži recent re-login (nije implementiran reauth flow). */
+    /** Set kad Firebase Auth.delete() traži recent re-login — UI prikazuje dialog sa CTA. */
     val deleteNeedsReauth: Boolean = false,
+    /** Set dok reauth Google chooser radi (spinner umesto CTA). */
+    val reauthInProgress: Boolean = false,
+    /** Set ako reauth padne (cancel / mismatch / network) — UI prikazuje poruku, dozvoljava retry. */
+    val reauthError: Boolean = false,
     /** Roditeljska kontrola — bilo koji krug me je markirao kao dete → sakrij "Obriši nalog". */
     val isChildAnywhere: Boolean = false,
 )
@@ -142,6 +146,7 @@ class AccountViewModel @Inject constructor(
         if (_state.value.isChildAnywhere) return
         _state.update { it.copy(deleting = true, deleteNeedsReauth = false) }
         viewModelScope.launch {
+            Timber.i("Account delete started uid=%s", uid)
             // 0. Mark pending delete u prefs — ako Auth.delete fail-uje a app crashne pre
             //    nego što user pokrene reauth, SplashViewModel pri sledećem startu vidi
             //    ovaj flag i retry-uje cleanup ili force-uje signOut (sprečava ghost-account).
@@ -163,6 +168,7 @@ class AccountViewModel @Inject constructor(
             if (!authDeleted) {
                 // Pending flag ostaje set — Splash će na sledećem startu retry-ovati ili
                 // force-ovati signOut da user ne ostane u inconsistent state-u.
+                Timber.i("Account delete requires reauth uid=%s", uid)
                 _state.update { it.copy(deleting = false, deleteNeedsReauth = true) }
                 return@launch
             }
@@ -170,11 +176,55 @@ class AccountViewModel @Inject constructor(
             localPrefs.pendingDeleteUid = null
             // 5. Sign-out cleanup (clear credentials).
             runCatching { authRepository.signOut(context) }
+            Timber.i("Account delete completed uid=%s", uid)
             _state.update { it.copy(deleting = false, signedOut = true) }
         }
     }
 
     fun dismissDeleteReauth() {
-        _state.update { it.copy(deleteNeedsReauth = false) }
+        _state.update { it.copy(deleteNeedsReauth = false, reauthError = false) }
+    }
+
+    /**
+     * One-step reauth + retry delete. Lanšuje Google chooser, traži fresh ID token,
+     * pa pozove `user.reauthenticate(...)` i ponovo `authRepository.deleteAccount()`.
+     * Ako bilo šta padne, vraća dialog u "needsReauth" state sa error flag-om da user može
+     * ponovo da pokuša. Cleanup data (Firestore + RTDB) je već urađen u `deleteAccount` ranije
+     * pa ovde samo finishujemo auth.delete + signOut.
+     */
+    fun reauthAndDelete(context: Context) {
+        val uid = authRepository.currentUser?.uid ?: return
+        if (_state.value.reauthInProgress) return
+        _state.update { it.copy(reauthInProgress = true, reauthError = false) }
+        viewModelScope.launch {
+            val reauthFailure = authRepository.reauthenticateWithGoogle(context)
+            if (reauthFailure != null) {
+                Timber.w("Reauth failed reason=%s uid=%s", reauthFailure, uid)
+                _state.update {
+                    it.copy(reauthInProgress = false, reauthError = true, deleteNeedsReauth = true)
+                }
+                return@launch
+            }
+            val authDeleted = authRepository.deleteAccount()
+            if (!authDeleted) {
+                Timber.w("Reauth succeeded but delete still failed uid=%s", uid)
+                _state.update {
+                    it.copy(reauthInProgress = false, reauthError = true, deleteNeedsReauth = true)
+                }
+                return@launch
+            }
+            localPrefs.pendingDeleteUid = null
+            runCatching { authRepository.signOut(context) }
+            Timber.i("Account delete completed via reauth uid=%s", uid)
+            _state.update {
+                it.copy(
+                    reauthInProgress = false,
+                    reauthError = false,
+                    deleteNeedsReauth = false,
+                    deleting = false,
+                    signedOut = true,
+                )
+            }
+        }
     }
 }

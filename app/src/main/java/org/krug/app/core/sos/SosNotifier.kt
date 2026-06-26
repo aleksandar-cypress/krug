@@ -58,6 +58,9 @@ class SosNotifier @Inject constructor(
         ensureChannel()
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            // Deep-link payload — MapScreen čita ovaj extra preko Intent.consumeSosFocusUid()
+            // i `flyTo(member.location)` + otvara MemberDetailSheet sa SOS pin-om u fokusu.
+            putExtra(EXTRA_FOCUS_SOS_UID, uid)
         }
         val pi = PendingIntent.getActivity(
             context, uid.hashCode(), openIntent,
@@ -134,6 +137,7 @@ class SosNotifier @Inject constructor(
         // Bumpovan ID — channel settings se ne mogu menjati posle prvog kreiranja, pa
         // moramo da pravimo novi channel kad menjamo importance/sound. v2 = HIGH + alarm.
         const val CHANNEL_ID = "krug_sos_v2"
+        const val EXTRA_FOCUS_SOS_UID = "krug_focus_sos_uid"
         private const val SOS_NOTIFICATION_BASE_ID = 2_000
         private val VIBRATION_PATTERN = longArrayOf(0, 500, 200, 500, 200, 500)
     }

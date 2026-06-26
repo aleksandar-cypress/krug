@@ -161,7 +161,9 @@
     <string name="account_delete_confirm_cta">Delete permanently</string>
     <string name="account_delete_progress">Deleting…</string>
     <string name="account_delete_reauth_title">Re-authentication required</string>
-    <string name="account_delete_reauth_body">For security reasons, Google requires a recent sign-in before account deletion. Sign out, sign in again, then try deleting</string>
+    <string name="account_delete_reauth_body">For security, Google asks you to sign in again before deleting your account. Tap below to confirm with your Google account.</string>
+    <string name="account_delete_reauth_cta">Sign in and delete</string>
+    <string name="account_delete_reauth_error">Sign-in failed. Try again, or cancel and use Sign out to retry later.</string>
 
     <!-- Privacy -->
     <string name="privacy_title">Privacy</string>
@@ -238,6 +240,15 @@
     <string name="permission_missing_location">Location</string>
     <string name="permission_missing_location_background">Background location</string>
     <string name="permission_missing_notifications">Notifications</string>
+
+    <!-- Offline banner -->
+    <string name="offline_banner_title">No internet connection</string>
+    <string name="offline_banner_body_with_age">Last update %1$s. Circle members see your old location.</string>
+    <string name="offline_banner_body_unknown">Circle members don\'t see updates until you reconnect.</string>
+
+    <!-- Power saver banner -->
+    <string name="powersave_banner_title">Battery saver active</string>
+    <string name="powersave_banner_body">Location updates run less often to save battery.</string>
 
     <!-- Edit circle sheet -->
     <string name="edit_circle_title">Edit circle</string>

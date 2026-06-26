@@ -32,6 +32,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.BatterySaver
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Add
@@ -95,6 +97,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
+import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
@@ -201,6 +204,65 @@ fun MapScreen(
     // Pending refocus: kad user tapne Osveži, pamtimo (uid, since). Kad stigne
     // sveži location.updatedAt > since za taj uid, automatski flyTo na novu poziciju.
     var pendingRefocus by remember { mutableStateOf<Pair<String, Long>?>(null) }
+
+    // SOS deep-link iz notifikacije — SosNotifier postavlja EXTRA_FOCUS_SOS_UID, MainActivity
+    // emituje u SosFocusBus, ovde fokusiramo pin čim member sa tim uid-om ima lokaciju
+    // (može da bude pre nego što Firestore + RTDB stignu na first frame, pa collect-ujemo
+    // dok god je bus non-null i čekamo članove). Posle obrade consume() resetuje bus.
+    val pendingSosFocus by org.krug.app.core.sos.SosFocusBus.pendingUid.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingSosFocus, state.members) {
+        val uid = pendingSosFocus ?: return@LaunchedEffect
+        val member = state.members.firstOrNull { it.uid == uid } ?: return@LaunchedEffect
+        val loc = member.location ?: return@LaunchedEffect
+        mapViewState.flyTo(loc.lng, loc.lat)
+        detailUid = uid
+        org.krug.app.core.sos.SosFocusBus.consume()
+    }
+
+    // Auto re-fit kamere na vraćanje iz background-a. Bez ovog: user vidi člana u
+    // pokretu, lock-uje telefon ili ide na Home, član se kreće dalje. Posle resume-a
+    // mapa je na staroj poziciji i pin je van vidnog polja — user mora ručno da klikne
+    // Članovi → refresh. Snapshot updatedAt-a po članu na ON_PAUSE; na ON_RESUME poredi
+    // sa current, ako je iko update-ovao → fit-to-bounds. Preskoči ako MemberDetailSheet
+    // otvoren (easeFollow logika već prati fokusiranog). Ako nije bilo update-a (kratke
+    // pauze, screen lock + unlock bez kretanja), ne diraj view da ne uznemiravamo user-a.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    val currentStateRef = androidx.compose.runtime.rememberUpdatedState(state)
+    val currentDetailUidRef = androidx.compose.runtime.rememberUpdatedState(detailUid)
+    DisposableEffect(lifecycle) {
+        var snapshotUpdatedAt: Map<String, Long>? = null
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> {
+                    snapshotUpdatedAt = currentStateRef.value.members.associate {
+                        it.uid to (it.location?.updatedAt ?: 0L)
+                    }
+                }
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
+                    val snap = snapshotUpdatedAt ?: return@LifecycleEventObserver
+                    snapshotUpdatedAt = null
+                    if (currentDetailUidRef.value != null) return@LifecycleEventObserver
+                    val members = currentStateRef.value.members
+                    val anyChanged = members.any { m ->
+                        val now = m.location?.updatedAt ?: 0L
+                        val before = snap[m.uid] ?: 0L
+                        now > before
+                    }
+                    if (!anyChanged) return@LifecycleEventObserver
+                    val points = members.mapNotNull { m ->
+                        m.location?.let { Point.fromLngLat(it.lng, it.lat) }
+                    }
+                    if (points.isNotEmpty()) {
+                        Timber.d("Resume re-fit: ${points.size} member(s) updated in background")
+                        mapViewState.fitToMembers(points)
+                    }
+                }
+                else -> {}
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(pendingRefocus, state.members) {
         val pending = pendingRefocus ?: return@LaunchedEffect
@@ -480,6 +542,11 @@ fun MapScreen(
                     }
                 },
             )
+            OfflineBanner(
+                isOnline = state.isOnline,
+                lastUpdatedAt = state.selfLocation?.updatedAt,
+            )
+            PowerSaveBanner(isOnSaver = state.isPowerSaveMode)
             if (activeSosMembers.isNotEmpty()) {
                 Spacer(Modifier.size(12.dp))
                 val activeCircleName = state.myCircles
@@ -1611,6 +1678,39 @@ private class MapViewHolder {
     }
 
     /**
+     * Fit kamere na sve dostavljene tačke (self + ne-self članove). Koristi se na
+     * ON_RESUME kad se app vrati iz background-a i bar jedan član je u međuvremenu
+     * ažurirao lokaciju — bez ovog, mapa ostaje na staroj poziciji i pin "iskoči"
+     * iz vidnog polja. Padding računa permission/offline banner-e gore i FAB-ove dole.
+     */
+    fun fitToMembers(points: List<Point>) {
+        val mv = mapView ?: return
+        if (!styleLoaded || points.isEmpty()) return
+        if (points.size == 1) {
+            val p = points.first()
+            mv.mapboxMap.easeTo(
+                CameraOptions.Builder()
+                    .center(p)
+                    .zoom(15.0)
+                    .build(),
+                MapAnimationOptions.mapAnimationOptions { duration(900L) },
+            )
+            return
+        }
+        val cam = mv.mapboxMap.cameraForCoordinates(
+            coordinates = points,
+            camera = CameraOptions.Builder().build(),
+            coordinatesPadding = EdgeInsets(140.0, 80.0, 220.0, 80.0),
+            maxZoom = 15.0,
+            offset = null,
+        )
+        mv.mapboxMap.easeTo(
+            cam,
+            MapAnimationOptions.mapAnimationOptions { duration(900L) },
+        )
+    }
+
+    /**
      * Continuous follow — pan-only easeTo, bez zoom change-a. Koristi se dok je
      * MemberDetailSheet otvoren i član se kreće: na svaki svež location update kamera
      * pomeri se na novu poziciju. flyTo nije pogodan ovde jer pravi arc + zoom reset
@@ -2379,6 +2479,109 @@ private fun lastSeenLabel(updatedAt: Long?): String {
 
 /** Kompaktna verzija za StatChip — "sad", "5m", "2h", "1d+" (uvek single-line). */
 // compactLastSeen — preseljen u core.util.Time radi unit testabilnosti.
+
+/**
+ * Battery Saver banner — sistemski power-save mode poseban od low-battery profila.
+ * Saver režim agresivno usporava sve background usluge (FGS može da dobije ređi
+ * callback ritam, JobScheduler je throttled). Banner kaže korisniku da je ažuriranje
+ * lokacije manje često dok je Saver on. Manji ton od offline-a (tertiary boja).
+ */
+@Composable
+private fun PowerSaveBanner(isOnSaver: Boolean) {
+    if (!isOnSaver) return
+    Spacer(Modifier.size(12.dp))
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.BatterySaver,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.size(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.powersave_banner_title),
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Text(
+                    text = stringResource(R.string.powersave_banner_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Offline banner — connectivity loss feedback. Reaktivno preko ConnectivityManager-a
+ * (NetworkMonitor u core/util). Pored "Offline" labele dodaje i "poslednje ažuriranje
+ * pre X min" iz self-location.updatedAt kako bi user video koliko su podaci stari.
+ * Tick se osvežava na 30s da labela ne ostane zamrznuta dok banner stoji.
+ */
+@Composable
+private fun OfflineBanner(isOnline: Boolean, lastUpdatedAt: Long?) {
+    if (isOnline) return
+    var nowTick by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(lastUpdatedAt) {
+        while (true) {
+            kotlinx.coroutines.delay(30_000L)
+            nowTick = System.currentTimeMillis()
+        }
+    }
+    val ageLabel = if (lastUpdatedAt != null && lastUpdatedAt > 0L) {
+        org.krug.app.core.util.sosRelativeTime(lastUpdatedAt, nowTick)
+    } else null
+
+    Spacer(Modifier.size(12.dp))
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CloudOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.size(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.offline_banner_title),
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                Text(
+                    text = if (ageLabel != null) {
+                        stringResource(R.string.offline_banner_body_with_age, ageLabel)
+                    } else {
+                        stringResource(R.string.offline_banner_body_unknown)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        }
+    }
+}
 
 /**
  * Subtle warning banner — pojavljuje se ako fali permission (FINE_LOCATION / background

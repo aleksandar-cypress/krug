@@ -102,6 +102,7 @@ class CircleRepository @Inject constructor(
                 "iconKey" to iconKey,
             ),
         ).await()
+        Timber.i("Circle details updated id=%s", circleId)
     }
 
     /**
@@ -142,6 +143,7 @@ class CircleRepository @Inject constructor(
                 ),
             )
         }.await()
+        Timber.i("Circle joined id=%s uid=%s asChild=%s", circleId, uid, asChild)
     }
 
     /** Remove self from circle. Rules zabranjuju vlasniku da napusti svoj krug. */
@@ -159,6 +161,7 @@ class CircleRepository @Inject constructor(
         members(circleId).document(memberUid)
             .update("isChild", isChild)
             .await()
+        Timber.i("Child status set id=%s uid=%s isChild=%s", circleId, memberUid, isChild)
     }
 
     /** Observe member docs za uid kroz sve krugove. True ako je isChild u BAR JEDNOM. */

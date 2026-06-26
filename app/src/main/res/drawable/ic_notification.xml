@@ -1,28 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Notification small icon — 4 male tačke u tesnom kružnom orbitu.
-    Outer extent: 5.3dp od centra (orbit 3.5 + radius 1.8) → safe padding 6.7dp od ivice
-    24dp ikone. Garantovano unutar Samsung One UI crop maske (i bilo koje druge).
+    Notification small icon (24dp canvas, monochrome — Android sistem ignoriše boju i
+    koristi samo alpha). Cilj: čitka silueta u status bar-u i AOD-u (Always-On Display).
+
+    Ranija verzija je imala 4 vrlo sitne tačke (radius 1.8dp na orbitu 3.5dp) — sistem ih
+    prikazuje kao izolovane "pahuljice" glyphs koji se gube. Nova verzija: 4 popunjene
+    glave (radius 3dp) na orbital radius 7dp + tanki povezivajući ring (stroke 1dp) koji
+    veže pattern u "krug ljudi" siluetu — instantly readable na sat licu i u status bar-u.
+
+    Outer extent: orbit 7 + head radius 3 = 10dp od centra. Safe padding 2dp od ivice
+    24dp ikone (sistem squircle crop ne seče).
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <!-- Top -->
+    <!-- Connecting ring (orbit) — tanki obrub koji vezuje 4 head dot-a u siluetu kruga. -->
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.0"
+        android:fillColor="#00000000"
+        android:pathData="M12,5 a7,7 0 1,0 0.001,0 z" />
+    <!-- Top head -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M12,8.5m-1.8,0a1.8,1.8 0,1 1,3.6 0a1.8,1.8 0,1 1,-3.6 0" />
-    <!-- Right -->
+        android:pathData="M12,5m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <!-- Right head -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M15.5,12m-1.8,0a1.8,1.8 0,1 1,3.6 0a1.8,1.8 0,1 1,-3.6 0" />
-    <!-- Bottom -->
+        android:pathData="M19,12m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <!-- Bottom head -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M12,15.5m-1.8,0a1.8,1.8 0,1 1,3.6 0a1.8,1.8 0,1 1,-3.6 0" />
-    <!-- Left -->
+        android:pathData="M12,19m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <!-- Left head -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M8.5,12m-1.8,0a1.8,1.8 0,1 1,3.6 0a1.8,1.8 0,1 1,-3.6 0" />
+        android:pathData="M5,12m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
 </vector>

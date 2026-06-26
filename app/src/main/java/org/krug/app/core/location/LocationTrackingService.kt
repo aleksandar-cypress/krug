@@ -106,6 +106,15 @@ class LocationTrackingService : Service() {
     @Volatile private var sosBoostUntilMs: Long = 0L
     @Volatile private var refreshBoostUntilMs: Long = 0L
 
+    /**
+     * Spam cap za refresh ping-ove — peer pošalje "Osveži lokaciju", dobije BURST 5min.
+     * Ako isti peer spamuje dugme u tom roku, ignorišemo dodatne ping-ove (boost je
+     * već u toku, novi boost samo ekstenduje period čime BURST drift-uje indefinitno
+     * i jede bateriju). Per-requester last-boost timestamp; ako je u poslednjih
+     * REFRESH_BOOST_COOLDOWN_MS, skip.
+     */
+    private val lastBoostByRequester = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             val loc = result.lastLocation ?: return
@@ -478,8 +487,20 @@ class LocationTrackingService : Service() {
                 if (stale.isNotEmpty()) {
                     Timber.d("Discarding ${stale.size} stale refresh request(s) older than ${REFRESH_REQUEST_TTL_MS / 60_000}min")
                 }
-                if (fresh.isNotEmpty()) {
-                    Timber.d("Refresh request from ${fresh.size} member(s) — pulling fresh fix + boost")
+                // Spam cap — filtriraj fresh kroz per-requester cooldown. Ako je isti peer
+                // već trigger-ovao boost u poslednjih REFRESH_BOOST_COOLDOWN_MS, ignoriši
+                // dodatne ping-ove (boost je još u toku, novi bi samo drift-ovao BURST).
+                val accepted = fresh.filterKeys { reqUid ->
+                    val lastTs = lastBoostByRequester[reqUid] ?: 0L
+                    now - lastTs >= REFRESH_BOOST_COOLDOWN_MS
+                }
+                val throttled = fresh.keys - accepted.keys
+                if (throttled.isNotEmpty()) {
+                    Timber.d("Throttled ${throttled.size} refresh request(s) within cooldown window")
+                }
+                if (accepted.isNotEmpty()) {
+                    Timber.i("Refresh request accepted from ${accepted.size} member(s) — pulling fresh fix + boost")
+                    accepted.keys.forEach { lastBoostByRequester[it] = now }
                     requestOneShotFix()
                     // Plus prebaci na BURST profil 5min — ako se kreće, peer ga vidi uživo
                     // umesto samo jedan fix na ping.
@@ -651,6 +672,8 @@ class LocationTrackingService : Service() {
         const val SOS_BOOST_DURATION_MS = 30 * 60_000L
         /** Kad peer pošalje refresh ping, BURST 5min — ako se kreće, prati ga taj period. */
         const val REFRESH_BOOST_DURATION_MS = 5 * 60_000L
+        /** Spam cap — isti peer ne može da trigger-uje novi boost dok ovaj nije istekao. */
+        const val REFRESH_BOOST_COOLDOWN_MS = REFRESH_BOOST_DURATION_MS
         /** Movement filter — manje od 15m kretanja preskače publish. */
         const val SIGNIFICANT_MOVEMENT_M = 15f
         /** Force publish za freshness signal čak i bez kretanja. */

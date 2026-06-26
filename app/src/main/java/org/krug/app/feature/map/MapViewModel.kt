@@ -27,6 +27,8 @@ import org.krug.app.core.sos.SosModel
 import org.krug.app.core.sos.SosRepository
 import org.krug.app.core.user.UserRepository
 import org.krug.app.core.util.DeviceNames
+import org.krug.app.core.util.NetworkMonitor
+import org.krug.app.core.util.PowerSaveMonitor
 import timber.log.Timber
 
 data class MemberWithLocation(
@@ -57,6 +59,16 @@ data class MapUiState(
      * (empty + circlesError) — drugi case zaslužuje retry banner umesto onboarding CTA.
      */
     val circlesError: Boolean = false,
+    /**
+     * Reactive network state preko ConnectivityManager. False → offline banner sa
+     * "poslednje ažuriranje pre X min" na osnovu selfLocation.updatedAt.
+     */
+    val isOnline: Boolean = true,
+    /**
+     * True kad je sistemski Battery Saver mod aktivan. UI banner upozorava da
+     * lokacija ide ređim intervalom dok je Saver on.
+     */
+    val isPowerSaveMode: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -69,6 +81,8 @@ class MapViewModel @Inject constructor(
     private val localPrefs: LocalPrefs,
     private val directionsRepository: DirectionsRepository,
     private val userRepository: UserRepository,
+    private val networkMonitor: NetworkMonitor,
+    private val powerSaveMonitor: PowerSaveMonitor,
 ) : ViewModel() {
 
     /**
@@ -88,8 +102,12 @@ class MapViewModel @Inject constructor(
     private val authFlow = authRepository.observeAuthState()
 
     val uiState: StateFlow<MapUiState> = authFlow.flatMapLatest { user ->
-        if (user == null) flowOf(MapUiState())
-        else combineForUser(user.uid)
+        val base = if (user == null) flowOf(MapUiState()) else combineForUser(user.uid)
+        combine(
+            base,
+            networkMonitor.isOnline,
+            powerSaveMonitor.isOnSaver,
+        ) { state, online, saver -> state.copy(isOnline = online, isPowerSaveMode = saver) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MapUiState())
 
     fun setActiveCircle(id: String) {

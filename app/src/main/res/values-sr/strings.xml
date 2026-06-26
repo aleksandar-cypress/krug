@@ -161,7 +161,9 @@
     <string name="account_delete_confirm_cta">Obriši trajno</string>
     <string name="account_delete_progress">Brisanje…</string>
     <string name="account_delete_reauth_title">Potrebna ponovna prijava</string>
-    <string name="account_delete_reauth_body">Iz bezbednosnih razloga, Google traži skoriju prijavu pre brisanja naloga. Odjavi se, prijavi ponovo, pa pokušaj brisanje opet</string>
+    <string name="account_delete_reauth_body">Iz bezbednosnih razloga, Google traži ponovnu prijavu pre brisanja naloga. Tapni dugme i potvrdi svoj Google nalog.</string>
+    <string name="account_delete_reauth_cta">Prijavi se i obriši</string>
+    <string name="account_delete_reauth_error">Prijava nije uspela. Pokušaj ponovo, ili otkaži i koristi Odjava pa probaj kasnije.</string>
 
     <!-- Privacy -->
     <string name="privacy_title">Privatnost</string>
@@ -238,6 +240,15 @@
     <string name="permission_missing_location">Lokacija</string>
     <string name="permission_missing_location_background">Lokacija u pozadini</string>
     <string name="permission_missing_notifications">Obaveštenja</string>
+
+    <!-- Offline banner -->
+    <string name="offline_banner_title">Nema internet veze</string>
+    <string name="offline_banner_body_with_age">Poslednje ažuriranje %1$s. Članovi kruga vide staru lokaciju.</string>
+    <string name="offline_banner_body_unknown">Članovi kruga ne vide ažuriranja dok se ne povežeš.</string>
+
+    <!-- Power saver banner -->
+    <string name="powersave_banner_title">Štedljivi režim aktivan</string>
+    <string name="powersave_banner_body">Lokacija se ažurira ređe radi uštede baterije.</string>
 
     <!-- Edit circle sheet -->
     <string name="edit_circle_title">Izmeni krug</string>

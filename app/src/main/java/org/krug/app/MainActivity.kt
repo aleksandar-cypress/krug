@@ -1,5 +1,6 @@
 package org.krug.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -13,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import dagger.hilt.android.AndroidEntryPoint
+import org.krug.app.core.sos.SosFocusBus
+import org.krug.app.core.sos.SosNotifier
 import org.krug.app.core.splash.SplashGate
 import org.krug.app.navigation.KrugNavHost
 import org.krug.app.ui.theme.KrugTheme
@@ -32,9 +35,28 @@ class MainActivity : ComponentActivity() {
         splashScreen.setOnExitAnimationListener { provider -> provider.remove() }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        handleSosFocusExtra(intent)
         setContent {
             KrugApp()
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // launchMode=singleTask znači da drugi tap na SOS notif dok je app open ide
+        // ovde umesto u onCreate. Refresh extra u Activity intent-u da bi sledeći
+        // getIntent() call vraćao novi intent, pa proslediti u bus.
+        setIntent(intent)
+        handleSosFocusExtra(intent)
+    }
+
+    private fun handleSosFocusExtra(intent: Intent?) {
+        val uid = intent?.getStringExtra(SosNotifier.EXTRA_FOCUS_SOS_UID)
+            ?.takeIf { it.isNotBlank() }
+            ?: return
+        SosFocusBus.request(uid)
+        // Skini extra da rotacija/configChange ne re-trigger-uje fokus.
+        intent.removeExtra(SosNotifier.EXTRA_FOCUS_SOS_UID)
     }
 }
 

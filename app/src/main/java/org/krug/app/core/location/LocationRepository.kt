@@ -82,6 +82,7 @@ class LocationRepository @Inject constructor(
     /** Pošalji "ping" target user-u da pošalje svežu lokaciju. */
     suspend fun requestRefresh(targetUid: String, requesterUid: String) {
         requestEntry(targetUid, requesterUid).setValue(ServerValue.TIMESTAMP).await()
+        Timber.i("Refresh ping sent target=%s from=%s", targetUid, requesterUid)
     }
 
     /** Sluša ping-ove poslate ovom user-u. Vraća mapu requesterUid → timestamp. */

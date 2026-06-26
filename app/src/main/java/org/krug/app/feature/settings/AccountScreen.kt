@@ -212,11 +212,42 @@ fun AccountScreen(
 
     if (state.deleteNeedsReauth) {
         AlertDialog(
-            onDismissRequest = { viewModel.dismissDeleteReauth() },
+            onDismissRequest = {
+                if (!state.reauthInProgress) viewModel.dismissDeleteReauth()
+            },
             title = { Text(stringResource(R.string.account_delete_reauth_title)) },
-            text = { Text(stringResource(R.string.account_delete_reauth_body)) },
+            text = {
+                Text(
+                    text = if (state.reauthError) {
+                        stringResource(R.string.account_delete_reauth_error)
+                    } else {
+                        stringResource(R.string.account_delete_reauth_body)
+                    },
+                )
+            },
             confirmButton = {
-                TextButton(onClick = { viewModel.dismissDeleteReauth() }) {
+                TextButton(
+                    enabled = !state.reauthInProgress,
+                    onClick = { viewModel.reauthAndDelete(context) },
+                ) {
+                    if (state.reauthInProgress) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.account_delete_reauth_cta),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !state.reauthInProgress,
+                    onClick = { viewModel.dismissDeleteReauth() },
+                ) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },

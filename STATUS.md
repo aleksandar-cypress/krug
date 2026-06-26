@@ -605,7 +605,6 @@ Detaljniji audit fokusiran na regression check, threading, error consistency, bu
 
 ### Što i dalje treba (preostalo posle ove sesije)
 - Distribuirati novi APK beta grupi kroz Firebase App Distribution (čekamo test feedback od user-a)
-- Member nickname per circle ("Mama" u family, "Mira" u prijateljskom)
 - Empty members CTA — "Niko se nije pridružio — pošalji pozivnicu" u MembersSheet kad si jedini
 - Battery saver banner na Map kad user u SAVER modu
 - Crashlytics breadcrumbs za key akcije
@@ -614,10 +613,8 @@ Detaljniji audit fokusiran na regression check, threading, error consistency, bu
 - Google reauth flow za delete-account (one-step umesto sign-out/sign-in/retry)
 - FCM SOS push za ubijeni app scenario (treba Blaze plan ~$1-3/mesec)
 - Places/Geofencing v1 (per-place "Obavesti članove" toggle, child mode tie-in)
-- Sound test za SOS u Settings (verifikacija pre stvarne hitnoće)
 - History trail (24h breadcrumbs po članu)
 - Refresh boost spam cap (zaštita ako peer spamuje "Osveži lokaciju")
-- "Podrži razvoj" link kad budemo imali više korisnika (Buy Me a Coffee/PayPal)
 
 ## Gde smo stali (2026-06-20, osma sesija — UI polish + child mode invite + circle edit + onboarding skip)
 
@@ -701,7 +698,6 @@ A37 + Xiaomi Mi 11 oba sa najnovijim build-om. Beta grupa nepromenjena (aleksand
 - (Već postojalo, samo verifikovano) — SOS notifikacija click otvara `MainActivity` sa SINGLE_TOP + CLEAR_TOP. Nakon unlock-a, app je na Map screen-u sa SOS banner-om.
 
 ### Sledeće sesije — preostalo
-- Member nickname per circle ("Mama" u family, "Mira" u prijateljskom)
 - Empty members CTA — "Niko se nije pridružio — pošalji pozivnicu" u MembersSheet kad si jedini
 - Battery saver banner na Map kad u SAVER modu
 - Crashlytics breadcrumbs za key akcije
@@ -710,10 +706,8 @@ A37 + Xiaomi Mi 11 oba sa najnovijim build-om. Beta grupa nepromenjena (aleksand
 - Google reauth flow za delete-account
 - FCM SOS push (treba Blaze plan ~$1-3/mesec)
 - Places/Geofencing (per-place "Obavesti članove" toggle, default = on za isChild)
-- Sound test za SOS u Settings
 - History trail (last 24h breadcrumbs)
 - Member trail / Places — uz Blaze ($)
-- "Podrži razvoj" link (čekamo više korisnika)
 
 ## Gde smo stali (2026-06-20, sedma sesija — child mode + onboarding 3 koraka)
 
@@ -884,10 +878,8 @@ A37 + Xiaomi Mi 11 oba sa najnovijim build-om. Beta grupa nepromenjena (aleksand
 - Pin update pulse animation
 - Map empty state — inline "Napravi krug" CTA
 - About screen polish (verzija, copyright, logo)
-- Member nickname per circle ("Mama" u family, "Mira" u prijateljskom)
 - Release signing + Play Store internal testing
 - Google reauth flow za delete-account
-- "Podrži razvoj" link (čekamo više korisnika)
 - FCM SOS push (treba Blaze plan)
 - History trail / Places-Geofencing (postv1 feature-i)
 

@@ -210,8 +210,9 @@ class AuthRepository @Inject constructor(
 
     /**
      * GDPR — obriši Firebase Auth user. Vraća true ako je uspešno, false ako Firebase
-     * traži recent re-login (FirebaseAuthRecentLoginRequiredException — nije implementiran
-     * reauth flow). Pozivalac treba da uradi cleanup Firestore/RTDB pre ovog poziva.
+     * traži recent re-login (FirebaseAuthRecentLoginRequiredException). U tom slučaju
+     * pozivalac treba da odradi `reauthenticateWithGoogle` pa pozove ovaj metod opet.
+     * Pozivalac treba da uradi cleanup Firestore/RTDB pre ovog poziva.
      */
     suspend fun deleteAccount(): Boolean {
         val u = firebaseAuth.currentUser ?: return true
@@ -221,6 +222,61 @@ class AuthRepository @Inject constructor(
         } catch (e: Exception) {
             Timber.w(e, "deleteAccount: Firebase auth delete failed (likely needs reauth)")
             false
+        }
+    }
+
+    /**
+     * Re-credential za sensitive operacije (delete-account) na Google nalozima.
+     * Firebase odbija `user.delete()` ako je sign-in stariji od ~5min — uzima fresh
+     * Google ID token preko istog CredentialManager flow-a kao i sign-in, pa zove
+     * `reauthenticate(...)` na trenutnom user-u (bez signOut/signIn cycle-a).
+     */
+    suspend fun reauthenticateWithGoogle(activityContext: Context): SignInResult.Reason? {
+        val user = firebaseAuth.currentUser
+            ?: return SignInResult.Reason.Unknown
+        if (user.isAnonymous) {
+            // Anonimni nemaju Google provider — reauth nije relevantan, no-op.
+            return null
+        }
+        val credentialManager = CredentialManager.create(activityContext)
+        val webClientId = appContext.getString(R.string.default_web_client_id)
+        // setFilterByAuthorizedAccounts(true) + AutoSelect: ako user već ima vezan
+        // Google nalog kroz CredentialManager, prikazaće chooser pre-filtriran na taj nalog
+        // da reauth ne ode na pogrešan email (account mismatch → Firebase odbija).
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(
+                GetGoogleIdOption.Builder()
+                    .setServerClientId(webClientId)
+                    .setFilterByAuthorizedAccounts(true)
+                    .setAutoSelectEnabled(true)
+                    .build(),
+            )
+            .build()
+
+        val idToken: String = try {
+            val response = withTimeoutOrNull(CREDENTIAL_TIMEOUT_MS) {
+                credentialManager.getCredential(activityContext, request)
+            } ?: run {
+                Timber.w("Reauth credential request timed out after %dms", CREDENTIAL_TIMEOUT_MS)
+                return SignInResult.Reason.Network
+            }
+            val credential = response.credential
+            if (credential !is CustomCredential || credential.type != TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                return SignInResult.Reason.Unknown
+            }
+            GoogleIdTokenCredential.createFrom(credential.data).idToken
+        } catch (e: GetCredentialException) {
+            Timber.w(e, "Reauth credential request failed")
+            return mapCredentialError(e)
+        }
+
+        return try {
+            user.reauthenticate(GoogleAuthProvider.getCredential(idToken, null)).await()
+            Timber.i("Reauth: google, uid=%s", user.uid)
+            null
+        } catch (e: Exception) {
+            Timber.w(e, "Firebase reauthenticate failed")
+            mapFirebaseAuthError(e)
         }
     }
 

@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto-backup (Android 6-11). Exclude-ujemo sve sharedpref-e jer sadrže
+  user-bound state (pendingDeleteUid, activeCircleId, FCM token) i Firebase
+  auth session token koji ne sme da curi u Google Drive.
+  Database files (Firestore + RTDB persistent cache) takođe exclude
+  jer cache pripada konkretnoj Firebase Auth sesiji.
+-->
 <full-backup-content>
-    <exclude domain="sharedpref" path="firebase_session.xml" />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="file" path="." />
 </full-backup-content>
