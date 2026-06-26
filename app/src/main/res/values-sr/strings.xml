@@ -63,12 +63,16 @@
     <string name="circles_empty_body">Napravite svoj prvi krug ili se pridružite postojećem</string>
     <string name="circles_create_cta">Napravi krug</string>
     <string name="circles_join_cta">Pridruži se kodom</string>
-    <string name="circles_members_count">%1$d članova</string>
+    <plurals name="circles_members_count">
+        <item quantity="one">%1$d član</item>
+        <item quantity="few">%1$d člana</item>
+        <item quantity="other">%1$d članova</item>
+    </plurals>
 
     <!-- Create circle -->
     <string name="create_circle_title">Novi krug</string>
     <string name="create_circle_name_label">Ime kruga</string>
-    <string name="create_circle_name_placeholder">Porodica, Drustvo, Posao…</string>
+    <string name="create_circle_name_placeholder">Porodica, Društvo, Posao…</string>
     <string name="create_circle_color_label">Boja</string>
     <string name="create_circle_icon_label">Ikonica</string>
     <string name="create_circle_create_cta">Napravi</string>
@@ -311,7 +315,7 @@
 
     <!-- Circle icon labels (icon picker) -->
     <string name="icon_label_family">Porodica</string>
-    <string name="icon_label_friends">Drustvo</string>
+    <string name="icon_label_friends">Društvo</string>
     <string name="icon_label_work">Posao</string>
     <string name="icon_label_school">Škola</string>
     <string name="icon_label_home">Komšiluk</string>

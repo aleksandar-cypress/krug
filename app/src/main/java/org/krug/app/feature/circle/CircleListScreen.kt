@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -368,7 +369,7 @@ private fun CircleRow(circle: CircleModel, onClick: () -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(circle.name, style = MaterialTheme.typography.titleLarge)
                 Text(
-                    text = stringResource(R.string.circles_members_count, circle.memberIds.size),
+                    text = pluralStringResource(R.plurals.circles_members_count, circle.memberIds.size, circle.memberIds.size),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
