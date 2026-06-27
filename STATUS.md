@@ -13,6 +13,15 @@ Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `9
 - Lični nalog ostaje za personal git/SSH, ne za Krug user-facing kontekste
 
 **Release APK** i dalje na `~/Desktop/krug-release.apk` (69 MB, sa NDK Crashlytics), spreman za beta distribuciju.
+
+**Play Console signup** kompletan na kraju sesije (2026-06-27 popodne):
+- Developer name: **„Krug Team"**
+- Email: `krugappteam@gmail.com`
+- Tip: Personal account
+- $25 plaćeno, ID + selfie upload-ovan
+- Status: **„Google is verifying your identity"** — čeka se odobrenje 24-72h (možda do 7 dana). Phone verifikacija će se automatski završiti posle identity approve-a.
+- App publishing zaključan dok status ne pređe u „Approved" (email će stići na `krugappteam@gmail.com`)
+- Sve assets su spremni za Play Store upload — listing copy SR+EN, screenshots, feature graphics, AAB.
 Firebase: Firestore + RTDB rules deployovane. Release SHA-1 dodat u Firebase Console (`21:6A:94:24:64:98:08:4A:42:02:D6:4F:13:77:40:26:3C:A8:E0:36`), Google sign-in radi i u release build-u.
 **Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — release build verifikovan na S24 (`R5CWC1F9FND`).
 
