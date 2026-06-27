@@ -1,11 +1,15 @@
 package org.krug.app.feature.onboarding.pages
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,7 +29,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +59,11 @@ internal fun OnboardingPageScaffold(
     secondaryButtonText: String? = null,
     onSecondary: (() -> Unit)? = null,
 ) {
+    // Staggered enter — hero scale+fade, text slide+fade, button scale+fade. Bez ovog,
+    // svaki permission ekran "ulazi" kao monolit i ne signalizira fokus user-ovog dejstva.
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -72,75 +85,99 @@ internal fun OnboardingPageScaffold(
             ),
             label = "onb-hero-scale",
         )
-        Box(
-            modifier = Modifier
-                .size(140.dp)
-                .scale(scale)
-                .shadow(elevation = 14.dp, shape = CircleShape, clip = false)
-                .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(colors = listOf(LogoBlue50, LogoPink50)),
-                ),
-            contentAlignment = Alignment.Center,
+        AnimatedVisibility(
+            visible = visible,
+            enter = scaleIn(initialScale = 0.8f, animationSpec = tween(500)) +
+                fadeIn(animationSpec = tween(500)),
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(72.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
+            Box(
+                modifier = Modifier
+                    .size(140.dp)
+                    .scale(scale)
+                    .shadow(elevation = 14.dp, shape = CircleShape, clip = false)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(colors = listOf(LogoBlue50, LogoPink50)),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(72.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
 
         Spacer(Modifier.size(36.dp))
 
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.size(12.dp))
-        Text(
-            text = body,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
+        AnimatedVisibility(
+            visible = visible,
+            enter = slideInVertically(
+                initialOffsetY = { it / 3 },
+                animationSpec = tween(500, delayMillis = 250),
+            ) + fadeIn(animationSpec = tween(500, delayMillis = 250)),
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.size(12.dp))
+                Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
 
         Spacer(Modifier.weight(1f))
 
-        Button(
-            onClick = onPrimary,
-            enabled = primaryEnabled && !primaryLoading,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ),
+        AnimatedVisibility(
+            visible = visible,
+            enter = fadeIn(animationSpec = tween(400, delayMillis = 500)) +
+                scaleIn(initialScale = 0.92f, animationSpec = tween(400, delayMillis = 500)),
         ) {
-            if (primaryLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                )
-                Spacer(Modifier.size(12.dp))
-            }
-            Text(
-                text = primaryButtonText,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            )
-        }
-        if (secondaryButtonText != null && onSecondary != null) {
-            Spacer(Modifier.size(4.dp))
-            TextButton(
-                onClick = onSecondary,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(secondaryButtonText)
+            Column {
+                Button(
+                    onClick = onPrimary,
+                    enabled = primaryEnabled && !primaryLoading,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                ) {
+                    if (primaryLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                        Spacer(Modifier.size(12.dp))
+                    }
+                    Text(
+                        text = primaryButtonText,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    )
+                }
+                if (secondaryButtonText != null && onSecondary != null) {
+                    Spacer(Modifier.size(4.dp))
+                    TextButton(
+                        onClick = onSecondary,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(secondaryButtonText)
+                    }
+                }
             }
         }
     }

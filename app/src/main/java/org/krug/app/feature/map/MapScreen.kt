@@ -1,6 +1,11 @@
 package org.krug.app.feature.map
 
 import android.annotation.SuppressLint
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -551,22 +556,28 @@ fun MapScreen(
                 lastUpdatedAt = state.selfLocation?.updatedAt,
             )
             PowerSaveBanner(isOnSaver = state.isPowerSaveMode)
-            if (activeSosMembers.isNotEmpty()) {
-                Spacer(Modifier.size(12.dp))
+            AnimatedVisibility(
+                visible = activeSosMembers.isNotEmpty(),
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
                 val activeCircleName = state.myCircles
                     .firstOrNull { it.id == state.activeCircleId }?.name
-                SosBanner(
-                    members = activeSosMembers,
-                    selfUid = state.selfUid,
-                    circleName = activeCircleName,
-                    pulsePhase = sosPhase,
-                    onClickMember = { m ->
-                        m.location?.let { loc ->
-                            mapViewState.flyTo(loc.lng, loc.lat)
-                        }
-                    },
-                    onCancelSelf = { viewModel.clearSos() },
-                )
+                Column {
+                    Spacer(Modifier.size(12.dp))
+                    SosBanner(
+                        members = activeSosMembers,
+                        selfUid = state.selfUid,
+                        circleName = activeCircleName,
+                        pulsePhase = sosPhase,
+                        onClickMember = { m ->
+                            m.location?.let { loc ->
+                                mapViewState.flyTo(loc.lng, loc.lat)
+                            }
+                        },
+                        onCancelSelf = { viewModel.clearSos() },
+                    )
+                }
             }
         }
 
@@ -2290,37 +2301,44 @@ private fun lastSeenLabel(updatedAt: Long?): String {
  */
 @Composable
 private fun PowerSaveBanner(isOnSaver: Boolean) {
-    if (!isOnSaver) return
-    Spacer(Modifier.size(12.dp))
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.tertiaryContainer,
+    AnimatedVisibility(
+        visible = isOnSaver,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut(),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.BatterySaver,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.size(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.powersave_banner_title),
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
-                Text(
-                    text = stringResource(R.string.powersave_banner_body),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
+        Column {
+            Spacer(Modifier.size(12.dp))
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp)),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.BatterySaver,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.size(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.powersave_banner_title),
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        )
+                        Text(
+                            text = stringResource(R.string.powersave_banner_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        )
+                    }
+                }
             }
         }
     }
@@ -2334,7 +2352,17 @@ private fun PowerSaveBanner(isOnSaver: Boolean) {
  */
 @Composable
 private fun OfflineBanner(isOnline: Boolean, lastUpdatedAt: Long?) {
-    if (isOnline) return
+    AnimatedVisibility(
+        visible = !isOnline,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut(),
+    ) {
+        OfflineBannerContent(lastUpdatedAt = lastUpdatedAt)
+    }
+}
+
+@Composable
+private fun OfflineBannerContent(lastUpdatedAt: Long?) {
     var nowTick by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(lastUpdatedAt) {
         while (true) {
@@ -2347,6 +2375,7 @@ private fun OfflineBanner(isOnline: Boolean, lastUpdatedAt: Long?) {
         org.krug.app.core.util.sosRelativeTime(context, lastUpdatedAt, nowTick)
     } else null
 
+    Column {
     Spacer(Modifier.size(12.dp))
     Surface(
         modifier = Modifier
@@ -2384,6 +2413,7 @@ private fun OfflineBanner(isOnline: Boolean, lastUpdatedAt: Long?) {
             }
         }
     }
+    }
 }
 
 /**
@@ -2413,41 +2443,48 @@ private fun PermissionWarningBanner(onOpenSettings: () -> Unit) {
         onDispose { lifecycle.removeObserver(observer) }
     }
 
-    if (missingPermissions.isEmpty()) return
-    Spacer(Modifier.size(12.dp))
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onOpenSettings),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.errorContainer,
+    AnimatedVisibility(
+        visible = missingPermissions.isNotEmpty(),
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut(),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Warning,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.size(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.permission_banner_missing),
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-                Text(
-                    text = stringResource(
-                        R.string.permission_banner_body,
-                        missingPermissions.joinToString(" · "),
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
+        Column {
+            Spacer(Modifier.size(12.dp))
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable(onClick = onOpenSettings),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.size(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.permission_banner_missing),
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.permission_banner_body,
+                                missingPermissions.joinToString(" · "),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
             }
         }
     }
