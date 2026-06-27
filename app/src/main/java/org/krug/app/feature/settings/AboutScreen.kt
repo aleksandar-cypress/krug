@@ -4,7 +4,6 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.widget.Toast
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,13 +25,16 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,8 +56,16 @@ private const val TERMS_URL = "https://aleksandar-cypress.github.io/krug/terms.h
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val invalidLinkMsg = stringResource(R.string.about_toast_invalid_link)
+    val noBrowserMsg = stringResource(R.string.about_toast_cannot_open_link)
     fun openUrl(url: String) {
-        openExternalUrl(context, url)
+        when (openExternalUrl(context, url)) {
+            OpenUrlResult.Ok -> Unit
+            OpenUrlResult.InvalidUrl -> scope.launch { snackbarHostState.showSnackbar(invalidLinkMsg) }
+            OpenUrlResult.NoHandler -> scope.launch { snackbarHostState.showSnackbar(noBrowserMsg) }
+        }
     }
     // Verzija u release-u nema "-debug" suffix; u debug build-u ostavljamo radi jasnosti.
     val versionDisplay = BuildConfig.VERSION_NAME
@@ -64,6 +74,7 @@ fun AboutScreen(onBack: () -> Unit) {
     SettingsSubScaffold(
         title = stringResource(R.string.about_title),
         onBack = onBack,
+        snackbarHostState = snackbarHostState,
     ) { _ ->
         // Spoljni Column drži skrol u gornjem delu + copyright pinovan na dno. Bez ovog,
         // copyright je bio na kraju iste scroll-Column-e pa je samo bio negde dole (kod
@@ -139,21 +150,22 @@ fun AboutScreen(onBack: () -> Unit) {
     }
 }
 
+internal enum class OpenUrlResult { Ok, InvalidUrl, NoHandler }
+
 /**
  * Defensive eksterni URL launcher:
  * 1) Pokušaj Chrome Custom Tabs (in-app browser, back se vraća u Krug bez gašenja app-a).
  * 2) Fallback na klasičan ACTION_VIEW intent (eksterni browser).
- * 3) Fallback na Toast — nema instaliran nijedan handler.
+ * 3) Vraća rezultat — caller odlučuje kako da prikaže grešku (Snackbar u našem slučaju).
  *
  * Bez ovoga, raw ACTION_VIEW na Android 14+ ume da baci ActivityNotFoundException ako
  * korisnik nema default browser (custom ROM, headless device, freshly wiped state).
  */
-private fun openExternalUrl(context: Context, url: String) {
+private fun openExternalUrl(context: Context, url: String): OpenUrlResult {
     val uri = runCatching { Uri.parse(url) }.getOrNull()
     if (uri == null) {
         Timber.w("openExternalUrl: failed to parse $url")
-        Toast.makeText(context, context.getString(R.string.about_toast_invalid_link), Toast.LENGTH_SHORT).show()
-        return
+        return OpenUrlResult.InvalidUrl
     }
     // Custom Tabs path — najbolji UX, ali zahteva da postoji bar jedan browser sa CCT podrškom.
     runCatching {
@@ -161,20 +173,19 @@ private fun openExternalUrl(context: Context, url: String) {
             .setShowTitle(true)
             .build()
         tab.launchUrl(context, uri)
-    }.onSuccess { return }
+    }.onSuccess { return OpenUrlResult.Ok }
         .onFailure { Timber.d(it, "Custom Tabs launch failed; trying ACTION_VIEW") }
 
     // Fallback 1: klasičan ACTION_VIEW.
     runCatching {
         val intent = Intent(Intent.ACTION_VIEW, uri)
         context.startActivity(intent)
-    }.onSuccess { return }
+    }.onSuccess { return OpenUrlResult.Ok }
         .onFailure { e ->
             if (e !is ActivityNotFoundException) Timber.w(e, "ACTION_VIEW failed for $url")
         }
 
-    // Fallback 2: nema browsera uopšte.
-    Toast.makeText(context, context.getString(R.string.about_toast_cannot_open_link), Toast.LENGTH_SHORT).show()
+    return OpenUrlResult.NoHandler
 }
 
 @Composable

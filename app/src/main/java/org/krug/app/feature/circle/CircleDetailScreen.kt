@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -134,7 +136,11 @@ fun CircleDetailScreen(
                     enabled = !state.generatingInvite,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Icon(Icons.Outlined.PersonAdd, contentDescription = null)
+                    ButtonLeadingIconOrSpinner(
+                        loading = state.generatingInvite,
+                        icon = Icons.Outlined.PersonAdd,
+                        spinnerColor = MaterialTheme.colorScheme.onPrimary,
+                    )
                     Spacer(Modifier.size(8.dp))
                     Text(stringResource(R.string.circle_detail_invite_cta))
                 }
@@ -144,7 +150,11 @@ fun CircleDetailScreen(
                     enabled = !state.generatingInvite,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Icon(Icons.Outlined.ChildCare, contentDescription = null)
+                    ButtonLeadingIconOrSpinner(
+                        loading = state.generatingInvite,
+                        icon = Icons.Outlined.ChildCare,
+                        spinnerColor = MaterialTheme.colorScheme.primary,
+                    )
                     Spacer(Modifier.size(8.dp))
                     Text(stringResource(R.string.circle_detail_invite_child))
                 }
@@ -154,7 +164,11 @@ fun CircleDetailScreen(
                     enabled = !state.generatingInvite,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Icon(Icons.Outlined.PersonAdd, contentDescription = null)
+                    ButtonLeadingIconOrSpinner(
+                        loading = state.generatingInvite,
+                        icon = Icons.Outlined.PersonAdd,
+                        spinnerColor = MaterialTheme.colorScheme.onPrimary,
+                    )
                     Spacer(Modifier.size(8.dp))
                     Text(stringResource(R.string.circle_detail_invite_cta))
                 }
@@ -220,7 +234,11 @@ fun CircleDetailScreen(
                     ),
                     modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 ) {
-                    Icon(Icons.Outlined.Delete, contentDescription = null)
+                    ButtonLeadingIconOrSpinner(
+                        loading = state.deleting,
+                        icon = Icons.Outlined.Delete,
+                        spinnerColor = MaterialTheme.colorScheme.error,
+                    )
                     Spacer(Modifier.size(8.dp))
                     Text(stringResource(R.string.circle_detail_delete_cta))
                 }
@@ -235,7 +253,11 @@ fun CircleDetailScreen(
                         ),
                         modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                     ) {
-                        Icon(Icons.AutoMirrored.Outlined.ExitToApp, contentDescription = null)
+                        ButtonLeadingIconOrSpinner(
+                            loading = state.leaving,
+                            icon = Icons.AutoMirrored.Outlined.ExitToApp,
+                            spinnerColor = MaterialTheme.colorScheme.error,
+                        )
                         Spacer(Modifier.size(8.dp))
                         Text(stringResource(R.string.circle_detail_leave_cta))
                     }
@@ -313,6 +335,28 @@ fun CircleDetailScreen(
                 onCancel = { showEditSheet = false },
             )
         }
+    }
+}
+
+/**
+ * Leading slot za button-e koji imaju async loading state — prikazuje inline
+ * CircularProgressIndicator umesto ikone dok je `loading=true`. Drži se istih
+ * dimenzija (18dp) pa Layout ne preskače.
+ */
+@Composable
+private fun ButtonLeadingIconOrSpinner(
+    loading: Boolean,
+    icon: ImageVector,
+    spinnerColor: Color,
+) {
+    if (loading) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(18.dp),
+            strokeWidth = 2.dp,
+            color = spinnerColor,
+        )
+    } else {
+        Icon(icon, contentDescription = null)
     }
 }
 

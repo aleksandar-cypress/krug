@@ -83,6 +83,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import org.krug.app.core.util.clickHaptic
+import org.krug.app.core.util.rejectHaptic
 import androidx.compose.ui.res.painterResource
 import org.krug.app.ui.brand.pressScaleClickable
 import timber.log.Timber
@@ -692,6 +694,9 @@ fun MapScreen(
             SosConfirmDialog(
                 onDismiss = { sosConfirmVisible = false },
                 onConfirm = {
+                    // Jak haptik na SOS trigger — irreversible action, korisnik treba da
+                    // OSETI da je SOS poslat. REJECT/LONG_PRESS je jači od CONTEXT_CLICK.
+                    view.rejectHaptic()
                     viewModel.triggerSos()
                     // Boost FGS na BURST profil 30min — peers prate najsvežiju lokaciju
                     // tokom hitne situacije.

@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.krug.app.core.util.confirmHaptic
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.krug.app.R
@@ -64,9 +65,15 @@ fun CreateCircleScreen(
     viewModel: CreateCircleViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val view = androidx.compose.ui.platform.LocalView.current
 
     LaunchedEffect(state.createdCircleId) {
-        state.createdCircleId?.let(onCreated)
+        state.createdCircleId?.let {
+            // Success haptic — korisnik dobija potvrdu da je krug napravljen pre nego
+            // što nav state stigne na CircleList.
+            view.confirmHaptic()
+            onCreated(it)
+        }
     }
 
     Scaffold(

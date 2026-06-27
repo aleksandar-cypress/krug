@@ -46,9 +46,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import org.krug.app.core.util.confirmHaptic
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.krug.app.R
 import org.krug.app.ui.brand.KrugLogo
@@ -67,12 +69,17 @@ fun EnterCodeScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
+    val view = LocalView.current
 
     LaunchedEffect(prefilledCode) {
         if (prefilledCode != null) viewModel.setCode(prefilledCode)
     }
     LaunchedEffect(state.joinedCircleId) {
-        state.joinedCircleId?.let(onJoined)
+        state.joinedCircleId?.let {
+            // Success haptic pre nav-a — korisnik oseti da je join uspeo.
+            view.confirmHaptic()
+            onJoined(it)
+        }
     }
     // Auto-focus na input + open keyboard čim ekran otvori — user ne mora dodatno
     // da tap-uje na input box. Magic moment "pridruži se" trebao bi da bude bez trenja.
