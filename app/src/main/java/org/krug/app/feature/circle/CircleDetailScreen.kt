@@ -15,8 +15,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.ChildCare
 import androidx.compose.material.icons.outlined.Edit
@@ -234,7 +234,7 @@ fun CircleDetailScreen(
                         ),
                         modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                     ) {
-                        Icon(Icons.Outlined.ExitToApp, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Outlined.ExitToApp, contentDescription = null)
                         Spacer(Modifier.size(8.dp))
                         Text(stringResource(R.string.circle_detail_leave_cta))
                     }

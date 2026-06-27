@@ -40,7 +40,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ChildCare
-import androidx.compose.material.icons.outlined.DirectionsRun
+import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.NearMe
 import androidx.compose.material.icons.outlined.Person
@@ -99,6 +99,7 @@ import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
+import com.mapbox.maps.MapboxDelicateApi
 import com.mapbox.maps.Style
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.animation.easeTo
@@ -751,7 +752,7 @@ private fun ActivityRecognitionRationaleDialog(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.DirectionsRun,
+                    imageVector = Icons.AutoMirrored.Outlined.DirectionsRun,
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(40.dp),
@@ -1684,6 +1685,7 @@ private class MapViewHolder {
      * ažurirao lokaciju — bez ovog, mapa ostaje na staroj poziciji i pin "iskoči"
      * iz vidnog polja. Padding računa permission/offline banner-e gore i FAB-ove dole.
      */
+    @OptIn(MapboxDelicateApi::class)
     fun fitToMembers(points: List<Point>) {
         val mv = mapView ?: return
         if (!styleLoaded || points.isEmpty()) return
