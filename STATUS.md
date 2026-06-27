@@ -2,13 +2,94 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-27, kraj devetnaeste sesije — testing prep: device install + bug fixes + SosBanner i18n + GPS banner)
+## Gde smo stali (2026-06-27, kraj dvadesete sesije — sajt LIVE na krugapp.com + brand email migracija + landing polish)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `47483da`. **Release APK build-ovan i dostupan u `~/Desktop/krug-release.apk` (65 MB), spreman za distribuciju testerima.**
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `9407c14`. **Sajt LIVE na https://krugapp.com/** (i `privacy.html`, `terms.html`, `robots.txt`, `sitemap.xml`, `screenshots/`). SSL aktivan, sve HTTP 200. Hosting na user-ovom shared planu (nije GitHub Pages — proper domen sa custom email forwarding capability).
+
+**Brand split**: User je 2026-06-27 napravio dedicated `krugappteam@gmail.com` Gmail nalog za Krug brand operacije:
+- Firebase Console: dodat kao Owner (ownership migration završen)
+- Play Console signup: ide pod tim nalogom (još ne urađeno, čeka $25 + ID verifikaciju)
+- Sav user-facing copy (privacy/terms/landing/listing) prebačen sa `aleksandarr@gmail.com` (lični) na `krugappteam@gmail.com` (brand)
+- Lični nalog ostaje za personal git/SSH, ne za Krug user-facing kontekste
+
+**Release APK** i dalje na `~/Desktop/krug-release.apk` (69 MB, sa NDK Crashlytics), spreman za beta distribuciju.
 Firebase: Firestore + RTDB rules deployovane. Release SHA-1 dodat u Firebase Console (`21:6A:94:24:64:98:08:4A:42:02:D6:4F:13:77:40:26:3C:A8:E0:36`), Google sign-in radi i u release build-u.
 **Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — release build verifikovan na S24 (`R5CWC1F9FND`).
 
 **Health stanja**: `compileDebugKotlin` 0 warning-a. `testDebugUnitTest` zelen — 46 testova prolaze (TimeBucket 18, Geo 11, StringFormat 7, DeviceNames 10). `assembleRelease` prošao (1m 29s, R8 + lintVital + Crashlytics mapping upload). `:benchmark` Gradle modul i dalje validan. Nova UI infrastruktura: `Haptics.kt` util, SettingsSubScaffold sa SnackbarHostState parametrom, MapMarkers.pinMarker sa isSelf flag-om, novi GpsWaitingBanner Composable, OnboardingPage.isAlreadyGranted().
+
+## Dvadeseta sesija (2026-06-27) — sajt live + brand split + landing polish
+
+Sesija duga, podeljena u tri faze: app polish (early), landing polish (mid), hosting deployment (late). Mnogo iteracija na sitnim stvarima koje su user-i odmah primetili.
+
+### A) Initial app polish + bug fix-evi (commits `0f5797b`, `53e3aff`)
+
+Lansiran APK na S24, user prijavio probleme:
+- Switch circle sheet sa 9+ krugova: Manage button skriven — LazyColumn dobio `weight(1f, fill = false)`
+- Notification panel duplikat icon: `setLargeIcon` uklonjen iz `LocationTrackingService` + `SosNotifier`
+- Logo spin animation: posle više iteracija (tween 600 → spring bouncy → tween + 350ms delay → spring no delay) → konačno **tween 600ms FastOutSlowIn + 250ms delay** pre `onClick()`. „Klik → malo se zavrti → prelazimo na drugi ekran" feel.
+- App icon u Samsung App info: launcher icon ima fundamental design constraint (head-ovi na 4-14% / 86-95% viewport-a uz ivicu). Probao 12dp/18dp/25dp inset + LogoBlue gradient bg + dva-logo predlog. **User odluka: ostavi 22dp (Option 3)** — launcher na home screen-u izgleda OK, App info screen je low-priority Samsung-specific UI.
+
+### B) Pre-testing prep (commit `47483da`)
+
+- SosBanner hardcoded SR strings (MapScreen.kt:1067-1095): tri stvari (`"$name traži pomoć"`, plurals, `"krug „X""`) → novi i18n ključevi + plurals u oba locale-a
+- Onboarding skip granted permissions: `OnboardingPage.isAlreadyGranted(context)` + edge case fallback (`viewModel.complete()` ako su sve strane preskočene)
+- GPS waiting banner: novi Composable, prikazuje se kad `state.selfLocation == null AND hasForegroundLocation` (cold start 2-15s)
+
+### C) Crashlytics NDK (commit `8e3cb94`)
+
+Dodat `firebase-crashlytics-ndk` dependency. Bez ovog, Mapbox native SIGSEGV/SIGBUS ne dolazi u Crashlytics dashboard.
+
+### D) Landing page hosting prep (commits `f8e0596`, `b76d504`, `124dfb9`)
+
+User odlučio: kupiti `krugapp.com` domen + shared hosting, ne GitHub Pages.
+- Sav privacy/terms URL referenciranje prebačen sa `aleksandar-cypress.github.io/krug/*` na `krugapp.com/*.html` (AboutScreen.kt + listing-{sr,en}.md)
+- og:tags + sitemap.xml + robots.txt + theme-color + canonical links dodato
+- **Bilingual privacy.html i terms.html** (SR + EN sa lang switcher): prethodno bili samo SR, sad full prevod sa .t-sr/.t-en spans, isti localStorage `krug-lang` key kao landing — izbor jezika persistira kroz sve tri stranice
+
+### E) Landing polish runde
+
+**Path 1 odluka (free-first, premium tek u v1.1)**: dugo strateški razgovor (commit `2cb19ab`). Razmotren Path 2 (full freemium od dana 1) — odbačen zbog 7-10 nedelja dodatnog rada (Play Billing, Cloud Functions backend, Places UI, history arhitektura, subscription management) + visok bug surface payments + nedostatak userbase za konverziju. Posle launch-a → 3 meseca rasta → v1.1 premium. Postojeći user-i posle v1.1 dobiće **soft enforcement** (postojeći krugovi/članovi ostaju pristupačni, novi krugovi su iza premium-a) — ne loss aversion nego value-add positioning.
+
+**Pricing kontradikcija** (commit `2cb19ab`): bio „v1 = sve free" header + free card sa „1 krug, 6 članova" limit. Konzistentno: free unlimited, premium daje nove feature-e ne unlock.
+
+**WOW screenshot galerija** (commits `9cee657`, `99faa70`): 5 phone mockup-ova → 4 (4+1 wrap je izgledao loše), CSS-only dark frame sa notch + shadow, staggered rotacija (-2°/+1°/-1°/+2°) sa hover lift. Screenshots optimizovani: 1440×2880 .jpg → 540×1080 .webp, quality 82, ~17-66 KB per fajl. SR/EN swap kroz isti pattern.
+
+**Trust strip + email CTA + FAQ** (commit `b193a77`):
+- Trust strip ispod hero CTAs: 4 checkmark badge-a (EU hosting, bez reklama, bez praćenja, pravljeno u Srbiji)
+- Dead „Coming soon Google Play" CTA → aktivan `mailto:` link „Javi mi kad bude live" (pre-filled subject) — real conversion goal pre Play Store-a
+- FAQ sekcija: 6 pitanja sa native `<details>/<summary>` (zero JS, accessible) — bateriju potrosnja, ko vidi lokaciju, brisanje naloga, hitne sluzbe disclaimer, vise krugova, da li ostaje besplatno
+
+### F) Brand email split (commit `9407c14`)
+
+User napravio `krugappteam@gmail.com` dedicated Gmail za Krug brand:
+- Firebase Console: dodat kao Owner (ownership migration završen u sesiji)
+- Sav user-facing email referenciranje prebačeno sa `aleksandarr@gmail.com` na `krugappteam@gmail.com` u 6 fajlova:
+  - `docs/index.html` (2 mesta — hero mailto + footer)
+  - `docs/privacy.html` (5 mesta — sve kontakt sekcije)
+  - `docs/terms.html` (1 mesto — kontakt)
+  - `docs/play-store/listing-sr.md` + `listing-en.md` (po 2 mesta — kontakt + what's new)
+  - `docs/play-store/pre-launch-console-actions.md` (1 mesto)
+- 13 mesta zamenjeno, 0 ostataka
+- Memorija ažurirana: `feedback_email.md` sad kaže `krugappteam@gmail.com` (lični `aleksandarr@gmail.com` ostaje za personal git/SSH/non-Krug)
+
+### G) Sajt LIVE (deployment ručno od user-a)
+
+User je upload-ovao 7 fajlova + screenshots folder iz `~/Desktop/krugapp-upload/` u cPanel `public_html/`. Verifikovano kroz `curl -sI`:
+- `https://krugapp.com/` → HTTP 200
+- `https://krugapp.com/privacy.html` → HTTP 200
+- `https://krugapp.com/terms.html` → HTTP 200
+- `https://krugapp.com/robots.txt` → HTTP 200
+- `https://krugapp.com/screenshots/02-map-onboarding-sr.webp` → HTTP 200
+
+SSL aktivan (HTTP/2), Let's Encrypt verovatno preko cPanel-a.
+
+### H) Sledeći koraci
+
+1. **Play Console signup** pod `krugappteam@gmail.com`: $25 + ID verifikacija + 24-72h. Pre toga, otvorin incognito browser tab.
+2. **Posle Play Console verifikacije**: sledeća sesija sa mnom — pratimo STATUS.md sekciju G iz 15. sesije (Create app → setup tasks → store listing → internal testing release). Estimated 1.5-2h.
+3. **(Kasnije) cPanel email forwarding**: `support@krugapp.com` → `krugappteam@gmail.com`, pa svuda u copy-ju prebacujemo na brand domen email.
+4. **Tester feedback**: APK na `~/Desktop/krug-release.apk` može da se šalje sad — testeri instaliraju, koriste, javlja se feedback.
 
 ## Devetnaesta sesija (2026-06-27) — device install + post-install bug fixes + testing prep
 
