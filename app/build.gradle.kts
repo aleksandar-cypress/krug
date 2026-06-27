@@ -80,6 +80,16 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
+        // Macrobenchmark build type — identičan release-u (minified, R8, baseline profile),
+        // ali isDebuggable=true + profileable shell=true (vidi AndroidManifest <profileable>)
+        // tako da :benchmark modul može da ga instrumentira. Ne ide na Play Store.
+        create("benchmark") {
+            initWith(getByName("release"))
+            // Debuggable false ostaje (drži produkciju vernom); profileable shell="true"
+            // u manifest-u je dovoljno za macrobenchmark.
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
     }
 
     compileOptions {

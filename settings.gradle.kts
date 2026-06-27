@@ -32,3 +32,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Krug"
 include(":app")
+include(":benchmark")

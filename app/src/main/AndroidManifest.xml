@@ -52,6 +52,11 @@
             android:name="com.mapbox.token"
             android:value="${MAPBOX_PUBLIC_TOKEN}" />
 
+        <!-- Macrobenchmark zahtev: shell="true" omogućava :benchmark modulu (ADB shell)
+             da instrumentira proces app-a u release/benchmark build-u bez debuggable=true.
+             Bez ovog tag-a, macrobenchmark puca sa "Profileable not enabled". -->
+        <profileable android:shell="true" />
+
         <service
             android:name=".core.location.LocationTrackingService"
             android:exported="false"

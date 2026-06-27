@@ -95,6 +95,20 @@ app/src/main/java/org/krug/app/
 Pokriva pure formatter-e (`TimeBucket`, `DistanceBucket`,
 `StringFormat`, `DeviceNames`). UI testovi nisu trenutno na agendi.
 
+## Macrobenchmark (startup timing)
+
+Modul `:benchmark` meri Cold/Warm/Hot startup vreme `:app` artefakta (na
+fizičkom uređaju ili emulatoru sa API 28+).
+
+```bash
+./gradlew :benchmark:connectedBenchmarkAndroidTest
+```
+
+Rezultati u `benchmark/build/outputs/connected_android_test_additional_output/`.
+Tipični brojevi na Pixel 4+: Cold ~600-900ms (sa baseline profile), Warm
+~300-500ms, Hot ~100-200ms. Regresija = bilo koja granica probijena za
+>15% između commit-a.
+
 ## Roadmap
 
 - [x] Faza 0: skeleton, navigation, theme
