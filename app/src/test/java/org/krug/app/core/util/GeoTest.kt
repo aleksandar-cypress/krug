@@ -29,25 +29,35 @@ class GeoTest {
         assertThat(a).isWithin(0.001).of(b)
     }
 
-    @Test fun `formatDistance under 50m returns blizu`() {
-        assertThat(formatDistance(0.0)).isEqualTo("blizu")
-        assertThat(formatDistance(49.9)).isEqualTo("blizu")
+    @Test fun `bucketDistance under 50m is Nearby`() {
+        assertThat(bucketDistance(0.0)).isEqualTo(DistanceBucket.Nearby)
+        assertThat(bucketDistance(49.9)).isEqualTo(DistanceBucket.Nearby)
     }
 
-    @Test fun `formatDistance under 1km returns meters`() {
-        assertThat(formatDistance(50.0)).isEqualTo("50 m")
-        assertThat(formatDistance(523.4)).isEqualTo("523 m")
-        assertThat(formatDistance(999.9)).isEqualTo("999 m")
+    @Test fun `bucketDistance at 50m is Meters`() {
+        assertThat(bucketDistance(50.0)).isEqualTo(DistanceBucket.Meters(50))
     }
 
-    @Test fun `formatDistance under 10km returns one decimal km`() {
-        assertThat(formatDistance(1000.0)).isEqualTo("1.0 km")
-        assertThat(formatDistance(2500.0)).isEqualTo("2.5 km")
-        assertThat(formatDistance(9999.0)).isEqualTo("10.0 km")
+    @Test fun `bucketDistance under 1km is Meters`() {
+        assertThat(bucketDistance(523.4)).isEqualTo(DistanceBucket.Meters(523))
+        assertThat(bucketDistance(999.9)).isEqualTo(DistanceBucket.Meters(999))
     }
 
-    @Test fun `formatDistance over 10km returns integer km`() {
-        assertThat(formatDistance(10_000.0)).isEqualTo("10 km")
-        assertThat(formatDistance(71_500.0)).isEqualTo("71 km")
+    @Test fun `bucketDistance at 1km is KmDecimal`() {
+        assertThat(bucketDistance(1000.0)).isEqualTo(DistanceBucket.KmDecimal(1.0))
+    }
+
+    @Test fun `bucketDistance under 10km is KmDecimal`() {
+        assertThat(bucketDistance(2500.0)).isEqualTo(DistanceBucket.KmDecimal(2.5))
+        val b = bucketDistance(9999.0) as DistanceBucket.KmDecimal
+        assertThat(b.km).isWithin(0.001).of(9.999)
+    }
+
+    @Test fun `bucketDistance at 10km is KmInt`() {
+        assertThat(bucketDistance(10_000.0)).isEqualTo(DistanceBucket.KmInt(10))
+    }
+
+    @Test fun `bucketDistance over 10km is KmInt`() {
+        assertThat(bucketDistance(71_500.0)).isEqualTo(DistanceBucket.KmInt(71))
     }
 }

@@ -26,15 +26,32 @@ fun haversineMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Dou
 }
 
 /**
+ * Pure bucket za distance prikaz. Testabilan bez Context-a (vidi GeoTest).
+ */
+sealed class DistanceBucket {
+    object Nearby : DistanceBucket()
+    data class Meters(val value: Int) : DistanceBucket()
+    data class KmDecimal(val km: Double) : DistanceBucket()
+    data class KmInt(val km: Int) : DistanceBucket()
+}
+
+fun bucketDistance(meters: Double): DistanceBucket = when {
+    meters < 50 -> DistanceBucket.Nearby
+    meters < 1000 -> DistanceBucket.Meters(meters.toInt())
+    meters < 10_000 -> DistanceBucket.KmDecimal(meters / 1000.0)
+    else -> DistanceBucket.KmInt((meters / 1000.0).toInt())
+}
+
+/**
  * Formatira metre u korisniku-čitljiv string:
  * - < 50m: "blizu" / "near" (lokalizovano)
  * - < 1km: "123 m"
  * - < 10km: "1.5 km"
  * - else: "23 km"
  */
-fun formatDistance(context: Context, meters: Double): String = when {
-    meters < 50 -> context.getString(R.string.distance_nearby)
-    meters < 1000 -> "${meters.toInt()} m"
-    meters < 10_000 -> String.format("%.1f km", meters / 1000.0)
-    else -> "${(meters / 1000.0).toInt()} km"
+fun formatDistance(context: Context, meters: Double): String = when (val b = bucketDistance(meters)) {
+    DistanceBucket.Nearby -> context.getString(R.string.distance_nearby)
+    is DistanceBucket.Meters -> "${b.value} m"
+    is DistanceBucket.KmDecimal -> String.format("%.1f km", b.km)
+    is DistanceBucket.KmInt -> "${b.km} km"
 }
