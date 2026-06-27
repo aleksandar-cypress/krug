@@ -244,10 +244,7 @@ private fun CodeBox(
     ) {
         Text(
             text = char?.toString() ?: "",
-            style = MaterialTheme.typography.headlineMedium.copy(
-                fontWeight = FontWeight.Bold,
-                fontSize = 28.sp,
-            ),
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
         )

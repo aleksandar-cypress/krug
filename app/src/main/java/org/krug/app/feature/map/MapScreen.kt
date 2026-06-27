@@ -89,6 +89,7 @@ import timber.log.Timber
 import android.view.HapticFeedbackConstants
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -2228,6 +2229,9 @@ private fun MemberDetailSheet(
                     Text(
                         text = member.displayName.ifBlank { if (member.isSelf) stringResource(R.string.member_label_you) else stringResource(R.string.member_label_member) },
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
                     if (member.isChild) {
                         Spacer(Modifier.width(8.dp))
@@ -2272,10 +2276,12 @@ private fun MemberDetailSheet(
                     val sosName = member.displayName
                         .ifBlank { if (member.isSelf) stringResource(R.string.member_label_you) else stringResource(R.string.member_label_member) }
                     Text(
-                        text = if (member.isSelf) "SOS aktivan — tvoji krugovi su obavešteni"
-                        else "$sosName traži hitnu pomoć",
+                        text = if (member.isSelf) stringResource(R.string.map_sos_self_active)
+                        else stringResource(R.string.map_sos_member_needs_help, sosName),
                         color = Color.White,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -2443,7 +2449,7 @@ private fun StatChip(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2461,7 +2467,7 @@ private fun StatChip(
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = accentColor,
                 maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

@@ -40,8 +40,15 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -129,6 +136,7 @@ fun CreateCircleScreen(
             Text(
                 text = stringResource(R.string.create_circle_color_label),
                 style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { heading() },
             )
             Spacer(Modifier.size(12.dp))
             ColorPicker(
@@ -141,6 +149,7 @@ fun CreateCircleScreen(
             Text(
                 text = stringResource(R.string.create_circle_icon_label),
                 style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { heading() },
             )
             Spacer(Modifier.size(12.dp))
             IconPicker(
@@ -216,6 +225,7 @@ private fun CirclePreview(
                 else MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -232,6 +242,7 @@ private fun ColorPicker(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val colorA11y = stringResource(R.string.create_circle_color_a11y)
         CirclePresets.colors.forEach { hex ->
             val isSelected = hex == selected
             val color = Color(android.graphics.Color.parseColor(hex))
@@ -247,6 +258,11 @@ private fun ColorPicker(
                             Modifier.border(3.dp, MaterialTheme.colorScheme.onBackground, CircleShape)
                         } else Modifier,
                     )
+                    .semantics {
+                        role = Role.RadioButton
+                        this.selected = isSelected
+                        contentDescription = colorA11y
+                    }
                     .clickable { onSelect(hex) },
             )
         }
@@ -267,12 +283,18 @@ private fun IconPicker(
             val isSelected = key == selected
             val icon = CircleIconAssets.forKey(key)
             val label = stringResource(CircleIconAssets.labelResForKey(key))
+            val iconA11y = stringResource(R.string.create_circle_icon_a11y_label, label)
             // Bez scale animacije + bez clip-a na Column-u — scale-up na 1.08x je
             // overflow-ovao Column-ov clip i sekao ivice ikone. Selected state se sada
             // signalizira samo bojom + border-om, što je dovoljno jasno.
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
+                    .semantics(mergeDescendants = true) {
+                        role = Role.RadioButton
+                        this.selected = isSelected
+                        contentDescription = iconA11y
+                    }
                     .clickable { onSelect(key) }
                     .padding(vertical = 4.dp),
             ) {

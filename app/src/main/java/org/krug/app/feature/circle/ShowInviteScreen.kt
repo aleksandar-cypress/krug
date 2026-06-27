@@ -146,8 +146,7 @@ private fun CodeDisplay(code: String) {
             ) {
                 Text(
                     text = c.toString(),
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = LogoBlue,
                 )
             }

@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -384,16 +385,20 @@ private fun MemberRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = m.displayName.ifBlank {
-                        if (m.isSelf) "Ti" else stringResource(R.string.circle_detail_role_member)
+                        if (m.isSelf) stringResource(R.string.member_label_you)
+                        else stringResource(R.string.circle_detail_role_member)
                     },
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 if (m.isChild) {
                     Spacer(Modifier.size(6.dp))
                     Icon(
                         imageVector = Icons.Outlined.ChildCare,
-                        contentDescription = "Dete",
+                        contentDescription = stringResource(R.string.member_child_cd),
                         tint = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.size(16.dp),
                     )

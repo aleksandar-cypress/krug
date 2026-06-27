@@ -79,6 +79,8 @@
     <string name="create_circle_error_empty">Ime kruga ne može biti prazno</string>
     <string name="create_circle_error_duplicate">Već imaš krug sa tim imenom</string>
     <string name="create_circle_error_generic">Greška pri kreiranju kruga. Pokušaj ponovo</string>
+    <string name="create_circle_color_a11y">Opcija za boju</string>
+    <string name="create_circle_icon_a11y_label">Ikona: %1$s</string>
 
     <!-- Show invite -->
     <string name="invite_title">Pozovite članove</string>
@@ -218,7 +220,8 @@
 
     <!-- Map: SOS -->
     <string name="map_sos_button">SoS</string>
-    <string name="map_sos_self_active">Tvoj SOS je aktivan</string>
+    <string name="map_sos_self_active">SOS aktivan, tvoji krugovi su obavešteni</string>
+    <string name="map_sos_member_needs_help">%1$s traži hitnu pomoć</string>
     <string name="map_sos_confirm_title">Pošalji SOS?</string>
     <string name="map_sos_confirm_body">Svi članovi tvojih krugova će dobiti hitno obaveštenje sa tvojom trenutnom lokacijom. Koristi samo u stvarnoj opasnosti</string>
     <string name="map_sos_confirm_send">Pošalji SOS</string>

@@ -78,6 +78,8 @@
     <string name="create_circle_error_empty">Circle name can\'t be empty</string>
     <string name="create_circle_error_duplicate">You already have a circle with that name</string>
     <string name="create_circle_error_generic">Couldn\'t create circle. Try again</string>
+    <string name="create_circle_color_a11y">Color option</string>
+    <string name="create_circle_icon_a11y_label">Icon: %1$s</string>
 
     <!-- Show invite -->
     <string name="invite_title">Invite members</string>
@@ -217,7 +219,8 @@
 
     <!-- Map: SOS -->
     <string name="map_sos_button">SoS</string>
-    <string name="map_sos_self_active">Your SOS is active</string>
+    <string name="map_sos_self_active">SOS active. Your circles have been notified</string>
+    <string name="map_sos_member_needs_help">%1$s is asking for urgent help</string>
     <string name="map_sos_confirm_title">Send SOS?</string>
     <string name="map_sos_confirm_body">All members of your circles will receive an emergency alert with your current location. Use only in real emergencies</string>
     <string name="map_sos_confirm_send">Send SOS</string>

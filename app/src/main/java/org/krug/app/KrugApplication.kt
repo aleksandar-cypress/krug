@@ -1,6 +1,7 @@
 package org.krug.app
 
 import android.app.Application
+import android.os.StrictMode
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
@@ -31,6 +32,28 @@ class KrugApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // StrictMode samo u debug — hvata disk/network I/O na main thread i resource
+        // leak-ove rano, ne loguje u release (overhead + lažni pozitivi iz Firebase init-a).
+        if (BuildConfig.DEBUG) {
+            StrictMode.setThreadPolicy(
+                StrictMode.ThreadPolicy.Builder()
+                    .detectDiskReads()
+                    .detectDiskWrites()
+                    .detectNetwork()
+                    .detectCustomSlowCalls()
+                    .penaltyLog()
+                    .build(),
+            )
+            StrictMode.setVmPolicy(
+                StrictMode.VmPolicy.Builder()
+                    .detectLeakedClosableObjects()
+                    .detectLeakedRegistrationObjects()
+                    .detectActivityLeaks()
+                    .detectFileUriExposure()
+                    .penaltyLog()
+                    .build(),
+            )
+        }
         // Logging: u debug ide u logcat (DebugTree), u release ide u Crashlytics.
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
