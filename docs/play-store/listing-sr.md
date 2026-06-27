@@ -99,8 +99,8 @@ aleksandarr@gmail.com
 
 🌐 PRIVATNOST I USLOVI
 
-Politika privatnosti: https://krugapp.com/privacy
-Uslovi korišćenja: https://krugapp.com/terms
+Politika privatnosti: https://krugapp.com/privacy.html
+Uslovi korišćenja: https://krugapp.com/terms.html
 ```
 
 *(oko 2700 znakova)*

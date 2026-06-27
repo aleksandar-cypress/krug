@@ -101,8 +101,8 @@ aleksandarr@gmail.com
 
 🌐 PRIVACY AND TERMS
 
-Privacy Policy: https://krugapp.com/privacy
-Terms of Service: https://krugapp.com/terms
+Privacy Policy: https://krugapp.com/privacy.html
+Terms of Service: https://krugapp.com/terms.html
 ```
 
 *(approximately 2,800 chars)*

@@ -50,8 +50,8 @@ import org.krug.app.ui.brand.KrugLogo
 import org.krug.app.ui.theme.LogoBlue
 import timber.log.Timber
 
-private const val PRIVACY_URL = "https://aleksandar-cypress.github.io/krug/privacy.html"
-private const val TERMS_URL = "https://aleksandar-cypress.github.io/krug/terms.html"
+private const val PRIVACY_URL = "https://krugapp.com/privacy.html"
+private const val TERMS_URL = "https://krugapp.com/terms.html"
 
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
