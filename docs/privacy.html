@@ -30,6 +30,13 @@
     margin: 0 auto;
     padding: 48px 24px 96px;
   }
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+    gap: 16px;
+  }
   .back {
     display: inline-flex;
     align-items: center;
@@ -37,9 +44,29 @@
     color: var(--accent);
     text-decoration: none;
     font-size: 14px;
-    margin-bottom: 32px;
   }
   .back:hover { text-decoration: underline; }
+  .lang-switch {
+    display: inline-flex;
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 2px;
+  }
+  .lang-switch button {
+    background: transparent;
+    border: 0;
+    padding: 4px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 6px;
+  }
+  .lang-switch button.active {
+    background: white;
+    color: var(--fg);
+    box-shadow: 0 1px 2px rgba(15,23,42,0.08);
+  }
   h1 { font-size: 32px; letter-spacing: -0.5px; margin: 0 0 8px; }
   .updated { color: var(--muted); font-size: 14px; margin: 0 0 32px; }
   h2 { font-size: 20px; margin-top: 40px; margin-bottom: 8px; letter-spacing: -0.3px; }
@@ -57,33 +84,71 @@
   }
   hr { border: 0; border-top: 1px solid var(--border); margin: 48px 0 24px; }
   .contact { background: var(--code-bg); padding: 20px; border-radius: 12px; margin-top: 16px; }
+
+  /* Language toggle */
+  .t-en { display: none; }
+  html[lang="en"] .t-en { display: inline; }
+  html[lang="en"] .t-sr { display: none; }
+  html[lang="en"] .t-en-block { display: block; }
+  .t-en-block { display: none; }
+  html[lang="en"] .t-sr-block { display: none; }
+  .t-sr-block { display: block; }
 </style>
 </head>
 <body>
 <main>
-  <a class="back" href="index.html">← Nazad</a>
+  <div class="topbar">
+    <a class="back" href="index.html">
+      <span class="t-sr">← Nazad</span><span class="t-en">← Back</span>
+    </a>
+    <div class="lang-switch" role="tablist" aria-label="Language">
+      <button type="button" data-lang="sr" class="active">SR</button>
+      <button type="button" data-lang="en">EN</button>
+    </div>
+  </div>
 
-  <h1>Politika privatnosti</h1>
-  <p class="updated">Poslednja izmena: 25. jun 2026.</p>
+  <h1>
+    <span class="t-sr">Politika privatnosti</span>
+    <span class="t-en">Privacy Policy</span>
+  </h1>
+  <p class="updated">
+    <span class="t-sr">Poslednja izmena: 25. jun 2026.</span>
+    <span class="t-en">Last updated: June 25, 2026.</span>
+  </p>
 
-  <p>Krug je Android aplikacija koja omogućava deljenje lokacije unutar privatnih krugova porodice i prijatelja. Ova politika privatnosti opisuje koje lične podatke prikupljamo, zašto ih prikupljamo, kako ih čuvamo i koja prava imate u vezi sa njima.</p>
+  <p>
+    <span class="t-sr">Krug je Android aplikacija koja omogućava deljenje lokacije unutar privatnih krugova porodice i prijatelja. Ova politika privatnosti opisuje koje lične podatke prikupljamo, zašto ih prikupljamo, kako ih čuvamo i koja prava imate u vezi sa njima.</span>
+    <span class="t-en">Krug is an Android application that enables location sharing within private circles of family and friends. This privacy policy describes what personal data we collect, why we collect it, how we store it, and what rights you have regarding it.</span>
+  </p>
 
-  <h2>1. Ko smo mi</h2>
-  <p>Aplikaciju Krug razvija i održava nezavisni tim u Srbiji. Kontakt: <a href="mailto:aleksandarr@gmail.com">aleksandarr@gmail.com</a>.</p>
+  <h2><span class="t-sr">1. Ko smo mi</span><span class="t-en">1. Who we are</span></h2>
+  <p>
+    <span class="t-sr">Aplikaciju Krug razvija i održava nezavisni tim u Srbiji. Kontakt: <a href="mailto:aleksandarr@gmail.com">aleksandarr@gmail.com</a>.</span>
+    <span class="t-en">The Krug app is developed and maintained by an independent team in Serbia. Contact: <a href="mailto:aleksandarr@gmail.com">aleksandarr@gmail.com</a>.</span>
+  </p>
 
-  <h2>2. Koje podatke prikupljamo</h2>
+  <h2><span class="t-sr">2. Koje podatke prikupljamo</span><span class="t-en">2. What data we collect</span></h2>
 
-  <h3>2.1. Podaci o lokaciji</h3>
-  <ul>
+  <h3><span class="t-sr">2.1. Podaci o lokaciji</span><span class="t-en">2.1. Location data</span></h3>
+  <ul class="t-sr-block">
     <li>GPS koordinate (geografska širina i dužina)</li>
     <li>Preciznost lokacije (u metrima)</li>
     <li>Nivo baterije i stanje punjenja uređaja (da članovi vašeg kruga znaju kada vam baterija slabi)</li>
     <li>Vreme poslednjeg ažuriranja</li>
   </ul>
-  <p>Lokacija se ažurira u pozadini (foreground service) sve dok je ova opcija uključena.</p>
+  <ul class="t-en-block">
+    <li>GPS coordinates (latitude and longitude)</li>
+    <li>Location accuracy (in meters)</li>
+    <li>Battery level and charging state of the device (so members of your circle know when your battery is low)</li>
+    <li>Time of the last update</li>
+  </ul>
+  <p>
+    <span class="t-sr">Lokacija se ažurira u pozadini (foreground service) sve dok je ova opcija uključena.</span>
+    <span class="t-en">Location updates run in the background (foreground service) as long as this option is enabled.</span>
+  </p>
 
-  <h3>2.2. Podaci o nalogu</h3>
-  <ul>
+  <h3><span class="t-sr">2.2. Podaci o nalogu</span><span class="t-en">2.2. Account data</span></h3>
+  <ul class="t-sr-block">
     <li>Ime za prikaz (iz Google naloga ili koje vi unesete)</li>
     <li>Email adresa (samo ako se prijavite preko Google naloga)</li>
     <li>URL profilne fotografije iz Google naloga (čuva se samo kao referenca, aplikacija ne preuzima ni ne čuva kopiju fotografije na našim serverima)</li>
@@ -91,43 +156,81 @@
     <li>Jedinstveni Firebase UID (interni identifikator)</li>
     <li>Firebase Cloud Messaging (FCM) token uređaja (koristi se za buduće push notifikacije; trenutno se samo čuva, ne šaljemo push poruke)</li>
   </ul>
+  <ul class="t-en-block">
+    <li>Display name (from your Google account or one you enter yourself)</li>
+    <li>Email address (only if you sign in via Google)</li>
+    <li>Profile photo URL from your Google account (stored only as a reference, the app does not download or store a copy of the photo on our servers)</li>
+    <li>Device model (e.g. "Samsung SM-A376B") for identification in the member list</li>
+    <li>Unique Firebase UID (internal identifier)</li>
+    <li>Firebase Cloud Messaging (FCM) device token (used for future push notifications; currently only stored, we do not send push messages)</li>
+  </ul>
 
-  <h3>2.3. Podaci o krugovima</h3>
-  <ul>
+  <h3><span class="t-sr">2.3. Podaci o krugovima</span><span class="t-en">2.3. Circle data</span></h3>
+  <ul class="t-sr-block">
     <li>Imena krugova i njihove boje koje sami zadate</li>
     <li>Lista članova kruga (njihovi UID-ovi)</li>
     <li>Pozivnice (jedinstveni kodovi koje generišete)</li>
   </ul>
+  <ul class="t-en-block">
+    <li>Circle names and colors you set yourself</li>
+    <li>List of circle members (their UIDs)</li>
+    <li>Invitations (unique codes you generate)</li>
+  </ul>
 
-  <h3>2.4. SOS događaji</h3>
-  <p>Kada aktivirate SOS, sačuva se trenutna lokacija, vreme aktivacije i krug u kome ste aktivirali SOS. Podatak ostaje aktivan do 30 minuta ili dok ga ne otkažete.</p>
+  <h3><span class="t-sr">2.4. SOS događaji</span><span class="t-en">2.4. SOS events</span></h3>
+  <p>
+    <span class="t-sr">Kada aktivirate SOS, sačuva se trenutna lokacija, vreme aktivacije i krug u kome ste aktivirali SOS. Podatak ostaje aktivan do 30 minuta ili dok ga ne otkažete.</span>
+    <span class="t-en">When you trigger SOS, the current location, activation time, and the circle in which you triggered SOS are saved. The record remains active for up to 30 minutes or until you cancel it.</span>
+  </p>
 
-  <h3>2.5. Podešavanja</h3>
-  <ul>
+  <h3><span class="t-sr">2.5. Podešavanja</span><span class="t-en">2.5. Settings</span></h3>
+  <ul class="t-sr-block">
     <li>Režim baterije (Balans / Štedi bateriju / Maksimalna tačnost)</li>
     <li>Status deljenja lokacije (uključeno/isključeno)</li>
     <li>Jezik aplikacije</li>
   </ul>
+  <ul class="t-en-block">
+    <li>Battery mode (Balanced / Battery saver / Maximum accuracy)</li>
+    <li>Location sharing status (on/off)</li>
+    <li>App language</li>
+  </ul>
 
-  <h3>2.6. Dijagnostički podaci</h3>
-  <p>Prikupljamo izveštaje o padovima aplikacije i tehničke greške putem Firebase Crashlytics-a. Izveštaj sadrži stack trace greške, model uređaja, verziju Android sistema, verziju aplikacije i kratke „breadcrumb" događaje (npr. „Sign-in", „Krug kreiran", „SOS aktiviran"). Uz to se beleže pomoćni identifikatori: vaš Firebase UID, ID aktivnog kruga i status (anonimna prijava / sa email-om). Ne čuva se vaša GPS lokacija ni sadržaj SOS poruka.</p>
+  <h3><span class="t-sr">2.6. Dijagnostički podaci</span><span class="t-en">2.6. Diagnostic data</span></h3>
+  <p>
+    <span class="t-sr">Prikupljamo izveštaje o padovima aplikacije i tehničke greške putem Firebase Crashlytics-a. Izveštaj sadrži stack trace greške, model uređaja, verziju Android sistema, verziju aplikacije i kratke „breadcrumb" događaje (npr. „Sign-in", „Krug kreiran", „SOS aktiviran"). Uz to se beleže pomoćni identifikatori: vaš Firebase UID, ID aktivnog kruga i status (anonimna prijava / sa email-om). Ne čuva se vaša GPS lokacija ni sadržaj SOS poruka.</span>
+    <span class="t-en">We collect app crash reports and technical errors through Firebase Crashlytics. The report contains the error stack trace, device model, Android version, app version, and brief "breadcrumb" events (e.g. "Sign-in", "Circle created", "SOS triggered"). Helper identifiers are also recorded: your Firebase UID, the ID of the active circle, and status (anonymous sign-in / email sign-in). Your GPS location and the content of SOS messages are not stored.</span>
+  </p>
 
-  <h3>2.7. Sigurnosna verifikacija aplikacije (App Check)</h3>
-  <p>Firebase App Check (Google Play Integrity API) proverava da je instalacija aplikacije ispravna i nije izmenjena. Sistemska komponenta vraća atestat koji uključuje informacije o uređaju i Play Protect statusu. Ne sadrži lične podatke i koristi se isključivo za sprečavanje neautorizovanih API poziva ka našim serverima.</p>
+  <h3><span class="t-sr">2.7. Sigurnosna verifikacija aplikacije (App Check)</span><span class="t-en">2.7. App security verification (App Check)</span></h3>
+  <p>
+    <span class="t-sr">Firebase App Check (Google Play Integrity API) proverava da je instalacija aplikacije ispravna i nije izmenjena. Sistemska komponenta vraća atestat koji uključuje informacije o uređaju i Play Protect statusu. Ne sadrži lične podatke i koristi se isključivo za sprečavanje neautorizovanih API poziva ka našim serverima.</span>
+    <span class="t-en">Firebase App Check (Google Play Integrity API) verifies that the app installation is genuine and unmodified. A system component returns an attestation that includes device and Play Protect status information. It contains no personal data and is used solely to prevent unauthorized API calls to our servers.</span>
+  </p>
 
-  <h2>3. Zašto prikupljamo ove podatke</h2>
-  <ul>
+  <h2><span class="t-sr">3. Zašto prikupljamo ove podatke</span><span class="t-en">3. Why we collect this data</span></h2>
+  <ul class="t-sr-block">
     <li><strong>Osnovna funkcija:</strong> deljenje lokacije sa članovima vaših krugova. Bez ovih podataka aplikacija ne može da radi.</li>
     <li><strong>SOS:</strong> da članovi vašeg kruga dobiju obaveštenje i tačnu lokaciju kada vam je potrebna pomoć.</li>
     <li><strong>Pouzdanost servisa:</strong> dijagnostički izveštaji o padovima da bismo aplikaciju brže popravljali.</li>
   </ul>
-  <p>Pravni osnov za obradu je vaš pristanak (GDPR čl. 6.1.a) koji dajete prilikom uključivanja deljenja lokacije i koji možete u svakom trenutku povući.</p>
+  <ul class="t-en-block">
+    <li><strong>Core function:</strong> location sharing with members of your circles. Without this data the app cannot work.</li>
+    <li><strong>SOS:</strong> so members of your circle receive a notification and your precise location when you need help.</li>
+    <li><strong>Service reliability:</strong> diagnostic crash reports so we can fix the app faster.</li>
+  </ul>
+  <p>
+    <span class="t-sr">Pravni osnov za obradu je vaš pristanak (GDPR čl. 6.1.a) koji dajete prilikom uključivanja deljenja lokacije i koji možete u svakom trenutku povući.</span>
+    <span class="t-en">The legal basis for processing is your consent (GDPR Art. 6(1)(a)), which you provide when enabling location sharing and may withdraw at any time.</span>
+  </p>
 
-  <h2>4. Sa kim delimo podatke</h2>
-  <p>Vaša lokacija je vidljiva isključivo članovima krugova kojima pripadate. Ne prodajemo, ne iznajmljujemo i ne ustupamo vaše podatke trećim licima u marketinške ili oglašivačke svrhe.</p>
+  <h2><span class="t-sr">4. Sa kim delimo podatke</span><span class="t-en">4. Who we share data with</span></h2>
+  <p>
+    <span class="t-sr">Vaša lokacija je vidljiva isključivo članovima krugova kojima pripadate. Ne prodajemo, ne iznajmljujemo i ne ustupamo vaše podatke trećim licima u marketinške ili oglašivačke svrhe.</span>
+    <span class="t-en">Your location is visible only to members of the circles you belong to. We do not sell, rent, or hand over your data to third parties for marketing or advertising purposes.</span>
+  </p>
 
-  <h3>Tehnički saradnici (sub-procesori)</h3>
-  <ul>
+  <h3><span class="t-sr">Tehnički saradnici (sub-procesori)</span><span class="t-en">Technical partners (sub-processors)</span></h3>
+  <ul class="t-sr-block">
     <li><strong>Google Firebase</strong> (Google LLC / Google Ireland Ltd): autentifikacija, baza podataka, push obaveštenja, dijagnostika, App Check. Podaci se čuvaju u EU regionu (multi-region <span class="pill">eur3</span> za Firestore, <span class="pill">europe-west1</span> za Realtime Database).</li>
     <li><strong>Mapbox</strong> (Mapbox, Inc.): renderovanje mape i izračunavanje putne razdaljine (Directions API). Mapbox prima vaše koordinate u sledećim slučajevima:
       <ul style="margin-top:4px">
@@ -137,59 +240,142 @@
       Mapbox je naš sub-procesor i podatke koristi isključivo za isporuku tih usluga; ne deli ih sa oglašivačima ni trećim stranama. Detaljnije u <a href="https://www.mapbox.com/legal/privacy">Mapbox Privacy Policy</a>.
     </li>
   </ul>
+  <ul class="t-en-block">
+    <li><strong>Google Firebase</strong> (Google LLC / Google Ireland Ltd): authentication, database, push notifications, diagnostics, App Check. Data is stored in the EU region (multi-region <span class="pill">eur3</span> for Firestore, <span class="pill">europe-west1</span> for Realtime Database).</li>
+    <li><strong>Mapbox</strong> (Mapbox, Inc.): map rendering and driving distance calculation (Directions API). Mapbox receives your coordinates in the following cases:
+      <ul style="margin-top:4px">
+        <li>When the app loads a portion of the map (Mapbox sees the viewport coordinates, not your exact location);</li>
+        <li>When you open a member detail, the app sends a pair of coordinates (yours and theirs, rounded to about 100m granularity) to the Mapbox Directions API to calculate driving distance.</li>
+      </ul>
+      Mapbox is our sub-processor and uses the data solely to provide those services; it does not share it with advertisers or third parties. See the <a href="https://www.mapbox.com/legal/privacy">Mapbox Privacy Policy</a> for details.
+    </li>
+  </ul>
 
-  <h2>5. Bezbednost</h2>
-  <ul>
+  <h2><span class="t-sr">5. Bezbednost</span><span class="t-en">5. Security</span></h2>
+  <ul class="t-sr-block">
     <li>Sva komunikacija ide preko HTTPS/TLS-a.</li>
     <li>Firebase App Check štiti od neautorizovanih API poziva van naše aplikacije.</li>
     <li>Pristup vašoj lokaciji i SOS podacima je ograničen Firebase security rules-ima. Niko izvan vaših krugova ne može da ih čita.</li>
     <li>Vaša lozinka se ne čuva u našoj aplikaciji (autentifikacija je preko Google naloga ili anonimno).</li>
   </ul>
+  <ul class="t-en-block">
+    <li>All communication goes over HTTPS/TLS.</li>
+    <li>Firebase App Check protects against unauthorized API calls from outside our app.</li>
+    <li>Access to your location and SOS data is restricted by Firebase security rules. No one outside your circles can read them.</li>
+    <li>Your password is not stored in our app (authentication is via Google account or anonymous).</li>
+  </ul>
 
-  <h2>6. Koliko dugo čuvamo podatke</h2>
-  <ul>
+  <h2><span class="t-sr">6. Koliko dugo čuvamo podatke</span><span class="t-en">6. How long we keep data</span></h2>
+  <ul class="t-sr-block">
     <li><strong>Lokacija (RTDB):</strong> samo poslednja poznata lokacija, prepiše se svakim novim ažuriranjem. Istorija se ne čuva.</li>
     <li><strong>SOS:</strong> automatski se briše nakon 30 minuta ili kada ga otkažete.</li>
     <li><strong>Nalog i krugovi:</strong> čuvaju se dok je vaš nalog aktivan.</li>
     <li><strong>Dijagnostika (Crashlytics):</strong> 90 dana neobrađenih izveštaja po standardnoj Google retenciji; agregirane statistike (broj padova po verziji) bez ličnih identifikatora čuvaju se duže.</li>
     <li><strong>FCM token:</strong> dok god aplikacija postoji na uređaju i šalje token na server; obriše se pri brisanju naloga ili deinstalaciji aplikacije.</li>
   </ul>
-  <p>Kada obrišete nalog (vidi tačku 7.2), svi vaši podaci se trajno brišu u roku od 30 dana.</p>
+  <ul class="t-en-block">
+    <li><strong>Location (RTDB):</strong> only the last known location, overwritten by each new update. History is not stored.</li>
+    <li><strong>SOS:</strong> automatically deleted after 30 minutes or when you cancel it.</li>
+    <li><strong>Account and circles:</strong> kept while your account is active.</li>
+    <li><strong>Diagnostics (Crashlytics):</strong> 90 days of unprocessed reports per Google's standard retention; aggregated statistics (number of crashes per version) without personal identifiers are kept longer.</li>
+    <li><strong>FCM token:</strong> as long as the app exists on the device and sends the token to the server; deleted when the account is deleted or the app uninstalled.</li>
+  </ul>
+  <p>
+    <span class="t-sr">Kada obrišete nalog (vidi tačku 7.2), svi vaši podaci se trajno brišu u roku od 30 dana.</span>
+    <span class="t-en">When you delete your account (see section 7.2), all your data is permanently deleted within 30 days.</span>
+  </p>
 
-  <h2>7. Vaša prava (GDPR)</h2>
+  <h2><span class="t-sr">7. Vaša prava (GDPR)</span><span class="t-en">7. Your rights (GDPR)</span></h2>
 
-  <h3>7.1. Pristup podacima i izmena</h3>
-  <p>Sve podatke o sebi koje aplikacija prikuplja možete videti i izmeniti direktno u aplikaciji (ime, foto, podešavanja).</p>
+  <h3><span class="t-sr">7.1. Pristup podacima i izmena</span><span class="t-en">7.1. Access and modification</span></h3>
+  <p>
+    <span class="t-sr">Sve podatke o sebi koje aplikacija prikuplja možete videti i izmeniti direktno u aplikaciji (ime, foto, podešavanja).</span>
+    <span class="t-en">All data about yourself that the app collects can be viewed and modified directly in the app (name, photo, settings).</span>
+  </p>
 
-  <h3>7.2. Brisanje naloga</h3>
-  <p>Možete zatražiti brisanje naloga slanjem email-a na <a href="mailto:aleksandarr@gmail.com">aleksandarr@gmail.com</a>. Bićete uklonjeni iz svih krugova, vaša lokacija i SOS podaci biće obrisani, kao i sav vaš profil. (Funkcija „Obriši nalog" u aplikaciji je u izradi.)</p>
+  <h3><span class="t-sr">7.2. Brisanje naloga</span><span class="t-en">7.2. Account deletion</span></h3>
+  <p>
+    <span class="t-sr">Možete zatražiti brisanje naloga slanjem email-a na <a href="mailto:aleksandarr@gmail.com">aleksandarr@gmail.com</a>. Bićete uklonjeni iz svih krugova, vaša lokacija i SOS podaci biće obrisani, kao i sav vaš profil. (Funkcija „Obriši nalog" u aplikaciji je u izradi.)</span>
+    <span class="t-en">You can request account deletion by emailing <a href="mailto:aleksandarr@gmail.com">aleksandarr@gmail.com</a>. You will be removed from all circles, your location and SOS data will be deleted, along with your entire profile. (An in-app "Delete account" feature is in development.)</span>
+  </p>
 
-  <h3>7.3. Povlačenje pristanka</h3>
-  <p>Možete u svakom trenutku isključiti deljenje lokacije u Podešavanja → Privatnost. Nakon toga vaša lokacija se više neće slati.</p>
+  <h3><span class="t-sr">7.3. Povlačenje pristanka</span><span class="t-en">7.3. Withdrawing consent</span></h3>
+  <p>
+    <span class="t-sr">Možete u svakom trenutku isključiti deljenje lokacije u Podešavanja → Privatnost. Nakon toga vaša lokacija se više neće slati.</span>
+    <span class="t-en">You can turn off location sharing at any time in Settings → Privacy. After that, your location will no longer be sent.</span>
+  </p>
 
-  <h3>7.4. Sistemske permisije koje možete povući</h3>
-  <p>Sve permisije aplikaciji možete povući kroz sistemska podešavanja Android-a (Postavke → Aplikacije → Krug → Dozvole):</p>
-  <ul>
+  <h3><span class="t-sr">7.4. Sistemske permisije koje možete povući</span><span class="t-en">7.4. System permissions you can revoke</span></h3>
+  <p>
+    <span class="t-sr">Sve permisije aplikaciji možete povući kroz sistemska podešavanja Android-a (Postavke → Aplikacije → Krug → Dozvole):</span>
+    <span class="t-en">You can revoke all app permissions through Android system settings (Settings → Apps → Krug → Permissions):</span>
+  </p>
+  <ul class="t-sr-block">
     <li><strong>Lokacija:</strong> povlačenjem ove dozvole prestaje deljenje lokacije; aplikacija nastavlja da radi ali bez ažuriranja vaše pozicije.</li>
     <li><strong>Prepoznavanje aktivnosti</strong> (opciono): koristi se za pametniju potrošnju baterije (češći GPS u vožnji, ređi u mirovanju). Bez nje aplikacija koristi statičan profil; bez funkcionalne razlike za delenje lokacije.</li>
     <li><strong>Obaveštenja:</strong> bez ove dozvole nećete dobiti SOS obaveštenja ni sistemsku notifikaciju o aktivnom deljenju lokacije.</li>
     <li><strong>Optimizacija baterije:</strong> bez izuzeća uređaj može da prekine deljenje lokacije u pozadini.</li>
   </ul>
+  <ul class="t-en-block">
+    <li><strong>Location:</strong> revoking this permission stops location sharing; the app continues to work but without updating your position.</li>
+    <li><strong>Activity recognition</strong> (optional): used for smarter battery consumption (more frequent GPS while driving, less when stationary). Without it the app uses a static profile; no functional difference for location sharing.</li>
+    <li><strong>Notifications:</strong> without this permission you will not receive SOS notifications or the system notification about active location sharing.</li>
+    <li><strong>Battery optimization:</strong> without the exception, the device may stop background location sharing.</li>
+  </ul>
 
-  <h3>7.5. Žalba nadzornom organu</h3>
-  <p>Imate pravo da podnesete žalbu Povereniku za informacije od javnog značaja i zaštitu podataka o ličnosti Republike Srbije (<a href="https://www.poverenik.rs">poverenik.rs</a>).</p>
+  <h3><span class="t-sr">7.5. Žalba nadzornom organu</span><span class="t-en">7.5. Complaint to the supervisory authority</span></h3>
+  <p>
+    <span class="t-sr">Imate pravo da podnesete žalbu Povereniku za informacije od javnog značaja i zaštitu podataka o ličnosti Republike Srbije (<a href="https://www.poverenik.rs">poverenik.rs</a>).</span>
+    <span class="t-en">You have the right to lodge a complaint with the Commissioner for Information of Public Importance and Personal Data Protection of the Republic of Serbia (<a href="https://www.poverenik.rs">poverenik.rs</a>).</span>
+  </p>
 
-  <h2>8. Korisnici mlađi od 13 godina</h2>
-  <p>Krug nije namenjen korisnicima mlađim od 13 godina. Ako saznamo da je nalog napravljen za dete mlađe od 13 godina bez saglasnosti roditelja, taj nalog ćemo obrisati.</p>
+  <h2><span class="t-sr">8. Korisnici mlađi od 13 godina</span><span class="t-en">8. Users under 13</span></h2>
+  <p>
+    <span class="t-sr">Krug nije namenjen korisnicima mlađim od 13 godina. Ako saznamo da je nalog napravljen za dete mlađe od 13 godina bez saglasnosti roditelja, taj nalog ćemo obrisati.</span>
+    <span class="t-en">Krug is not intended for users under the age of 13. If we learn that an account has been created for a child under 13 without parental consent, we will delete that account.</span>
+  </p>
 
-  <h2>9. Promene ove politike</h2>
-  <p>Ako budemo menjali ovu politiku, ažurirana verzija će biti objavljena na ovoj stranici sa novim datumom. Značajne izmene biće najavljene u aplikaciji.</p>
+  <h2><span class="t-sr">9. Promene ove politike</span><span class="t-en">9. Changes to this policy</span></h2>
+  <p>
+    <span class="t-sr">Ako budemo menjali ovu politiku, ažurirana verzija će biti objavljena na ovoj stranici sa novim datumom. Značajne izmene biće najavljene u aplikaciji.</span>
+    <span class="t-en">If we change this policy, the updated version will be published on this page with a new date. Significant changes will be announced in the app.</span>
+  </p>
 
-  <h2>10. Kontakt</h2>
+  <h2><span class="t-sr">10. Kontakt</span><span class="t-en">10. Contact</span></h2>
   <div class="contact">
-    <p style="margin:0">Za sva pitanja u vezi sa privatnošću ili obradom podataka možete nas kontaktirati na:<br>
-    <a href="mailto:aleksandarr@gmail.com"><strong>aleksandarr@gmail.com</strong></a></p>
+    <p style="margin:0">
+      <span class="t-sr">Za sva pitanja u vezi sa privatnošću ili obradom podataka možete nas kontaktirati na:</span>
+      <span class="t-en">For any questions regarding privacy or data processing, you can contact us at:</span><br>
+      <a href="mailto:aleksandarr@gmail.com"><strong>aleksandarr@gmail.com</strong></a>
+    </p>
   </div>
 </main>
+
+<script>
+(function () {
+  var STORAGE_KEY = "krug-lang";
+  var html = document.documentElement;
+  var buttons = document.querySelectorAll(".lang-switch button");
+
+  function setLang(lang) {
+    if (lang !== "sr" && lang !== "en") lang = "sr";
+    html.setAttribute("lang", lang);
+    buttons.forEach(function (b) {
+      b.classList.toggle("active", b.dataset.lang === lang);
+    });
+    try { localStorage.setItem(STORAGE_KEY, lang); } catch (e) {}
+  }
+
+  var urlLang = new URLSearchParams(location.search).get("lang");
+  var saved = null;
+  try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+  var browser = (navigator.language || "sr").toLowerCase().startsWith("sr") ? "sr" : "en";
+  setLang(urlLang || saved || browser);
+
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () { setLang(b.dataset.lang); });
+  });
+})();
+</script>
 </body>
 </html>

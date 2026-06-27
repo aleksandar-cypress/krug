@@ -33,6 +33,13 @@
     margin: 0 auto;
     padding: 48px 24px 96px;
   }
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+    gap: 16px;
+  }
   .back {
     display: inline-flex;
     align-items: center;
@@ -40,9 +47,29 @@
     color: var(--accent);
     text-decoration: none;
     font-size: 14px;
-    margin-bottom: 32px;
   }
   .back:hover { text-decoration: underline; }
+  .lang-switch {
+    display: inline-flex;
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 2px;
+  }
+  .lang-switch button {
+    background: transparent;
+    border: 0;
+    padding: 4px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 6px;
+  }
+  .lang-switch button.active {
+    background: white;
+    color: var(--fg);
+    box-shadow: 0 1px 2px rgba(15,23,42,0.08);
+  }
   h1 { font-size: 32px; letter-spacing: -0.5px; margin: 0 0 8px; }
   .updated { color: var(--muted); font-size: 14px; margin: 0 0 32px; }
   h2 { font-size: 20px; margin-top: 40px; margin-bottom: 8px; letter-spacing: -0.3px; }
@@ -62,40 +89,90 @@
     margin: 20px 0;
   }
   .warn strong { display: block; margin-bottom: 4px; }
+
+  /* Language toggle */
+  .t-en { display: none; }
+  html[lang="en"] .t-en { display: inline; }
+  html[lang="en"] .t-sr { display: none; }
+  html[lang="en"] .t-en-block { display: block; }
+  .t-en-block { display: none; }
+  html[lang="en"] .t-sr-block { display: none; }
+  .t-sr-block { display: block; }
 </style>
 </head>
 <body>
 <main>
-  <a class="back" href="index.html">← Nazad</a>
+  <div class="topbar">
+    <a class="back" href="index.html">
+      <span class="t-sr">← Nazad</span><span class="t-en">← Back</span>
+    </a>
+    <div class="lang-switch" role="tablist" aria-label="Language">
+      <button type="button" data-lang="sr" class="active">SR</button>
+      <button type="button" data-lang="en">EN</button>
+    </div>
+  </div>
 
-  <h1>Uslovi korišćenja</h1>
-  <p class="updated">Poslednja izmena: 25. jun 2026.</p>
+  <h1>
+    <span class="t-sr">Uslovi korišćenja</span>
+    <span class="t-en">Terms of Service</span>
+  </h1>
+  <p class="updated">
+    <span class="t-sr">Poslednja izmena: 25. jun 2026.</span>
+    <span class="t-en">Last updated: June 25, 2026.</span>
+  </p>
 
-  <p>Dobrodošli u Krug. Pre nego što počnete da koristite aplikaciju, molimo vas da pažljivo pročitate ove uslove korišćenja. Pristupanjem aplikaciji ili korišćenjem bilo koje funkcije prihvatate da budete obavezani ovim uslovima.</p>
+  <p>
+    <span class="t-sr">Dobrodošli u Krug. Pre nego što počnete da koristite aplikaciju, molimo vas da pažljivo pročitate ove uslove korišćenja. Pristupanjem aplikaciji ili korišćenjem bilo koje funkcije prihvatate da budete obavezani ovim uslovima.</span>
+    <span class="t-en">Welcome to Krug. Before you start using the app, please read these terms of service carefully. By accessing the app or using any of its features, you agree to be bound by these terms.</span>
+  </p>
 
-  <h2>1. Definicije</h2>
-  <ul>
+  <h2><span class="t-sr">1. Definicije</span><span class="t-en">1. Definitions</span></h2>
+  <ul class="t-sr-block">
     <li><strong>„Krug"</strong>: Android aplikacija „Krug" koja omogućava deljenje lokacije sa članovima privatnih krugova.</li>
     <li><strong>„Mi" / „nama"</strong>: nezavisan tim koji razvija aplikaciju Krug u Srbiji.</li>
     <li><strong>„Korisnik" / „vi"</strong>: fizičko lice koje koristi aplikaciju.</li>
     <li><strong>„Krug"</strong> (kao funkcija): privatna grupa članova unutar aplikacije koja deli lokaciju.</li>
   </ul>
+  <ul class="t-en-block">
+    <li><strong>"Krug"</strong>: the Android application "Krug" that enables location sharing with members of private circles.</li>
+    <li><strong>"We" / "us"</strong>: the independent team developing the Krug app in Serbia.</li>
+    <li><strong>"User" / "you"</strong>: a natural person using the app.</li>
+    <li><strong>"Circle"</strong> (as a feature): a private group of members within the app sharing location.</li>
+  </ul>
 
-  <h2>2. Prihvatanje uslova</h2>
-  <p>Instaliranjem aplikacije, kreiranjem naloga ili korišćenjem bilo koje funkcije Krug-a izjavljujete da ste pročitali, razumeli i prihvatili ove uslove i Politiku privatnosti.</p>
-  <p>Ako se ne slažete sa ovim uslovima, molimo vas da ne koristite aplikaciju.</p>
+  <h2><span class="t-sr">2. Prihvatanje uslova</span><span class="t-en">2. Acceptance of terms</span></h2>
+  <p>
+    <span class="t-sr">Instaliranjem aplikacije, kreiranjem naloga ili korišćenjem bilo koje funkcije Krug-a izjavljujete da ste pročitali, razumeli i prihvatili ove uslove i Politiku privatnosti.</span>
+    <span class="t-en">By installing the app, creating an account, or using any feature of Krug, you declare that you have read, understood, and accepted these terms and the Privacy Policy.</span>
+  </p>
+  <p>
+    <span class="t-sr">Ako se ne slažete sa ovim uslovima, molimo vas da ne koristite aplikaciju.</span>
+    <span class="t-en">If you do not agree with these terms, please do not use the app.</span>
+  </p>
 
-  <h2>3. Opis usluge</h2>
-  <p>Krug je besplatna Android aplikacija koja omogućava:</p>
-  <ul>
+  <h2><span class="t-sr">3. Opis usluge</span><span class="t-en">3. Service description</span></h2>
+  <p>
+    <span class="t-sr">Krug je besplatna Android aplikacija koja omogućava:</span>
+    <span class="t-en">Krug is a free Android application that enables:</span>
+  </p>
+  <ul class="t-sr-block">
     <li>Deljenje lokacije u realnom vremenu sa članovima privatnih krugova koje sami kreirate.</li>
     <li>Slanje SOS signala sa lokacijom članovima vaših krugova.</li>
     <li>Pregled lokacija članova na mapi.</li>
     <li>Pozivanje članova putem deljenih kodova.</li>
   </ul>
-  <p>Usluga se pruža „kakva jeste" (as-is), bez garancije neprekidnog rada.</p>
+  <ul class="t-en-block">
+    <li>Real-time location sharing with members of private circles you create yourself.</li>
+    <li>Sending an SOS signal with location to members of your circles.</li>
+    <li>Viewing member locations on a map.</li>
+    <li>Inviting members via shareable codes.</li>
+  </ul>
+  <p>
+    <span class="t-sr">Usluga se pruža „kakva jeste" (as-is), bez garancije neprekidnog rada.</span>
+    <span class="t-en">The service is provided "as-is", without warranty of uninterrupted operation.</span>
+  </p>
 
-  <div class="warn">
+  <div class="warn t-sr-block">
     <strong>VAŽNO: SOS funkcija nije zamena za hitne službe</strong>
     SOS u Krug-u obaveštava ČLANOVE VAŠIH KRUGOVA. To NIJE poziv hitnim službama. U slučaju stvarne hitne situacije pozovite:
     <ul style="margin:8px 0 0; color:var(--warn-fg)">
@@ -105,18 +182,37 @@
       <li><strong>112</strong>: Jedinstveni broj za hitne situacije</li>
     </ul>
   </div>
+  <div class="warn t-en-block">
+    <strong>IMPORTANT: The SOS feature is not a substitute for emergency services</strong>
+    SOS in Krug notifies the MEMBERS OF YOUR CIRCLES. It is NOT a call to emergency services. In a real emergency, call:
+    <ul style="margin:8px 0 0; color:var(--warn-fg)">
+      <li><strong>192</strong>: Police (Serbia)</li>
+      <li><strong>193</strong>: Fire department (Serbia)</li>
+      <li><strong>194</strong>: Ambulance (Serbia)</li>
+      <li><strong>112</strong>: Single European emergency number</li>
+    </ul>
+  </div>
 
-  <h2>4. Nalog i registracija</h2>
-  <ul>
+  <h2><span class="t-sr">4. Nalog i registracija</span><span class="t-en">4. Account and registration</span></h2>
+  <ul class="t-sr-block">
     <li>Da biste koristili Krug morate imati najmanje 13 godina.</li>
     <li>Saglasni ste da date tačne podatke prilikom registracije.</li>
     <li>Odgovorni ste za zaštitu pristupa svom nalogu (ne deliti uređaj sa neovlašćenim licima).</li>
     <li>Jedan nalog je predviđen za jedno fizičko lice.</li>
   </ul>
+  <ul class="t-en-block">
+    <li>You must be at least 13 years old to use Krug.</li>
+    <li>You agree to provide accurate information during registration.</li>
+    <li>You are responsible for protecting access to your account (do not share your device with unauthorized persons).</li>
+    <li>One account is intended for one natural person.</li>
+  </ul>
 
-  <h2>5. Obaveze korisnika</h2>
-  <p>Korišćenjem Krug-a saglasni ste da:</p>
-  <ul>
+  <h2><span class="t-sr">5. Obaveze korisnika</span><span class="t-en">5. User obligations</span></h2>
+  <p>
+    <span class="t-sr">Korišćenjem Krug-a saglasni ste da:</span>
+    <span class="t-en">By using Krug you agree that:</span>
+  </p>
+  <ul class="t-sr-block">
     <li>nećete deliti tuđu lokaciju bez saglasnosti te osobe;</li>
     <li>nećete pokušavati da pristupite tuđim podacima ili krugovima kojima ne pripadate;</li>
     <li>nećete koristiti aplikaciju za uznemiravanje, praćenje ili nadzor drugih lica protiv njihove volje;</li>
@@ -124,50 +220,132 @@
     <li>nećete pokušavati reverzni inženjering, dekompajliranje ili manipulaciju aplikacijom ili njenom infrastrukturom;</li>
     <li>nećete koristiti aplikaciju u svrhe koje su nezakonite po zakonima Republike Srbije ili zemlje u kojoj se nalazite.</li>
   </ul>
-  <p>Kršenje ovih pravila može dovesti do trenutnog brisanja vašeg naloga.</p>
+  <ul class="t-en-block">
+    <li>you will not share someone else's location without that person's consent;</li>
+    <li>you will not attempt to access data or circles you do not belong to;</li>
+    <li>you will not use the app for harassment, stalking, or surveillance of others against their will;</li>
+    <li>you will not use the SOS function as a joke or falsely;</li>
+    <li>you will not attempt reverse engineering, decompilation, or manipulation of the app or its infrastructure;</li>
+    <li>you will not use the app for purposes that are unlawful under the laws of the Republic of Serbia or the country you are in.</li>
+  </ul>
+  <p>
+    <span class="t-sr">Kršenje ovih pravila može dovesti do trenutnog brisanja vašeg naloga.</span>
+    <span class="t-en">Violation of these rules may result in immediate deletion of your account.</span>
+  </p>
 
-  <h2>6. Privatnost</h2>
-  <p>Naša obrada vaših podataka detaljno je opisana u <a href="privacy.html">Politici privatnosti</a>. Prihvatanjem ovih uslova prihvatate i Politiku privatnosti.</p>
+  <h2><span class="t-sr">6. Privatnost</span><span class="t-en">6. Privacy</span></h2>
+  <p>
+    <span class="t-sr">Naša obrada vaših podataka detaljno je opisana u <a href="privacy.html">Politici privatnosti</a>. Prihvatanjem ovih uslova prihvatate i Politiku privatnosti.</span>
+    <span class="t-en">Our processing of your data is described in detail in the <a href="privacy.html">Privacy Policy</a>. By accepting these terms you also accept the Privacy Policy.</span>
+  </p>
 
-  <h2>7. Intelektualna svojina</h2>
-  <p>Aplikacija Krug, ime, logo, dizajn i izvorni kod su vlasništvo autora ili odgovarajućih nosilaca licenci. Korišćenje aplikacije ne prenosi nikakva prava na intelektualnu svojinu.</p>
+  <h2><span class="t-sr">7. Intelektualna svojina</span><span class="t-en">7. Intellectual property</span></h2>
+  <p>
+    <span class="t-sr">Aplikacija Krug, ime, logo, dizajn i izvorni kod su vlasništvo autora ili odgovarajućih nosilaca licenci. Korišćenje aplikacije ne prenosi nikakva prava na intelektualnu svojinu.</span>
+    <span class="t-en">The Krug application, name, logo, design, and source code are the property of the author or the respective license holders. Use of the app does not transfer any intellectual property rights.</span>
+  </p>
 
-  <h2>8. Odricanje od garancija</h2>
-  <p>Aplikacija se pruža „kakva jeste" i „kako je dostupna", bez ikakvih izričitih ili podrazumevanih garancija. Ne garantujemo da će aplikacija:</p>
-  <ul>
+  <h2><span class="t-sr">8. Odricanje od garancija</span><span class="t-en">8. Disclaimer of warranties</span></h2>
+  <p>
+    <span class="t-sr">Aplikacija se pruža „kakva jeste" i „kako je dostupna", bez ikakvih izričitih ili podrazumevanih garancija. Ne garantujemo da će aplikacija:</span>
+    <span class="t-en">The app is provided "as-is" and "as available", without any express or implied warranties. We do not guarantee that the app will:</span>
+  </p>
+  <ul class="t-sr-block">
     <li>raditi bez prekida ili grešaka;</li>
     <li>uvek tačno prikazati lokaciju (zavisi od GPS signala, baterije, OEM optimizacija, itd.);</li>
     <li>uvek isporučiti SOS obaveštenja (zavisi od stanja mreže i ograničenja proizvođača telefona);</li>
     <li>biti odgovarajuća za bilo koju posebnu svrhu.</li>
   </ul>
+  <ul class="t-en-block">
+    <li>work without interruptions or errors;</li>
+    <li>always display the location accurately (depends on GPS signal, battery, OEM optimizations, etc.);</li>
+    <li>always deliver SOS notifications (depends on network conditions and phone manufacturer restrictions);</li>
+    <li>be suitable for any particular purpose.</li>
+  </ul>
 
-  <h2>9. Ograničenje odgovornosti</h2>
-  <p>U najvećoj mogućoj meri dozvoljenoj zakonom, autor aplikacije ne odgovara za:</p>
-  <ul>
+  <h2><span class="t-sr">9. Ograničenje odgovornosti</span><span class="t-en">9. Limitation of liability</span></h2>
+  <p>
+    <span class="t-sr">U najvećoj mogućoj meri dozvoljenoj zakonom, autor aplikacije ne odgovara za:</span>
+    <span class="t-en">To the maximum extent permitted by law, the author of the app is not liable for:</span>
+  </p>
+  <ul class="t-sr-block">
     <li>posredne, indirektne, slučajne ili posledične štete koje proističu iz korišćenja ili nemogućnosti korišćenja aplikacije;</li>
     <li>štete nastale usled netačne lokacije, propuštenog SOS obaveštenja, ili nemogućnosti aplikacije da radi u određenim uslovima (npr. nepostojeća internet veza, isključen GPS, agresivne battery saver postavke OEM-a);</li>
     <li>postupke drugih korisnika unutar vaših krugova.</li>
   </ul>
-  <p>Krug je besplatan lični projekat i koristi se na sopstvenu odgovornost.</p>
+  <ul class="t-en-block">
+    <li>indirect, incidental, or consequential damages arising from the use or inability to use the app;</li>
+    <li>damages caused by inaccurate location, a missed SOS notification, or the app's inability to operate in certain conditions (e.g. no internet connection, GPS turned off, aggressive OEM battery saver settings);</li>
+    <li>actions of other users within your circles.</li>
+  </ul>
+  <p>
+    <span class="t-sr">Krug je besplatan lični projekat i koristi se na sopstvenu odgovornost.</span>
+    <span class="t-en">Krug is a free personal project and is used at your own risk.</span>
+  </p>
 
-  <h2>10. Prestanak korišćenja</h2>
-  <p>Možete u svakom trenutku prestati da koristite aplikaciju i zatražiti brisanje naloga (vidi Politiku privatnosti, tačka 7.2).</p>
-  <p>Mi zadržavamo pravo da privremeno ili trajno blokiramo nalog korisnika koji krši ove uslove.</p>
+  <h2><span class="t-sr">10. Prestanak korišćenja</span><span class="t-en">10. Termination</span></h2>
+  <p>
+    <span class="t-sr">Možete u svakom trenutku prestati da koristite aplikaciju i zatražiti brisanje naloga (vidi Politiku privatnosti, tačka 7.2).</span>
+    <span class="t-en">You can stop using the app at any time and request account deletion (see Privacy Policy, section 7.2).</span>
+  </p>
+  <p>
+    <span class="t-sr">Mi zadržavamo pravo da privremeno ili trajno blokiramo nalog korisnika koji krši ove uslove.</span>
+    <span class="t-en">We reserve the right to temporarily or permanently block the account of a user who violates these terms.</span>
+  </p>
 
-  <h2>11. Izmene aplikacije i usluga</h2>
-  <p>Zadržavamo pravo da u svakom trenutku menjamo, dodajemo ili uklanjamo funkcije aplikacije, kao i da privremeno ili trajno prekinemo pružanje usluge. Značajne izmene biće najavljene u aplikaciji ili putem ažuriranja iz Google Play prodavnice.</p>
+  <h2><span class="t-sr">11. Izmene aplikacije i usluga</span><span class="t-en">11. Changes to the app and service</span></h2>
+  <p>
+    <span class="t-sr">Zadržavamo pravo da u svakom trenutku menjamo, dodajemo ili uklanjamo funkcije aplikacije, kao i da privremeno ili trajno prekinemo pružanje usluge. Značajne izmene biće najavljene u aplikaciji ili putem ažuriranja iz Google Play prodavnice.</span>
+    <span class="t-en">We reserve the right to change, add, or remove app features at any time, and to temporarily or permanently discontinue the service. Significant changes will be announced in the app or through Google Play Store updates.</span>
+  </p>
 
-  <h2>12. Izmene uslova</h2>
-  <p>Ovi uslovi se mogu povremeno menjati. Ažurirana verzija se objavljuje na ovoj stranici sa novim datumom. Nastavak korišćenja aplikacije nakon izmene smatra se prihvatanjem novih uslova.</p>
+  <h2><span class="t-sr">12. Izmene uslova</span><span class="t-en">12. Changes to these terms</span></h2>
+  <p>
+    <span class="t-sr">Ovi uslovi se mogu povremeno menjati. Ažurirana verzija se objavljuje na ovoj stranici sa novim datumom. Nastavak korišćenja aplikacije nakon izmene smatra se prihvatanjem novih uslova.</span>
+    <span class="t-en">These terms may change from time to time. The updated version is published on this page with a new date. Continued use of the app after a change is considered acceptance of the new terms.</span>
+  </p>
 
-  <h2>13. Merodavno pravo i nadležnost</h2>
-  <p>Na ove uslove i odnos između korisnika i autora aplikacije primenjuje se pravo Republike Srbije. U slučaju spora, nadležan je sud u Beogradu, osim ako primenjivim propisima nije drugačije određeno.</p>
+  <h2><span class="t-sr">13. Merodavno pravo i nadležnost</span><span class="t-en">13. Governing law and jurisdiction</span></h2>
+  <p>
+    <span class="t-sr">Na ove uslove i odnos između korisnika i autora aplikacije primenjuje se pravo Republike Srbije. U slučaju spora, nadležan je sud u Beogradu, osim ako primenjivim propisima nije drugačije određeno.</span>
+    <span class="t-en">These terms and the relationship between the user and the author of the app are governed by the law of the Republic of Serbia. In case of dispute, the court in Belgrade has jurisdiction, unless applicable regulations provide otherwise.</span>
+  </p>
 
-  <h2>14. Kontakt</h2>
+  <h2><span class="t-sr">14. Kontakt</span><span class="t-en">14. Contact</span></h2>
   <div class="contact">
-    <p style="margin:0">Pitanja, prijave ili zahteve u vezi sa ovim uslovima šaljite na:<br>
-    <a href="mailto:aleksandarr@gmail.com"><strong>aleksandarr@gmail.com</strong></a></p>
+    <p style="margin:0">
+      <span class="t-sr">Pitanja, prijave ili zahteve u vezi sa ovim uslovima šaljite na:</span>
+      <span class="t-en">Send questions, reports, or requests related to these terms to:</span><br>
+      <a href="mailto:aleksandarr@gmail.com"><strong>aleksandarr@gmail.com</strong></a>
+    </p>
   </div>
 </main>
+
+<script>
+(function () {
+  var STORAGE_KEY = "krug-lang";
+  var html = document.documentElement;
+  var buttons = document.querySelectorAll(".lang-switch button");
+
+  function setLang(lang) {
+    if (lang !== "sr" && lang !== "en") lang = "sr";
+    html.setAttribute("lang", lang);
+    buttons.forEach(function (b) {
+      b.classList.toggle("active", b.dataset.lang === lang);
+    });
+    try { localStorage.setItem(STORAGE_KEY, lang); } catch (e) {}
+  }
+
+  var urlLang = new URLSearchParams(location.search).get("lang");
+  var saved = null;
+  try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+  var browser = (navigator.language || "sr").toLowerCase().startsWith("sr") ? "sr" : "en";
+  setLang(urlLang || saved || browser);
+
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () { setLang(b.dataset.lang); });
+  });
+})();
+</script>
 </body>
 </html>
