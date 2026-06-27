@@ -2,13 +2,82 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-27, kraj sedamnaeste sesije — app polish: StrictMode, audit fix-evi, PTR, Preview-e, MapScreen split start, macrobenchmark)
+## Gde smo stali (2026-06-27, kraj osamnaeste sesije — UI polish: haptic, Snackbar, loading states, banner animacije, onboarding entrance, map marker self, dark mode fix)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `f8d879f`.
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `a8d6f8b`.
 Firebase: Firestore + RTDB rules deployovane. Release SHA-1 dodat u Firebase Console (`21:6A:94:24:64:98:08:4A:42:02:D6:4F:13:77:40:26:3C:A8:E0:36`), Google sign-in radi i u release build-u.
 **Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — release build verifikovan na S24 (`R5CWC1F9FND`).
 
-**Health stanja**: `compileDebugKotlin` 0 warning-a. `testDebugUnitTest` zelen — 46 testova prolaze (TimeBucket 18, Geo 11, StringFormat 7, DeviceNames 10). Nova oblast: **`:benchmark` Gradle modul** sa StartupBenchmark.kt, `:app` ima novi `benchmark` build type (initWith release) za macrobenchmark instrumentaciju. `./gradlew :app:assembleBenchmark` prošao (54 task-a, 2m 7s sa R8 + baseline profile installer-om).
+**Health stanja**: `compileDebugKotlin` 0 warning-a. `testDebugUnitTest` zelen — 46 testova prolaze (TimeBucket 18, Geo 11, StringFormat 7, DeviceNames 10). `:benchmark` Gradle modul i dalje validan. Nova UI infrastruktura: `Haptics.kt` util sa `confirmHaptic/rejectHaptic/clickHaptic` ekstenzijama na View, SettingsSubScaffold sad uzima SnackbarHostState parametar, MapMarkers.pinMarker dobio isSelf flag.
+
+## Osamnaesta sesija (2026-06-27) — UI polish sweep (10/12 izabranih stavki)
+
+User izabrao 12 UI unapređenja sa predloga, 10 završeno + 2 audit gap-a flagovana. Tri commit-a u 3 batch-a.
+
+### Batch A (commit `a155875`) — perceived quality
+
+- **Haptic feedback** (novi `core/util/Haptics.kt`):
+  - `View.confirmHaptic()`: API 30+ `HapticFeedbackConstants.CONFIRM`, fallback `LONG_PRESS`
+  - `View.rejectHaptic()`: API 30+ `REJECT`, fallback `LONG_PRESS` (za SOS)
+  - `View.clickHaptic()`: `VIRTUAL_KEY` (svi API)
+  - Apply sites:
+    - MapScreen SosConfirmDialog `onConfirm`: `rejectHaptic` (irreversible action)
+    - CreateCircleScreen `LaunchedEffect(createdCircleId)`: `confirmHaptic` pre nav-a
+    - EnterCodeScreen `LaunchedEffect(joinedCircleId)`: `confirmHaptic` pre nav-a
+- **Toast → Snackbar**:
+  - `AboutScreen` imao 2 Toast-a (invalid link, no browser) — refaktor `openExternalUrl()` da vraća `OpenUrlResult` enum, caller koristi `SnackbarHostState`
+  - `SettingsSubScaffold` sad uzima `snackbarHostState` parametar (default `remember { SnackbarHostState() }`)
+- **Loading button states** (novi `ButtonLeadingIconOrSpinner` helper u CircleDetailScreen):
+  - 4 button-a (2 invite, delete, leave) sad pokazuju 18dp `CircularProgressIndicator` umesto leading ikone dok `loading=true`
+  - `CreateButton` u CreateCircleScreen već imao loading state, ne dirano
+
+### Batch B (commit `8ae4dba`) — vizualni polish
+
+- **AnimatedVisibility** na sva 4 map banner-a:
+  - `PowerSaveBanner`, `OfflineBanner`, `PermissionWarningBanner`, `SosBanner`
+  - `expandVertically() + fadeIn()` na enter, `shrinkVertically() + fadeOut()` na exit
+  - `OfflineBanner` izvučen sub-Composable `OfflineBannerContent` jer je `LaunchedEffect` sa 30s tick-om morao da bude vezan za vidljivost (ne za composition)
+  - `SosBanner` wrap na call-site (banner nema svoj toggle)
+- **Onboarding staggered entrance**:
+  - `IntroPage`: 5 sekcija sa 150-200ms stagger delay-em (hero scale-in → title slide-up → body slide-up → 2 feature row-e slide-up → CTA scale-in). Ukupno ~1.2s reveal.
+  - `OnboardingPageScaffold` (koristi se za AllSetPage + PermissionPages): hero 0ms, text 250ms, button 500ms. Postojeći breath pulse na hero-u nije diran.
+  - `LaunchedEffect(Unit) { visible = true }` pattern — flip flag posle prvog frame-a
+
+### Batch C (commit `a8d6f8b`) — audit findings primijenjeni
+
+Četiri paralelna read-only sub-agent-a (Settings audit, Edge states audit, Dark mode audit, SR microcopy review) — applied **P0 nalazi**:
+
+- **Map marker self vs others** (`MapMarkers.pinMarker(isSelf: Boolean)`):
+  - bubble + tail 18% veći (scale 1.18f), dodatni LogoBlue (`#3A86C8`) halo prsten oko belog
+  - Cache key dobio `|self`/`|other` suffix da bitmap-i ne kolapsiraju
+  - Call site (MapScreen.kt:1445) prosleđuje `member.isSelf`
+- **Dark mode P0**:
+  - `SplashScreen.kt:57`: `Color.White` background → `MaterialTheme.colorScheme.background`
+  - `AuthScreen.kt:68`: isto
+- **CircleListScreen error retry** (edge states P0):
+  - `state.error` postojao u VM ali UI nikad nije čitao. Dodat `ErrorRetry` Composable u `when {}` između loading i empty state. Retry button zove `viewModel::refresh` (isti put kao pull-to-refresh).
+  - 3 nova string ključa (`circles_error_title/body/retry`) u oba locale-a.
+- **SR microcopy P0**:
+  - `enter_code_error_already_member`: „Već **ste** član" → „Već **si** član" (ti konzistentnost)
+  - `battery_saver_desc`, `battery_max_desc`: „**updates**" (engleski) → „ažuriranja" (srpski prevod)
+  - `time_minutes_short`, `time_hours_short`: „%dmin"/"%dh" → „%d min"/"%d h" (razmak konzistentan sa `time_days_ago` „pre %d d")
+  - `member_state_long_offline_title`: „%1$dd" → „%1$d d" (razmak)
+  - Iste izmene u EN gde važi (parity)
+
+### F) Šta NIJE urađeno (flagovi za sledeće sesije)
+
+1. **Member avatar photo integration** (task 25) — Coil `AsyncImage` + Firebase Auth `photoUrl` + inicijali fallback na member-ima. Najveći scope koji sam preskočio.
+2. **Settings vizualni audit findings** (P1/P2 iz Settings audit-a):
+   - Card border radius drift (10/12/14/16dp između screen-ova), padding drift (12 vs 14 vs 16dp), typography token drift (labelMedium vs labelLarge za section header)
+   - Mnogo malih izmena, diminishing returns — može u kasniji „normalize" pass
+3. **Edge states P1 gaps**:
+   - MapScreen ne pokazuje „Čeka se GPS fix" indikator kad `self.location == null` (default Belgrade prikazan tiho)
+   - OnboardingScreen ne preskače već-granted permission stranice
+   - AccountScreen / BatteryModeScreen blank flash dok DataStore ne učita prefs (<100ms ali nepolovišano)
+4. **SR microcopy P1/P2** (lakše izmene tone-a, „Vec ste" → „Vec si" pattern checkpoints, „upravo sada" vs „sad" konzistentnost)
+5. **Dark mode brand color hardcoded sites** (P1 iz dark mode audit-a) — `Color.White` tint na ikonama u branded buttons (OK u praksi, ali nije idealno za custom theme support kasnije)
+6. **MapScreen split nastavak** (iz 17. sesije) — MapBanners.kt, MapTopBar.kt, MapSheets.kt, MemberDetailSheet.kt, MapboxContainer.kt
+7. **SosBanner hardcoded SR** (linije 1044/1046/1062) — fix kad MapBanners.kt bude extract-ovan
 
 ## Sedamnaesta sesija (2026-06-27) — app polish: 8/8 izabranih unapređenja
 
