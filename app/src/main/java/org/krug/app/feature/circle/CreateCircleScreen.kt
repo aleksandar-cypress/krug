@@ -374,3 +374,45 @@ private fun CreateButton(
         )
     }
 }
+
+// region @Preview
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Circle preview")
+@Composable
+private fun CirclePreviewPreview() {
+    org.krug.app.ui.theme.KrugTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            CirclePreview(
+                color = Color(0xFF4F46E5),
+                iconKey = "family",
+                name = "Porodica",
+            )
+        }
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Color picker")
+@Composable
+private fun ColorPickerPreview() {
+    org.krug.app.ui.theme.KrugTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            ColorPicker(selected = CirclePresets.colors.first(), onSelect = {})
+        }
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Icon picker")
+@Composable
+private fun IconPickerPreview() {
+    org.krug.app.ui.theme.KrugTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            IconPicker(
+                selected = CirclePresets.icons.first(),
+                accentColor = Color(0xFF4F46E5),
+                onSelect = {},
+            )
+        }
+    }
+}
+
+// endregion

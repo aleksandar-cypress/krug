@@ -384,3 +384,53 @@ private fun CircleRow(circle: CircleModel, onClick: () -> Unit) {
 private fun parseColor(hex: String): Color =
     runCatching { Color(android.graphics.Color.parseColor(hex)) }
         .getOrDefault(Color(0xFF4F46E5))
+
+// region @Preview
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Empty state")
+@Composable
+private fun EmptyStatePreview() {
+    org.krug.app.ui.theme.KrugTheme {
+        EmptyState(onCreate = {}, onJoin = {})
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Skeleton list")
+@Composable
+private fun SkeletonListPreview() {
+    org.krug.app.ui.theme.KrugTheme {
+        SkeletonList()
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Circle row")
+@Composable
+private fun CircleRowPreview() {
+    org.krug.app.ui.theme.KrugTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            CircleRow(
+                circle = CircleModel(
+                    id = "demo",
+                    name = "Porodica",
+                    ownerId = "demo",
+                    memberIds = listOf("a", "b", "c"),
+                    colorHex = "#4F46E5",
+                    iconKey = "family",
+                ),
+                onClick = {},
+            )
+        }
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Create FAB")
+@Composable
+private fun CreateCircleFabPreview() {
+    org.krug.app.ui.theme.KrugTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            CreateCircleFab(text = "Novi krug", onClick = {})
+        }
+    }
+}
+
+// endregion

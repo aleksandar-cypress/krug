@@ -444,3 +444,59 @@ private fun MemberRow(
         }
     }
 }
+
+// region @Preview
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Member row, owner")
+@Composable
+private fun MemberRowOwnerPreview() {
+    org.krug.app.ui.theme.KrugTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            MemberRow(
+                m = CircleDetailMember(
+                    uid = "x",
+                    displayName = "Marko Marković",
+                    isOwner = true,
+                    isSelf = true,
+                    isChild = false,
+                ),
+            )
+        }
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Member row, child")
+@Composable
+private fun MemberRowChildPreview() {
+    org.krug.app.ui.theme.KrugTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            MemberRow(
+                m = CircleDetailMember(
+                    uid = "y",
+                    displayName = "Ana",
+                    isOwner = false,
+                    isSelf = false,
+                    isChild = true,
+                ),
+                canManage = true,
+            )
+        }
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Circle header")
+@Composable
+private fun CircleHeaderPreview() {
+    org.krug.app.ui.theme.KrugTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            CircleHeader(
+                name = "Porodica",
+                colorHex = "#4F46E5",
+                iconKey = "family",
+                memberCount = 4,
+            )
+        }
+    }
+}
+
+// endregion
