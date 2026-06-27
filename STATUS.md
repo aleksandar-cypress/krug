@@ -2,13 +2,136 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-27, kraj šesnaeste sesije — sve „dok ne stigne Play Console" stavke skinute, repo zaista launch-ready)
+## Gde smo stali (2026-06-27, kraj sedamnaeste sesije — app polish: StrictMode, audit fix-evi, PTR, Preview-e, MapScreen split start, macrobenchmark)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `c2e0175`.
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `f8d879f`.
 Firebase: Firestore + RTDB rules deployovane. Release SHA-1 dodat u Firebase Console (`21:6A:94:24:64:98:08:4A:42:02:D6:4F:13:77:40:26:3C:A8:E0:36`), Google sign-in radi i u release build-u.
 **Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — release build verifikovan na S24 (`R5CWC1F9FND`).
 
-**Health stanja**: `compileDebugKotlin` sad bez ijednog warning-a (4 deprecation-a fix-ovana). `testDebugUnitTest` zelen — **29 testova prolaze** (TimeBucket 18, Geo 11, plus StringFormat 7 + DeviceNames 10 = ukupno 46). Unit test pokrivenost za Time/Geo formatter-e vraćena kroz sealed bucket refaktor (vidi sekciju A šesnaeste sesije). Prvi signed AAB (34.5 MB, datum 2026-06-25) i dalje validan kao referenca, ali sledeći upload na Play Store ide iz fresh build-a posle ovih commit-a.
+**Health stanja**: `compileDebugKotlin` 0 warning-a. `testDebugUnitTest` zelen — 46 testova prolaze (TimeBucket 18, Geo 11, StringFormat 7, DeviceNames 10). Nova oblast: **`:benchmark` Gradle modul** sa StartupBenchmark.kt, `:app` ima novi `benchmark` build type (initWith release) za macrobenchmark instrumentaciju. `./gradlew :app:assembleBenchmark` prošao (54 task-a, 2m 7s sa R8 + baseline profile installer-om).
+
+## Sedamnaesta sesija (2026-06-27) — app polish: 8/8 izabranih unapređenja
+
+Sesija fokusirana na quality-of-life unapređenja koja ne zavise od Play Console-a. User izabrao 8 stavki sa predloga (1, 2, 5, 6, 7, 8, 9, 10), sve završene.
+
+### A) StrictMode + ANR detection (commit `a95c9f0`, deo polish batch-a)
+
+`KrugApplication.onCreate` u debug build-u sad postavlja:
+- `ThreadPolicy`: detectDiskReads, detectDiskWrites, detectNetwork, detectCustomSlowCalls
+- `VmPolicy`: detectLeakedClosableObjects, detectLeakedRegistrationObjects, detectActivityLeaks, detectFileUriExposure
+
+`penaltyLog` only (ne penaltyDeath) — Firebase init ima lažne pozitive koji ne smeju da ruše dev build. Release build potpuno isključen — nula overhead u produkciji.
+
+### B) i18n completeness check (commit nikakav, audit bio clean)
+
+Read-only sub-agent diff-ovao keys između `values/strings.xml` i `values-sr/strings.xml`:
+- 331 ključeva u oba locale-a, 0 gap-ova, 0 orphan-a
+- 1 plurals block (`circles_members_count`) ima EN: one/other, SR: one/few/other (CLDR-compliant)
+- 100+ stringova sa `%d`/`%s`/`%1$s` placeholder-ima — argument count balansiran kroz EN/SR
+- **Verdict**: katalog je strukturalno zdrav, nema šta da se fix-uje
+
+### C) A11y / TalkBack pass (commit `a95c9f0`)
+
+Read-only sub-agent našao 2 P0 + 3 P1 stavki. Fix-evi:
+- **CreateCircleScreen ColorPicker**: dodato `Modifier.semantics { role = RadioButton; selected = isSelected; contentDescription = "Color option" }` na clickable Box-ove
+- **CreateCircleScreen IconPicker**: isto + koristi postojeći label resource per icon kao contentDescription
+- **CreateCircleScreen heading semantics**: section header-i „Boja" i „Ikona" dobili `Modifier.semantics { heading() }` za TalkBack rotor navigaciju
+- **Novi string ključevi**: `create_circle_color_a11y`, `create_circle_icon_a11y_label` u oba locale-a
+
+### D) Large text scaling audit (commit `a95c9f0`)
+
+Read-only sub-agent našao 4 P0 + 4 P1 stavki. Fix-evi:
+- **MapScreen.kt:2274 SOS banner**: `maxLines=2 + TextOverflow.Ellipsis` (bilo bez constraint-a, na 200% scale-u SOS poruka se prelivala)
+- **MapScreen.kt:2228 member display name u detail sheet-u**: `maxLines=1 + Ellipsis + weight(1f, fill=false)`
+- **ShowInviteScreen.kt:149**: hardcoded `fontSize=32.sp` → `MaterialTheme.typography.headlineMedium.copy(FontWeight.Bold)` (poštuje user font scale)
+- **EnterCodeScreen.kt:249**: hardcoded inline `fontSize=28.sp` uklonjen, koristi sam typography token
+- **CircleDetailScreen.kt:385 MemberRow displayName**: `maxLines=1 + Ellipsis + weight`
+- **CreateCircleScreen.kt:218 circle name preview**: dodao explicit `overflow = TextOverflow.Ellipsis` na postojeći `maxLines=1`
+
+### E) **Bonus**: sakriveni hardcoded SR strings (commit `a95c9f0`)
+
+Tokom audit fix-eva otkrivene 3 triple-violation stavke koje su prethodni QA audit-i propustili (jer su bile u expression context-u, ne plain `Text("literal")`):
+
+- **MapScreen.kt:2275 SOS banner u member detail sheet-u**: `"SOS aktivan — tvoji krugovi su obavešteni"` i `"$sosName traži hitnu pomoć"` — hardcoded SR + em-dash. Sad `R.string.map_sos_self_active` (rewritten bez em-dash-a u oba locale-a) + novi `R.string.map_sos_member_needs_help`.
+- **CircleDetailScreen.kt:387**: `m.displayName.ifBlank { if (m.isSelf) "Ti" else ... }` — hardcoded „Ti". Sad `stringResource(R.string.member_label_you)`.
+- **CircleDetailScreen.kt:396**: `contentDescription = "Dete"` — hardcoded „Dete". Sad `stringResource(R.string.member_child_cd)` (key je već postojao za istu svrhu u MapScreen-u).
+
+**Flag**: SosBanner u MapScreen.kt:1044/1046/1062 ima JOŠ hardcoded SR copy-ja (`"$name traži pomoć"`, `"${others.size} članova traži pomoć"`, `"krug „"`). Otkriveno tokom MapScreen split priprema. Fix će ići kad SosBanner bude extract-ovan u MapBanners.kt (sledeća sesija).
+
+### F) Pull-to-refresh na CircleListScreen (commit `fea9e87`)
+
+`CircleListViewModel` dobio:
+- `refreshTrigger: MutableStateFlow<Long>` combined sa `authState` pre `flatMapLatest`
+- `refreshing: Boolean` u UI state-u
+- `fun refresh()` — emituje novi timestamp (re-subscribe Firestore observer-a) + drži spinner vidljiv minimum 600ms (bez ovog, kešovan snapshot vrati za <50ms i spinner samo „blinkne")
+
+`CircleListScreen` zameni `Box(...) { content }` sa `PullToRefreshBox(isRefreshing, onRefresh = vm::refresh) { content }`.
+
+**Preskočen**: CircleDetailScreen za PTR. Screen je full Column sa header/invite buttons/nested member LazyColumn/leave button — PTR gestus iz header-a ne radi vizuelno, member lista nije list-dominated. Bolje da ne kompromitujemo UX.
+
+### G) Compose @Preview annotacije (commit `14b5b87`)
+
+Prethodno samo 1 preview u repo-u (KrugAppPreview u MainActivity koji ne radi u IDE zbog Firebase init-a). Dodato **10 novih preview-a** u 3 fajla:
+
+- **CircleListScreen**: EmptyState, SkeletonList (shimmer), CircleRow (sa demo Porodica circle), CreateCircleFab
+- **CreateCircleScreen**: CirclePreview, ColorPicker (svih 6 swatches), IconPicker (svih ikona)
+- **CircleDetailScreen**: MemberRow (owner+self), MemberRow (child + canManage), CircleHeader
+
+Sve wrapped u `KrugTheme { ... }` + `showBackground = true`. FQN `androidx.compose.ui.tooling.preview.Preview` umesto import-a da region {} block na dnu fajla ne curi imports gore.
+
+### H) MapScreen.kt split — prvi korak (commit `a1cf9e2`)
+
+`MapScreen.kt` je bio 2679 linija, lider liste za split kandidate. Plan: 5-6 manjih fajlova grupisanih po funkcionalnoj sekciji.
+
+**Završeno u ovoj sesiji**: extract `MapDialogs.kt` (212 linija, 2 Composable-a):
+- `ActivityRecognitionRationaleDialog` (rationale za fizičku aktivnost permission)
+- `SosConfirmDialog` (custom SOS confirm dialog)
+
+Side effect: `SosRed`, `SosRedDark`, `PrivateGray` promenjene iz `private val` u `internal val` u MapScreen.kt da budu dostupne split fajlovima u istom paketu.
+
+**Posle ovog koraka**: MapScreen.kt 2679 → 2467 linija.
+
+**Ostatak za sledeću sesiju**: MapBanners.kt (krugGlass + 4 banner-a), MapTopBar.kt (TopFloatingBar + CircleIconButton + CircleLogoButton + MembersPill + MemberMiniAvatar), MapSheets.kt (CirclePickerSheet + MembersSheet + MemberRow), MemberDetailSheet.kt, MapboxContainer.kt.
+
+### I) Macrobenchmark modul (commit `f8d879f`)
+
+Novi Gradle modul `:benchmark` (com.android.test plugin):
+
+- **Versions** (`libs.versions.toml`): benchmark=1.3.3, androidx.test.{ext-junit 1.2.1, runner 1.6.2}, uiautomator 2.3.0; alias za `android.test` plugin
+- **`:benchmark/build.gradle.kts`**: targetira `:app`, `experimentalProperties["android.experimental.self-instrumenting"] = true`, `benchmark` build type sa `matchingFallbacks += listOf("release")`
+- **`:benchmark/src/main/AndroidManifest.xml`**: instrumentation za `androidx.benchmark.junit4.AndroidBenchmarkRunner` targetira `org.krug.app`
+- **`StartupBenchmark.kt`**: 4 test slučaja
+  - `coldStartupNone` (bez baseline profile, ref za regresiju)
+  - `coldStartupBaselineProfile` (`CompilationMode.Partial()` — primenjuje baseline-prof.txt)
+  - `warmStartup` (proces ostao u memoriji)
+  - `hotStartup` (Activity ostala u memoriji)
+  - Svaki radi 5 iteracija, meri `StartupTimingMetric()`
+- **`:app/build.gradle.kts`**: novi `benchmark` build type (`initWith(getByName("release"))`, debug signing, matchingFallback->release) — instrumentiramo identičan minified+R8+baselineprofile artefakt produkcije
+- **`:app/src/main/AndroidManifest.xml`**: dodato `<profileable android:shell="true" />` (macrobenchmark zahtev, bez ovog puca „Profileable not enabled")
+
+**Run**:
+```
+./gradlew :benchmark:connectedBenchmarkAndroidTest
+```
+
+Output: `benchmark/build/outputs/connected_android_test_additional_output/`. Tipični brojevi na Pixel 4+: Cold 600-900ms (sa baseline), Warm 300-500ms, Hot 100-200ms. **Regresija = bilo koja granica probijena za >15% između commit-a.**
+
+`README.md` dobio Macrobenchmark sekciju sa primer komandom + tipičnim brojevima.
+
+### J) Bonus tech debt fix: createCircle silent failure
+
+(Već u commit `c6e4e01` iz 16. sesije, ali napomenuto u Šesnaeste sesije sekciji C — vredi pomenuti i ovde zato što je P1 bug fix.) `CreateCircleViewModel` postavljao `genericError = "generic"` literal string ali UI ga nije čitao. Sad `Boolean` polje + UI prikazuje `R.string.create_circle_error_generic`.
+
+### K) Sledeća sesija — preostalo
+
+1. **Play Console developer account** — i dalje jedini hard blocker za sve Play Store stvari
+2. **MapScreen.kt split nastavak** — 5 dodatnih ekstrakcija (MapBanners, MapTopBar, MapSheets, MemberDetailSheet, MapboxContainer)
+3. **SosBanner hardcoded SR fix** — kad MapBanners.kt bude extract-ovan
+4. **Run macrobenchmark na S24** — measure baseline, commit benchmark JSON kao referencu
+5. **Testovi na uređaju**: TalkBack walkthrough, font scale 200% walkthrough (a11y + large text audit su statički)
+6. **Premium tier groundwork** — Roadmap Faza 8: geofencing (places), history 30d, SOS background push (premium)
+
+## Šesnaesta sesija (2026-06-27) — „dok ne stigne Play Console" sweep
 
 ## Šesnaesta sesija (2026-06-27) — „dok ne stigne Play Console" sweep
 
