@@ -61,7 +61,7 @@ Play Console → App content → Data safety:
 3. Upload signed AAB iz `app/build/outputs/bundle/release/app-release.aab`
 4. Release notes (SR + EN) iz `docs/play-store/listing-*.md` "What's new" sekcija
 5. Add testers:
-   - Aleksandar (`aleksandarr@gmail.com`)
+   - Aleksandar (`krugappteam@gmail.com`)
    - Jelena
    - Plus 3-5 prijatelja/porodice
 6. Share opt-in URL iz Play Console-a sa testerima

@@ -97,7 +97,7 @@ This is an early version (v0.1.0). Features are actively being developed. Your f
 
 📧 CONTACT
 
-aleksandarr@gmail.com
+krugappteam@gmail.com
 
 🌐 PRIVACY AND TERMS
 
@@ -121,7 +121,7 @@ First public release of Krug.
 • Driving distance between members
 • Serbian and English language support
 
-Tell us what's missing or what needs fixing: aleksandarr@gmail.com
+Tell us what's missing or what needs fixing: krugappteam@gmail.com
 ```
 
 *(approximately 430 chars)*

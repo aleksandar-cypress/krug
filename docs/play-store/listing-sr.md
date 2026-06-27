@@ -95,7 +95,7 @@ Ovo je rana verzija (v0.1.0). Funkcije se aktivno razvijaju. Tvoja povratna info
 
 📧 KONTAKT
 
-aleksandarr@gmail.com
+krugappteam@gmail.com
 
 🌐 PRIVATNOST I USLOVI
 
@@ -119,7 +119,7 @@ Prva javna verzija Krug aplikacije.
 • Putna razdaljina između članova
 • Srpski i engleski jezik
 
-Javite nam šta vam fali ili šta treba popraviti: aleksandarr@gmail.com
+Javite nam šta vam fali ili šta treba popraviti: krugappteam@gmail.com
 ```
 
 *(oko 460 znakova)*
