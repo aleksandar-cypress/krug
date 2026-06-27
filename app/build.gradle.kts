@@ -145,6 +145,9 @@ dependencies {
     implementation(libs.firebase.messaging)
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.crashlytics)
+    // NDK Crashlytics — hvata native (C/C++) crash-eve iz Mapbox SDK-a (libmapbox-*.so).
+    // Bez ovog, native SIGSEGV/SIGBUS pad-ovi ne dolaze u Crashlytics dashboard.
+    implementation(libs.firebase.crashlytics.ndk)
     implementation(libs.firebase.appcheck.playintegrity)
     // App Check debug provider — moramo da bude u svim build-ovima (ne samo debug) jer
     // KrugApplication ima compile-time referencu na DebugAppCheckProviderFactory u
