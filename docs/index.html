@@ -405,6 +405,84 @@
   .f-blue   { --feat-color: var(--blue);   --feat-bg: var(--blue-50); }
   .f-pink   { --feat-color: var(--pink);   --feat-bg: var(--pink-50); }
   .f-teal   { --feat-color: var(--teal);   --feat-bg: var(--teal-50); }
+
+  /* ============ SCREENSHOTS GALLERY ============ */
+  .shots-section {
+    padding: 60px 0 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .shots-bg-blob {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%; height: 80%;
+    background: radial-gradient(closest-side, rgba(58,134,200,0.12), rgba(229,107,143,0.08) 50%, transparent 75%);
+    filter: blur(60px);
+    z-index: -1;
+    pointer-events: none;
+  }
+  .shots-rail {
+    display: flex;
+    gap: 28px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 48px;
+  }
+  .phone-mock {
+    position: relative;
+    width: 230px;
+    aspect-ratio: 9/19;
+    border-radius: 36px;
+    background: #0f172a;
+    padding: 8px;
+    box-shadow:
+      0 30px 60px -20px rgba(58,134,200,0.35),
+      0 18px 30px -8px rgba(15,23,42,0.18),
+      0 1px 0 0 rgba(255,255,255,0.4) inset;
+    transition: transform 0.45s cubic-bezier(0.22, 0.85, 0.28, 1), box-shadow 0.45s;
+    flex-shrink: 0;
+  }
+  .phone-mock:hover {
+    transform: translateY(-12px) rotate(-1deg);
+    box-shadow:
+      0 50px 90px -20px rgba(58,134,200,0.45),
+      0 25px 40px -8px rgba(15,23,42,0.22),
+      0 1px 0 0 rgba(255,255,255,0.4) inset;
+  }
+  .phone-mock::before {
+    /* Top notch detail */
+    content: '';
+    position: absolute;
+    top: 14px; left: 50%;
+    transform: translateX(-50%);
+    width: 80px; height: 22px;
+    background: #0f172a;
+    border-radius: 12px;
+    z-index: 2;
+  }
+  .phone-mock img {
+    width: 100%; height: 100%;
+    border-radius: 28px;
+    object-fit: cover;
+    display: block;
+  }
+  /* Subtle stagger animation when entering viewport via .reveal */
+  .phone-mock:nth-child(1) { transform: rotate(-2deg); }
+  .phone-mock:nth-child(1):hover { transform: translateY(-12px) rotate(-3deg); }
+  .phone-mock:nth-child(2) { transform: translateY(-20px); }
+  .phone-mock:nth-child(2):hover { transform: translateY(-32px); }
+  .phone-mock:nth-child(3) { transform: rotate(2deg); }
+  .phone-mock:nth-child(3):hover { transform: translateY(-12px) rotate(3deg); }
+  .phone-mock:nth-child(4) { transform: translateY(-12px) rotate(-1deg); }
+  .phone-mock:nth-child(4):hover { transform: translateY(-24px) rotate(-2deg); }
+  .phone-mock:nth-child(5) { transform: rotate(1deg); }
+  .phone-mock:nth-child(5):hover { transform: translateY(-12px) rotate(2deg); }
+
+  /* SR/EN screenshot swap */
+  .phone-mock .shot-en { display: none; }
+  html[lang="en"] .phone-mock .shot-sr { display: none; }
+  html[lang="en"] .phone-mock .shot-en { display: block; }
   .f-orange { --feat-color: var(--orange); --feat-bg: var(--orange-50); }
 
   /* ============ HOW IT WORKS ============ */
@@ -788,6 +866,21 @@
     .contact-panel { padding: 44px 28px; }
     .footer-inner { grid-template-columns: 1fr; text-align: center; justify-items: center; }
     .footer-bottom { justify-content: center; text-align: center; }
+    /* Horizontal scroll na mobile-u za screenshots (umesto wrap-a) */
+    .shots-rail {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      justify-content: flex-start;
+      padding: 24px 20px 32px;
+      margin: 24px -20px 0;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .shots-rail::-webkit-scrollbar { display: none; }
+    .phone-mock { width: 200px; scroll-snap-align: center; }
+    .phone-mock:nth-child(n) { transform: none; }
+    .phone-mock:nth-child(n):hover { transform: translateY(-8px); }
   }
   @media (max-width: 480px) {
     .steps { grid-template-columns: 1fr; }
@@ -956,6 +1049,47 @@
         <span class="t-sr">Pravi posebne krugove za porodicu i prijatelje. Pozovi ljude jednostavnim kodom. Nema javnog profila, nema feed-a.</span>
         <span class="t-en">Build separate circles for family and friends. Invite with a simple code. No public profile, no social feed.</span>
       </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCREENSHOTS ============ -->
+<section class="container shots-section">
+  <div class="shots-bg-blob" aria-hidden="true"></div>
+  <div class="section-head reveal">
+    <span class="eyebrow">
+      <span class="t-sr">U aplikaciji</span><span class="t-en">In the app</span>
+    </span>
+    <h2>
+      <span class="t-sr">Pogledaj kako izgleda.</span>
+      <span class="t-en">See how it looks.</span>
+    </h2>
+    <p>
+      <span class="t-sr">Čista mapa, brz SOS, krugovi u par koraka.</span>
+      <span class="t-en">A clean map, fast SOS, circles in a few steps.</span>
+    </p>
+  </div>
+
+  <div class="shots-rail reveal">
+    <div class="phone-mock">
+      <img class="shot-sr" src="screenshots/02-map-onboarding-sr.webp" alt="Mapa sa članovima kruga" loading="lazy" width="540" height="1080">
+      <img class="shot-en" src="screenshots/02-map-onboarding-en.webp" alt="Map with circle members" loading="lazy" width="540" height="1080">
+    </div>
+    <div class="phone-mock">
+      <img class="shot-sr" src="screenshots/01-map-member-detail-sr.webp" alt="Detalji člana sa baterijom i distancom" loading="lazy" width="540" height="1080">
+      <img class="shot-en" src="screenshots/01-map-member-detail-en.webp" alt="Member detail with battery and distance" loading="lazy" width="540" height="1080">
+    </div>
+    <div class="phone-mock">
+      <img class="shot-sr" src="screenshots/05-circle-members-sr.webp" alt="Lista članova kruga" loading="lazy" width="540" height="1080">
+      <img class="shot-en" src="screenshots/05-circle-members-en.webp" alt="Circle members list" loading="lazy" width="540" height="1080">
+    </div>
+    <div class="phone-mock">
+      <img class="shot-sr" src="screenshots/03-create-circle-sr.webp" alt="Kreiranje novog kruga" loading="lazy" width="540" height="1080">
+      <img class="shot-en" src="screenshots/03-create-circle-en.webp" alt="Create a new circle" loading="lazy" width="540" height="1080">
+    </div>
+    <div class="phone-mock">
+      <img class="shot-sr" src="screenshots/04-join-circle-sr.webp" alt="Pridruživanje krugu sa kodom" loading="lazy" width="540" height="1080">
+      <img class="shot-en" src="screenshots/04-join-circle-en.webp" alt="Join circle with a code" loading="lazy" width="540" height="1080">
     </div>
   </div>
 </section>
