@@ -1,40 +1,32 @@
-# Krug — Family Circle
+# Krug
 
-Android aplikacija za deljenje lokacije sa porodicom i prijateljima.
-Life360-stil UX, Firebase free tier backend.
+Android aplikacija za deljenje lokacije sa porodicom i prijateljima. Firebase
+backend, Mapbox za mapu, Compose UI, srpski + engleski.
 
 ## Status
 
-MVP skeleton: navigacija + theme + placeholder screens. Compile-ready posle setup-a ispod.
+Feature-complete, priprema za Play Store internal beta. Vidi
+**[STATUS.md](STATUS.md)** za detaljan rolling log po sesijama.
 
 ## Stack
 
 - Kotlin 2.0, Jetpack Compose, Hilt, Navigation Compose
-- Firebase: Auth, Firestore, Realtime Database, FCM
+- Firebase: Auth (Google), Firestore, Realtime Database, FCM, Crashlytics
 - Mapbox Maps SDK 11.x
 - Min SDK 26 (Android 8.0), Target 36
 
 ## Prvi setup (jednom)
 
-### 1. Gradle wrapper
-
-```bash
-cd ~/Desktop/sajts/krug
-gradle wrapper --gradle-version 8.10.2
-```
-
-(potreban `gradle` instaliran preko `brew install gradle` ili Homebrew/SDKMAN; alternativno otvori projekat u Android Studio i pusti ga da generiše wrapper).
-
-### 2. Firebase Console
+### 1. Firebase Console
 
 Pun korak-po-korak je u **[`docs/firebase-setup.md`](docs/firebase-setup.md)**.
 
-Kratko: napraviš Firebase projekat sa privatnim Gmail-om, registruješ **dva**
-Android app-a (`org.krug.app.debug` i `org.krug.app`), dodaš debug SHA-1, uključiš
-Google sign-in + Firestore + Realtime Database, smestiš `google-services.json` u
+Kratko: napraviš Firebase projekat, registruješ **dva** Android app-a
+(`org.krug.app.debug` i `org.krug.app`), dodaš debug SHA-1, uključiš Google
+sign-in + Firestore + Realtime Database, smestiš `google-services.json` u
 `app/`.
 
-### 3. Mapbox tokeni
+### 2. Mapbox tokeni
 
 U `~/.gradle/gradle.properties` dodaj:
 
@@ -45,11 +37,27 @@ MAPBOX_PUBLIC_TOKEN=pk.********      # public, ide u manifest
 
 Tokene generišeš na https://account.mapbox.com/access-tokens/
 
+### 3. Release signing (opciono, za AAB)
+
+U `local.properties` (gitignored) dodaj:
+
+```properties
+KRUG_KEYSTORE_PATH=release-keystore.jks
+KRUG_KEYSTORE_PASSWORD=...
+KRUG_KEY_ALIAS=krug-release
+KRUG_KEY_PASSWORD=...
+```
+
+Bez ovih, `:app:bundleRelease` gracefully fallback-uje na unsigned AAB.
+
 ### 4. Build
 
 ```bash
 ./gradlew assembleDebug
 ./gradlew installDebug
+
+# release AAB za Play Store
+./gradlew :app:bundleRelease
 ```
 
 ## Folder struktura
@@ -58,31 +66,49 @@ Tokene generišeš na https://account.mapbox.com/access-tokens/
 app/src/main/java/org/krug/app/
 ├── KrugApplication.kt
 ├── MainActivity.kt
-├── navigation/
-│   ├── Routes.kt              # typed safe routes
-│   └── KrugNavHost.kt
-├── ui/theme/                  # Color / Type / Theme
+├── navigation/                 # typed safe routes + NavHost
+├── ui/theme/                   # Color / Type / Theme
+├── core/
+│   ├── auth/                   # Firebase Auth wrappers
+│   ├── circle/                 # Circle model + repository
+│   ├── location/               # FGS + location updates
+│   ├── permissions/            # runtime permission flow
+│   ├── prefs/                  # DataStore preferences
+│   ├── sos/                    # SOS trigger + notifier
+│   ├── user/                   # user model + repository
+│   └── util/                   # Time / Geo / formatters (unit-tested)
 └── feature/
     ├── splash/
     ├── auth/
     ├── onboarding/
-    ├── map/                   # start destination
-    ├── circle/                # TODO
-    └── settings/              # TODO
+    ├── map/                    # start destination, map + member detail
+    ├── circle/                 # list / detail / create / join
+    └── settings/
 ```
 
-## Roadmap (kratko)
+## Tests
+
+```bash
+./gradlew :app:testDebugUnitTest
+```
+
+Pokriva pure formatter-e (`TimeBucket`, `DistanceBucket`,
+`StringFormat`, `DeviceNames`). UI testovi nisu trenutno na agendi.
+
+## Roadmap
 
 - [x] Faza 0: skeleton, navigation, theme
-- [ ] Faza 1: Firebase Auth (Google + Email)
-- [ ] Faza 2: Mapbox MapView + sopstvena lokacija
-- [ ] Faza 3: Circles (create, invite, join)
-- [ ] Faza 4: Live location sharing (FGS + RTDB)
-- [ ] Faza 5: Privacy + battery modes
-- [ ] Faza 6: Places / geofencing
-- [ ] Faza 7: Beta + Play Store
+- [x] Faza 1: Firebase Auth (Google)
+- [x] Faza 2: Mapbox MapView + sopstvena lokacija
+- [x] Faza 3: Circles (create, invite, join)
+- [x] Faza 4: Live location sharing (FGS + RTDB)
+- [x] Faza 5: Privacy + battery modes
+- [x] Faza 6: SOS + push notifications
+- [ ] Faza 7: Play Store internal beta (u toku)
+- [ ] Faza 8: Public launch + premium tier (history 30d, places, SOS push)
 
 ## Privacy
 
-Aplikacija koristi background lokaciju. Play Store traži pisanu justifikaciju u
-Console-u — videti `docs/play-store-location-declaration.md` (TODO) pre objave.
+Aplikacija koristi background lokaciju za live sharing u krugovima. Politika
+privatnosti: [docs/privacy.html](docs/privacy.html). Play Store location
+declaration ide u Console pri uploadu.
