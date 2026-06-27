@@ -54,6 +54,10 @@ object MapMarkers {
     /**
      * Life360-style pin: krug sa uskim pointer-om dole, beli prsten oko, color fill,
      * unutra foto (ako ima) ili 1-2 slova inicijala.
+     *
+     * Self varijanta: 18% veća (bubble + tail), dodatni LogoBlue halo prsten oko belog —
+     * vizuelna hijerarhija „ovo sam ja" na prvi pogled. Bez ovog svi pinovi su istog
+     * stila pa korisnik mora da pročita label da pronađe sebe na mapi sa puno članova.
      */
     fun pinMarker(
         context: Context,
@@ -61,39 +65,50 @@ object MapMarkers {
         photo: Bitmap? = null,
         initials: String? = null,
         batteryPct: Int? = null,
+        isSelf: Boolean = false,
     ): Bitmap {
         // Bucket batteryPct na korake od 10% (0, 10, 20…100) da cache key ne menja
         // na svaku 1% promenu baterije — to je bio leak izvor.
         val battBucket = batteryPct?.let { ((it + 5) / 10) * 10 }?.coerceIn(0, 100) ?: -1
-        val cacheKey = "$hex|${photo?.hashCode() ?: 0}|${initials.orEmpty()}|$battBucket"
+        val cacheKey = "$hex|${photo?.hashCode() ?: 0}|${initials.orEmpty()}|$battBucket|${if (isSelf) "self" else "other"}"
         cache[cacheKey]?.let { return it }
 
         val density = context.resources.displayMetrics.density
-        val w = (density * 60).toInt()
-        val h = (density * 74).toInt()
+        val scale = if (isSelf) 1.18f else 1.0f
+        val w = (density * 60 * scale).toInt()
+        val h = (density * 74 * scale).toInt()
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
 
         val cx = w / 2f
-        val bubbleR = density * 22f
-        val cy = bubbleR + density * 6
+        val bubbleR = density * 22f * scale
+        val cy = bubbleR + density * 6 * scale
 
         val color = runCatching { hex.toColorInt() }.getOrDefault("#818CF8".toColorInt())
-        val ringW = density * 3f
-        val tailDrop = density * 12f
-        val batteryStroke = density * 3f
-        val batteryRadius = bubbleR + ringW + batteryStroke / 2 + density * 1f
+        val ringW = density * 3f * scale
+        val tailDrop = density * 12f * scale
+        val batteryStroke = density * 3f * scale
+        val batteryRadius = bubbleR + ringW + batteryStroke / 2 + density * 1f * scale
 
         // Drop shadow.
         val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             this.color = Color.argb(70, 0, 0, 0)
-            maskFilter = BlurMaskFilter(density * 5, BlurMaskFilter.Blur.NORMAL)
+            maskFilter = BlurMaskFilter(density * 5 * scale, BlurMaskFilter.Blur.NORMAL)
         }
-        canvas.drawPath(buildPinPath(cx, cy + density * 3, bubbleR, tailDrop), shadowPaint)
+        canvas.drawPath(buildPinPath(cx, cy + density * 3 * scale, bubbleR, tailDrop), shadowPaint)
+
+        // Self varijanta dobija dodatni LogoBlue halo prsten oko belog za vidljivost.
+        if (isSelf) {
+            val haloW = density * 2.5f * scale
+            canvas.drawPath(
+                buildPinPath(cx, cy, bubbleR + ringW + haloW, tailDrop + density * 4 * scale),
+                Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = "#3A86C8".toColorInt() },
+            )
+        }
 
         // Beli spoljni prsten.
         canvas.drawPath(
-            buildPinPath(cx, cy, bubbleR + ringW, tailDrop + density * 2),
+            buildPinPath(cx, cy, bubbleR + ringW, tailDrop + density * 2 * scale),
             Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = Color.WHITE },
         )
 
@@ -105,8 +120,8 @@ object MapMarkers {
 
         // Sadržaj unutar bubble-a.
         when {
-            photo != null -> drawCircularPhoto(canvas, photo, cx, cy, bubbleR - density * 2)
-            !initials.isNullOrBlank() -> drawInitials(canvas, initials, cx, cy, density)
+            photo != null -> drawCircularPhoto(canvas, photo, cx, cy, bubbleR - density * 2 * scale)
+            !initials.isNullOrBlank() -> drawInitials(canvas, initials, cx, cy, density, scale)
         }
 
         // Battery ring oko cele pin glave — luk dužine batteryPct%, počinje na vrhu.
@@ -185,10 +200,10 @@ object MapMarkers {
         canvas.drawArc(rect, -90f, sweep, false, fillPaint)
     }
 
-    private fun drawInitials(canvas: Canvas, text: String, cx: Float, cy: Float, density: Float) {
+    private fun drawInitials(canvas: Canvas, text: String, cx: Float, cy: Float, density: Float, scale: Float = 1.0f) {
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
-            textSize = density * if (text.length >= 2) 17 else 22
+            textSize = density * scale * if (text.length >= 2) 17 else 22
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
         }

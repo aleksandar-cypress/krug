@@ -234,7 +234,7 @@
     <string name="member_state_private">Private mode</string>
     <string name="member_state_sos_help">SOS: needs help</string>
     <string name="member_state_private_body">This member is not currently sharing location or is offline. The last known position is shown</string>
-    <string name="member_state_long_offline_title">Inactive %1$dd</string>
+    <string name="member_state_long_offline_title">Inactive %1$d d</string>
     <string name="member_state_long_offline_body">May have uninstalled the app or the phone is off. Refresh won\'t work. The circle owner can remove them from Circle details.</string>
     <string name="member_refresh_self">Refresh my location</string>
     <string name="member_refresh_self_done">Refreshed…</string>
@@ -263,8 +263,11 @@
     <!-- Time labels (compact + verbose) -->
     <string name="time_dash">-</string>
     <string name="time_just_now_short">now</string>
-    <string name="time_minutes_short">%dmin</string>
-    <string name="time_hours_short">%dh</string>
+    <string name="circles_error_title">Couldn\'t load your circles</string>
+    <string name="circles_error_body">Check your connection and try again</string>
+    <string name="circles_error_retry">Try again</string>
+    <string name="time_minutes_short">%d min</string>
+    <string name="time_hours_short">%d h</string>
     <string name="time_day_plus">1d+</string>
     <string name="time_just_now_long">just now</string>
     <string name="time_minutes_ago">%d min ago</string>

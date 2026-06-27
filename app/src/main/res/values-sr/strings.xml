@@ -95,7 +95,7 @@
     <string name="enter_code_input_label">Kod</string>
     <string name="enter_code_join_cta">Pridruži se</string>
     <string name="enter_code_error_invalid">Kod nije validan ili je istekao</string>
-    <string name="enter_code_error_already_member">Već ste član ovog kruga</string>
+    <string name="enter_code_error_already_member">Već si član ovog kruga</string>
     <string name="enter_code_error_generic">Greška, pokušaj ponovo</string>
     <string name="enter_code_error_cooldown">Previše pokušaja. Sačekaj malo pa pokušaj ponovo</string>
     <string name="enter_code_cooldown_countdown">Sačekaj %1$d s pa pokušaj ponovo</string>
@@ -182,9 +182,9 @@
     <string name="battery_balanced">Balans (preporučeno)</string>
     <string name="battery_balanced_desc">Lokacija se osvežava ređe da telefon ne bi grejao. Kad neko zatraži tvoju lokaciju ili pokreneš SOS, šalje se sveži fix odmah</string>
     <string name="battery_saver">Štedi bateriju</string>
-    <string name="battery_saver_desc">Najsporiji updates, najmanji uticaj na bateriju i temperaturu. Koristi kad ne moraš da budeš praćen u realnom vremenu</string>
+    <string name="battery_saver_desc">Najsporija ažuriranja, najmanji uticaj na bateriju i temperaturu. Koristi kad ne moraš da budeš praćen u realnom vremenu</string>
     <string name="battery_max">Maksimalna tačnost</string>
-    <string name="battery_max_desc">Najčešći updates, najtačnija lokacija. Telefon će se primetno grejati i trošiti bateriju</string>
+    <string name="battery_max_desc">Najčešća ažuriranja, najtačnija lokacija. Telefon će se primetno grejati i trošiti bateriju</string>
 
     <!-- About -->
     <string name="about_title">O aplikaciji</string>
@@ -235,7 +235,7 @@
     <string name="member_state_private">Privatni mod</string>
     <string name="member_state_sos_help">SOS: traži pomoć</string>
     <string name="member_state_private_body">Član trenutno ne deli lokaciju ili je offline. Prikazana je poslednja poznata pozicija</string>
-    <string name="member_state_long_offline_title">Nije aktivan %1$dd</string>
+    <string name="member_state_long_offline_title">Nije aktivan %1$d d</string>
     <string name="member_state_long_offline_body">Možda je obrisao app ili je telefon ugašen. Refresh neće raditi. Vlasnik kruga može ga ukloniti iz Detalji kruga.</string>
     <string name="member_refresh_self">Osveži moju lokaciju</string>
     <string name="member_refresh_self_done">Osveženo…</string>
@@ -264,8 +264,11 @@
     <!-- Time labels (compact + verbose) -->
     <string name="time_dash">-</string>
     <string name="time_just_now_short">sad</string>
-    <string name="time_minutes_short">%dmin</string>
-    <string name="time_hours_short">%dh</string>
+    <string name="circles_error_title">Krugovi se ne učitavaju</string>
+    <string name="circles_error_body">Proveri internet i pokušaj ponovo</string>
+    <string name="circles_error_retry">Pokušaj ponovo</string>
+    <string name="time_minutes_short">%d min</string>
+    <string name="time_hours_short">%d h</string>
     <string name="time_day_plus">1d+</string>
     <string name="time_just_now_long">upravo sada</string>
     <string name="time_minutes_ago">pre %d min</string>

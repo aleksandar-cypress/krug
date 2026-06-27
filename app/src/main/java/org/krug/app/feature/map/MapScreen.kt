@@ -1442,7 +1442,7 @@ private fun MapboxContainer(
                 val annotation = manager.create(
                     PointAnnotationOptions()
                         .withPoint(Point.fromLngLat(loc.lng, loc.lat))
-                        .withIconImage(MapMarkers.pinMarker(context, color, photo, initials, batteryPct))
+                        .withIconImage(MapMarkers.pinMarker(context, color, photo, initials, batteryPct, isSelf = member.isSelf))
                         .withIconOpacity(iconOpacity)
                         .withTextField(label)
                         .withTextSize(12.0)

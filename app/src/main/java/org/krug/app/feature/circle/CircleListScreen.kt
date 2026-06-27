@@ -107,6 +107,7 @@ fun CircleListScreen(
         ) {
             when {
                 state.loading -> SkeletonList()
+                state.error -> ErrorRetry(onRetry = viewModel::refresh)
                 state.circles.isEmpty() -> EmptyState(onCreate = onCreate, onJoin = onJoin)
                 else -> CircleList(
                     circles = state.circles,
@@ -159,6 +160,49 @@ private fun EmptyState(onCreate: () -> Unit, onJoin: () -> Unit) {
             shape = RoundedCornerShape(16.dp),
         ) {
             Text(stringResource(R.string.circles_join_cta))
+        }
+    }
+}
+
+/**
+ * Error state — Firestore observer pukao a nemamo keširan circles snapshot.
+ * Bez ovog, user je video prazno stanje sa Create CTA umesto retry banner-a,
+ * što sugeriše „nemaš krugove" kada zapravo ima ali ih ne vidimo zbog mreže.
+ */
+@Composable
+private fun ErrorRetry(onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Group,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(48.dp),
+        )
+        Spacer(Modifier.size(16.dp))
+        Text(
+            text = stringResource(R.string.circles_error_title),
+            style = MaterialTheme.typography.titleLarge,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.size(8.dp))
+        Text(
+            text = stringResource(R.string.circles_error_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.size(24.dp))
+        OutlinedButton(
+            onClick = onRetry,
+            shape = RoundedCornerShape(16.dp),
+        ) {
+            Text(stringResource(R.string.circles_error_retry))
         }
     }
 }
