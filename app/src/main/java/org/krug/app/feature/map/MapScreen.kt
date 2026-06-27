@@ -911,7 +911,10 @@ private fun CircleIconButton(
     var spinTrigger by remember { mutableIntStateOf(0) }
     val rotation by animateFloatAsState(
         targetValue = spinTrigger * 360f,
-        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+        ),
         label = "icon-spin",
     )
     Box(
@@ -946,7 +949,10 @@ private fun CircleLogoButton(
     var spinTrigger by remember { mutableIntStateOf(0) }
     val rotation by animateFloatAsState(
         targetValue = spinTrigger * 360f,
-        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+        ),
         label = "logo-spin",
     )
     Box(
@@ -1650,7 +1656,13 @@ private fun CirclePickerSheet(
             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
             modifier = Modifier.padding(bottom = 12.dp),
         )
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // weight(1f) na LazyColumn-i + weightless button ispod = button uvek vidljiv
+        // bez obzira na broj krugova. Bez ovog, sa 9+ krugova LazyColumn naraste preko
+        // dna sheet-a i Manage circles dugme nestane.
+        LazyColumn(
+            modifier = Modifier.weight(1f, fill = false),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             items(circles, key = { it.id }) { c ->
                 CirclePickerRow(
                     circle = c,
