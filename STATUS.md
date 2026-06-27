@@ -2,13 +2,71 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-27, kraj osamnaeste sesije — UI polish: haptic, Snackbar, loading states, banner animacije, onboarding entrance, map marker self, dark mode fix)
+## Gde smo stali (2026-06-27, kraj devetnaeste sesije — testing prep: device install + bug fixes + SosBanner i18n + GPS banner)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `a8d6f8b`.
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `47483da`. **Release APK build-ovan i dostupan u `~/Desktop/krug-release.apk` (65 MB), spreman za distribuciju testerima.**
 Firebase: Firestore + RTDB rules deployovane. Release SHA-1 dodat u Firebase Console (`21:6A:94:24:64:98:08:4A:42:02:D6:4F:13:77:40:26:3C:A8:E0:36`), Google sign-in radi i u release build-u.
 **Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — release build verifikovan na S24 (`R5CWC1F9FND`).
 
-**Health stanja**: `compileDebugKotlin` 0 warning-a. `testDebugUnitTest` zelen — 46 testova prolaze (TimeBucket 18, Geo 11, StringFormat 7, DeviceNames 10). `:benchmark` Gradle modul i dalje validan. Nova UI infrastruktura: `Haptics.kt` util sa `confirmHaptic/rejectHaptic/clickHaptic` ekstenzijama na View, SettingsSubScaffold sad uzima SnackbarHostState parametar, MapMarkers.pinMarker dobio isSelf flag.
+**Health stanja**: `compileDebugKotlin` 0 warning-a. `testDebugUnitTest` zelen — 46 testova prolaze (TimeBucket 18, Geo 11, StringFormat 7, DeviceNames 10). `assembleRelease` prošao (1m 29s, R8 + lintVital + Crashlytics mapping upload). `:benchmark` Gradle modul i dalje validan. Nova UI infrastruktura: `Haptics.kt` util, SettingsSubScaffold sa SnackbarHostState parametrom, MapMarkers.pinMarker sa isSelf flag-om, novi GpsWaitingBanner Composable, OnboardingPage.isAlreadyGranted().
+
+## Devetnaesta sesija (2026-06-27) — device install + post-install bug fixes + testing prep
+
+Sesija fokusirana na install Krug APK-a na Samsung S24 Ultra (`R5CWC1F9FND`) i fix-ovi koje je device testing odmah otkrio. **Pet commit-a u nekoliko diskretnih celina:**
+
+### A) Inicialni install + tri device-discovered bug-a (commit `0f5797b`)
+
+`./gradlew :app:installDebug` na S24 (SM-S928B, API 36) prošao. Tokom prvog testiranja user prijavio tri stavke:
+
+1. **Switch circle sheet** sa 9+ krugova: „Manage circles" button na dnu se ne vidi. Root cause: `LazyColumn` u `CirclePickerSheet` (MapScreen.kt:1641) bez `weight()` modifier-a — lista raste preko dna sheet-a, button skroluje van. Fix: `Modifier.weight(1f, fill = false)` na LazyColumn, button uvek vidljiv ispod.
+2. **App icon** u Samsung „App info" screen-u izgleda kao prazan beli krug — probao 12dp inset (pogoršano, vraćeno na 22dp). Posle više iteracija (12dp/22dp/25dp insets + LogoBlue gradient bg + dva-logo predlog + objašnjenje da Android API ne dozvoljava per-context icon) korisnik prihvatio Option 3: ostavi kako je. Launcher icon ostaje sa 22dp inset.
+3. **Logo spin animation** na map top right buttons (CircleIconButton + CircleLogoButton): tween 600ms je radio ali user osetio kao slabu animaciju. Privremeno prešao na spring MediumBouncy + StiffnessMediumLow (user kasnije rekao da je „previše brz") — fix u sledećem commit-u.
+
+### B) Notification duplikat icon + spin timing fix (commit `53e3aff`)
+
+User otkrio kroz testing:
+- **Notification panel pokazuje DVE ikone**: leva (launcher icon, automatski Samsung One UI app source indicator) + desna (`setLargeIcon` = `ic_notification_large`). Duplikat. Probao razne kombinacije za fix-ovanje desne (tighter viewport, white fill, circle bg) — sve su pravile različite probleme. **User odluka: skinuti `setLargeIcon` poziv u oba file-a** (LocationTrackingService.kt + SosNotifier.kt). Posle uklanjanja, notification ima samo jednu ikonu (launcher icon levo) — clean look. Trade-off: launcher icon ima problem sa sečenjem head-ova (4 figure uz ivicu logo viewport-a), ali to je fundamental design constraint koji bez logo redizajna ne može da se reši.
+- **Spin animation timing**: tween 600ms + bez delay-a → screen exit transition (280ms iz KrugNavHost) starts immediately, ikona nestane sa screen-om pre nego što rotacija stigne da bude vidljiva. Više iteracija (spring + 350ms delay, tween 700ms, spring no delay, original 600ms no delay) dok user nije konačno potvrdio na: **tween 600ms FastOutSlowIn + 250ms delay pre `onClick`**. User vidi ~150° spin pre nego što screen krene, pa još deo tokom transition-a. „Klik → malo se zavrti → prelazimo na drugi ekran" feel.
+
+### C) Pre-testing prep (commit `47483da`)
+
+Tri stavke da bi testeri odmah ne našli:
+
+1. **SosBanner hardcoded SR strings** (MapScreen.kt:1067-1072 + 1086-1095) — flag iz 17. sesije. Three real i18n bugs:
+   - `"$name traži pomoć"` → `stringResource(map_sos_banner_one_help, name)` (novi ključ u oba locale-a)
+   - `"${others.size} članova traži pomoć"` → `pluralStringResource(map_sos_banner_multi_help)` (novi plurals: EN one/other, SR one/few/other CLDR)
+   - `"krug „$circleName""` → `stringResource(map_sos_banner_circle_label, circleName)` (novi ključ, em-dash uklonjen, escaped quotes EN)
+
+2. **Onboarding skip granted permissions** (OnboardingPage.kt + OnboardingScreen.kt):
+   - Novi `OnboardingPage.isAlreadyGranted(context)` — true kad je permission dat van app-a (sistemske Settings, ili uninstall+reinstall — Android čuva permission grants).
+   - `buildOnboardingPages()` sad takođe filter-uje preskočene strane.
+   - Edge case: ako su SVE strane preskočene, `LaunchedEffect(pages)` direktno zove `viewModel.complete()` — bez ovog je bio blank screen forever.
+
+3. **GPS waiting banner** (MapScreen.kt:2315):
+   - Novi `GpsWaitingBanner` Composable + dva string ključa (`map_gps_waiting_*`).
+   - Pokazuje se kad `state.selfLocation == null AND hasForegroundLocation(context)` — tipično 2-15s na cold start dok FGS dobija prvi GPS fix.
+   - Wrapped u `AnimatedVisibility` (expandVertically + fadeIn na enter, shrinkVertically + fadeOut na exit) kao ostali banneri. CircularProgressIndicator + naslov „Čeka se GPS" + body „Tvoja lokacija će se pojaviti za par sekundi".
+   - Plasiran između `OfflineBanner` i `PowerSaveBanner` u banner stack-u.
+
+### D) Sanity verifikovano pre testing-a
+
+- `./gradlew :app:testDebugUnitTest` → 46 testova prolaze
+- `./gradlew :app:assembleRelease` → 1m 29s, R8 minify + lintVital + Crashlytics mapping upload, signed sa tvojim release keystore-om
+- Release APK kopiran u `~/Desktop/krug-release.apk` (65 MB) za distribuciju
+- `compileDebugKotlin` → 0 warnings
+
+### E) Šta NIJE urađeno tokom 19. sesije (ostavljeno za posle testing-a)
+
+1. **App icon (launcher) head cropping** — fundamental design constraint, traži ili redizajn logo-a (head-ovi bliže centru) ili kompromisni inset (25dp+ → manji launcher). User odlučio Option 3 (ostavi kako je za sada).
+2. **AccountScreen + BatteryModeScreen blank flash** — nije real bug (AccountScreen init iz sync FirebaseAuth, BatteryMode flash <100ms je nitpick). Skipped.
+3. **Sve P1/P2 audit findings** iz 18. sesije (settings radius/padding normalize, dark mode brand colors, SR microcopy P1/P2, member avatar photo integration, MapScreen split nastavak) — ne blokiraju testing.
+
+### F) Sledeći koraci
+
+1. **Distribucija APK-a** — user šalje testerima preko WhatsApp/Drive/email. Tester instalira (mora dozvoliti „Install from unknown sources").
+2. **Tester feedback** — javi mi kad iskoči nešto pa rešavamo.
+3. **Play Console upload** — kad bude verifikovan account.
+4. **Post-testing**: P1/P2 audit findings, MapScreen split nastavak, member avatar photo, premium tier groundwork (Roadmap Faza 8).
 
 ## Osamnaesta sesija (2026-06-27) — UI polish sweep (10/12 izabranih stavki)
 
