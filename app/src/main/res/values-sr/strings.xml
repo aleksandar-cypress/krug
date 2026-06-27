@@ -68,6 +68,11 @@
         <item quantity="few">%1$d člana</item>
         <item quantity="other">%1$d članova</item>
     </plurals>
+    <plurals name="map_sos_banner_multi_help">
+        <item quantity="one">%1$d član traži pomoć</item>
+        <item quantity="few">%1$d člana traži pomoć</item>
+        <item quantity="other">%1$d članova traži pomoć</item>
+    </plurals>
 
     <!-- Create circle -->
     <string name="create_circle_title">Novi krug</string>
@@ -222,6 +227,10 @@
     <string name="map_sos_button">SoS</string>
     <string name="map_sos_self_active">SOS aktivan, tvoji krugovi su obavešteni</string>
     <string name="map_sos_member_needs_help">%1$s traži hitnu pomoć</string>
+    <string name="map_sos_banner_one_help">%1$s traži pomoć</string>
+    <string name="map_sos_banner_circle_label">krug „%1$s"</string>
+    <string name="map_gps_waiting_title">Čeka se GPS</string>
+    <string name="map_gps_waiting_body">Tvoja lokacija će se pojaviti za par sekundi</string>
     <string name="map_sos_confirm_title">Pošalji SOS?</string>
     <string name="map_sos_confirm_body">Svi članovi tvojih krugova će dobiti hitno obaveštenje sa tvojom trenutnom lokacijom. Koristi samo u stvarnoj opasnosti</string>
     <string name="map_sos_confirm_send">Pošalji SOS</string>

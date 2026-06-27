@@ -67,6 +67,10 @@
         <item quantity="one">%1$d member</item>
         <item quantity="other">%1$d members</item>
     </plurals>
+    <plurals name="map_sos_banner_multi_help">
+        <item quantity="one">%1$d member needs help</item>
+        <item quantity="other">%1$d members need help</item>
+    </plurals>
 
     <!-- Create circle -->
     <string name="create_circle_title">New circle</string>
@@ -221,6 +225,10 @@
     <string name="map_sos_button">SoS</string>
     <string name="map_sos_self_active">SOS active. Your circles have been notified</string>
     <string name="map_sos_member_needs_help">%1$s is asking for urgent help</string>
+    <string name="map_sos_banner_one_help">%1$s needs help</string>
+    <string name="map_sos_banner_circle_label">circle \"%1$s\"</string>
+    <string name="map_gps_waiting_title">Waiting for GPS fix</string>
+    <string name="map_gps_waiting_body">Your location will appear in a few seconds</string>
     <string name="map_sos_confirm_title">Send SOS?</string>
     <string name="map_sos_confirm_body">All members of your circles will receive an emergency alert with your current location. Use only in real emergencies</string>
     <string name="map_sos_confirm_send">Send SOS</string>

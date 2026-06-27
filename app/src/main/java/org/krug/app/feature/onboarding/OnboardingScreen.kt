@@ -66,6 +66,15 @@ fun OnboardingScreen(
         if (uiState.completed) onDone()
     }
 
+    // Edge: ako su sve permissions već granted (user ih dodelio iz sistemskih Settings-a,
+    // ili posle uninstall+reinstall — Android čuva permission grants), `pages` je prazan
+    // i nema šta da prikazujemo. Direktno kompletiraj onboarding.
+    LaunchedEffect(pages) {
+        if (pages.isEmpty() && !uiState.completed) {
+            viewModel.complete()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         HorizontalPager(
             state = pagerState,

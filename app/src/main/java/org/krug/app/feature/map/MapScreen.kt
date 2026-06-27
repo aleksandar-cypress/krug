@@ -68,6 +68,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -555,6 +556,12 @@ fun MapScreen(
             OfflineBanner(
                 isOnline = state.isOnline,
                 lastUpdatedAt = state.selfLocation?.updatedAt,
+            )
+            // GPS waiting — pokazuj samo ako imamo permission ali još nema fix-a.
+            // Bez permission-a, PermissionWarningBanner gore ionako kaže šta da uradi.
+            GpsWaitingBanner(
+                isWaiting = state.selfLocation == null &&
+                    org.krug.app.core.permissions.PermissionUtils.hasForegroundLocation(context),
             )
             PowerSaveBanner(isOnSaver = state.isPowerSaveMode)
             AnimatedVisibility(
@@ -1066,9 +1073,13 @@ private fun SosBanner(
                         val titleText = when {
                             others.size == 1 -> {
                                 val name = others.first().displayName.ifBlank { stringResource(R.string.member_label_circle_member) }
-                                "$name traži pomoć"
+                                stringResource(R.string.map_sos_banner_one_help, name)
                             }
-                            others.size > 1 -> "${others.size} članova traži pomoć"
+                            others.size > 1 -> pluralStringResource(
+                                R.plurals.map_sos_banner_multi_help,
+                                others.size,
+                                others.size,
+                            )
                             else -> stringResource(R.string.map_sos_self_active)
                         }
                         Text(
@@ -1082,12 +1093,11 @@ private fun SosBanner(
                         // ima više SOS-ova, najnoviji je najrelevantniji "pre X min" marker.
                         val freshestSosAt = members.maxOfOrNull { it.sos?.triggeredAt ?: 0L } ?: 0L
                         val timeLabel = sosRelativeTime(context, freshestSosAt)
+                        val circleLabel = if (!circleName.isNullOrBlank()) {
+                            stringResource(R.string.map_sos_banner_circle_label, circleName)
+                        } else ""
                         val subtitle = buildString {
-                            if (!circleName.isNullOrBlank()) {
-                                append("krug „")
-                                append(circleName)
-                                append("\"")
-                            }
+                            if (circleLabel.isNotEmpty()) append(circleLabel)
                             if (timeLabel.isNotBlank()) {
                                 if (isNotEmpty()) append(" · ")
                                 append(timeLabel)
@@ -2307,6 +2317,55 @@ private fun lastSeenLabel(updatedAt: Long?): String {
 
 /** Kompaktna verzija za StatChip — "sad", "5m", "2h", "1d+" (uvek single-line). */
 // compactLastSeen — preseljen u core.util.Time radi unit testabilnosti.
+
+/**
+ * GPS waiting banner — prvi launch nakon onboarding-a, FGS traži prvi fix (2-15s).
+ * Bez ovog korisnik vidi praznu mapu na Beograd default centru sa nikakvim self pin-om
+ * i ne zna da li nešto ne radi ili samo čeka. Banner objašnjava da je u toku.
+ */
+@Composable
+private fun GpsWaitingBanner(isWaiting: Boolean) {
+    AnimatedVisibility(
+        visible = isWaiting,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut(),
+    ) {
+        Column {
+            Spacer(Modifier.size(12.dp))
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp)),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                    Spacer(Modifier.size(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.map_gps_waiting_title),
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        Text(
+                            text = stringResource(R.string.map_gps_waiting_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 /**
  * Battery Saver banner — sistemski power-save mode poseban od low-battery profila.
