@@ -186,6 +186,7 @@
     <!-- About -->
     <string name="about_title">About</string>
     <string name="about_version">Version %1$s</string>
+    <string name="about_copyright">© %1$d Krug · All rights reserved</string>
     <string name="about_privacy_policy">Privacy policy</string>
     <string name="about_terms">Terms of service</string>
     <string name="about_support">Support development</string>

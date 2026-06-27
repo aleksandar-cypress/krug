@@ -127,7 +127,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 )
             }
             Text(
-                text = "© $year Krug · Sva prava zadržana",
+                text = stringResource(R.string.about_copyright, year),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier

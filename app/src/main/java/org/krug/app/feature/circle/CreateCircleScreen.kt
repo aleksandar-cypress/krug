@@ -104,7 +104,7 @@ fun CreateCircleScreen(
                 onValueChange = viewModel::setName,
                 label = { Text(stringResource(R.string.create_circle_name_label)) },
                 placeholder = { Text(stringResource(R.string.create_circle_name_placeholder)) },
-                isError = state.nameError || state.duplicateError,
+                isError = state.nameError || state.duplicateError || state.genericError,
                 supportingText = {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -114,6 +114,7 @@ fun CreateCircleScreen(
                             text = when {
                                 state.duplicateError -> stringResource(R.string.create_circle_error_duplicate)
                                 state.nameError -> stringResource(R.string.create_circle_error_empty)
+                                state.genericError -> stringResource(R.string.create_circle_error_generic)
                                 else -> ""
                             },
                         )

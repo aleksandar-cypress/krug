@@ -23,7 +23,8 @@ data class CreateCircleUiState(
     val nameError: Boolean = false,
     /** True ako user već ima krug sa istim imenom — UI prikazuje "Već imaš krug sa tim imenom". */
     val duplicateError: Boolean = false,
-    val genericError: String? = null,
+    /** True kad createCircle baci exception (network/Firestore) — UI prikazuje generičku error poruku. */
+    val genericError: Boolean = false,
     val createdCircleId: String? = null,
 )
 
@@ -43,7 +44,7 @@ class CreateCircleViewModel @Inject constructor(
     }
     fun setColor(value: String) = _state.update { it.copy(selectedColor = value) }
     fun setIcon(value: String) = _state.update { it.copy(selectedIcon = value) }
-    fun clearError() = _state.update { it.copy(genericError = null) }
+    fun clearError() = _state.update { it.copy(genericError = false) }
 
     fun submit() {
         val trimmed = _state.value.name.trim().capitalizeFirstLetter()
@@ -53,7 +54,7 @@ class CreateCircleViewModel @Inject constructor(
         }
         val uid = authRepository.currentUser?.uid ?: return
         if (_state.value.creating) return
-        _state.update { it.copy(creating = true, duplicateError = false) }
+        _state.update { it.copy(creating = true, duplicateError = false, genericError = false) }
         viewModelScope.launch {
             // Spreči duplikat — user već poseduje krug sa istim imenom.
             val isDuplicate = runCatching {
@@ -76,7 +77,7 @@ class CreateCircleViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     Timber.e(e, "createCircle failed")
-                    _state.update { it.copy(creating = false, genericError = "generic") }
+                    _state.update { it.copy(creating = false, genericError = true) }
                 }
         }
     }

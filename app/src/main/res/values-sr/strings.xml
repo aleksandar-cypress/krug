@@ -187,6 +187,7 @@
     <!-- About -->
     <string name="about_title">O aplikaciji</string>
     <string name="about_version">Verzija %1$s</string>
+    <string name="about_copyright">© %1$d Krug · Sva prava zadržana</string>
     <string name="about_privacy_policy">Politika privatnosti</string>
     <string name="about_terms">Uslovi korišćenja</string>
     <string name="about_support">Podrži razvoj</string>

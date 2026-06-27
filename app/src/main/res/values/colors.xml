@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Brand palette (Life360-inspired, modern) -->
+    <!-- Brand palette (modern indigo + coral). -->
     <color name="brand_indigo_500">#4F46E5</color>
     <color name="brand_indigo_600">#4338CA</color>
     <color name="brand_coral_500">#FF6B35</color>
