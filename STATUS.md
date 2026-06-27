@@ -2,13 +2,100 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-26, kraj petnaeste sesije — Play Store assets: screenshots + i18n polish, blokirano na Play Console account-u)
+## Gde smo stali (2026-06-27, kraj šesnaeste sesije — sve „dok ne stigne Play Console" stavke skinute, repo zaista launch-ready)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `01c9007`.
-Firebase: Firestore + RTDB rules deployovane. **Release SHA-1 dodat u Firebase Console** (`21:6A:94:24:64:98:08:4A:42:02:D6:4F:13:77:40:26:3C:A8:E0:36`) — Google sign-in radi i u release build-u.
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `c2e0175`.
+Firebase: Firestore + RTDB rules deployovane. Release SHA-1 dodat u Firebase Console (`21:6A:94:24:64:98:08:4A:42:02:D6:4F:13:77:40:26:3C:A8:E0:36`), Google sign-in radi i u release build-u.
 **Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — release build verifikovan na S24 (`R5CWC1F9FND`).
 
-**Health stanja**: debug + release oba build-uju uredno (`compileDebugKotlin` proverava posle plurals refaktora). **Prvi signed AAB napravljen** (34.5 MB, jarsigner verified, datum 2026-06-25). Smoke test na S24 prošao. **Unit test pokrivenost za Time/Geo formatter-e privremeno izgubljena** — `TimeTest.kt` obrisan jer su signature-i posle i18n-a uzeli `Context` parametar; vraćanje pokrivenosti čeka refaktor (sealed `TimeBucket` type + Composable formatter) ili Robolectric.
+**Health stanja**: `compileDebugKotlin` sad bez ijednog warning-a (4 deprecation-a fix-ovana). `testDebugUnitTest` zelen — **29 testova prolaze** (TimeBucket 18, Geo 11, plus StringFormat 7 + DeviceNames 10 = ukupno 46). Unit test pokrivenost za Time/Geo formatter-e vraćena kroz sealed bucket refaktor (vidi sekciju A šesnaeste sesije). Prvi signed AAB (34.5 MB, datum 2026-06-25) i dalje validan kao referenca, ali sledeći upload na Play Store ide iz fresh build-a posle ovih commit-a.
+
+## Šesnaesta sesija (2026-06-27) — „dok ne stigne Play Console" sweep
+
+Sesija fokusirana na sve što se može uraditi bez Play Console-a. Pet diskretnih radnih celina, sve commit-ovane.
+
+### A) Time/Geo sealed bucket refaktor (commit `f4164d7`)
+
+Vraća unit test pokrivenost izgubljenu u 15. sesiji posle i18n refaktora (signature-i `compactLastSeen` / `sosRelativeTime` / `formatDistance` su uzeli `Context` parametar, blokirao plain JUnit).
+
+- **`Time.kt`**: dva sealed type-a — `CompactTimeBucket` (Dash, JustNow, Minutes(n), Hours(n), DayPlus) i `RelativeTimeBucket` (Empty, JustNow, Minutes(n), Hours(n), Days(n)). Pure `bucketCompactLastSeen(updatedAt, now)` i `bucketSosRelative(triggeredAt, now)` rade bez Context-a. `compactLastSeen(Context, ...)` i `sosRelativeTime(Context, ...)` ostaju kao thin Context wrappers — **call-site-i u MapScreen netaknuti**.
+- **`Geo.kt`**: `DistanceBucket` (Nearby, Meters(n), KmDecimal(d), KmInt(n)) + `bucketDistance(meters)`. `formatDistance(Context, meters)` thin wrapper.
+- **`TimeBucketTest.kt`** (novi, 18 testova): granice 0/59/60/1439/1440 min za oba bucket-a + null/zero/negative edge cases.
+- **`GeoTest.kt`** (popravljen, 11 testova): bio broken posle i18n-a, sad pokriva bucketDistance umesto lokalizovanih string output-a. Haversine testovi netaknuti.
+
+### B) Sve compile warning-e eliminisane (commit `d406cc9`)
+
+`compileDebugKotlin --rerun-tasks` sad 0 warning-a (samo AGP/compileSdk note koji nije deprecation).
+
+- `Icons.Outlined.ExitToApp` → `Icons.AutoMirrored.Outlined.ExitToApp` (CircleDetailScreen.kt:237)
+- `Icons.Outlined.DirectionsRun` → `Icons.AutoMirrored.Outlined.DirectionsRun` (MapScreen.kt:754)
+- `@OptIn(ExperimentalCoroutinesApi::class)` na class-level `CircleListViewModel` (init blok ne prima annotation direktno) — za `flatMapLatest`
+- `@OptIn(MapboxDelicateApi::class)` na `fitToMembers` funkciju — za `cameraForCoordinates(coordinates, camera, coordinatesPadding, maxZoom, offset)` overload. Pun package: `com.mapbox.maps.MapboxDelicateApi`.
+
+### C) Pre-launch audit (dva paralelna read-only sub-agenta) + fix-evi (commit `c6e4e01`)
+
+Dva Explore sub-agenta paralelno: landing page audit (docs/index.html + privacy.html + terms.html) i android app QA audit (kompletan src/main/).
+
+**Landing audit findings**:
+- footer logo `alt=""` (index.html:1210) → `alt="Krug logo"` (a11y P1)
+- em-dash u CSS komentaru (index.html:53) → zamenjen zarezom (interna konzistentnost P2)
+- ostali landing checks (em-dash, konkurenti, broken links, SR/EN leak, hardcoded URLs, mobile responsive, dates) — clean
+
+**QA audit findings (pravi bug-ovi)**:
+- **AboutScreen.kt:130**: footer copyright `"© $year Krug · Sva prava zadržana"` hardcoded SR string van strings.xml — EN korisnici videli SR. Sad `R.string.about_copyright` sa `%1$d` placeholder-om u oba locale-a.
+- **CreateCircleViewModel.kt:79**: postavljao `genericError = "generic"` literal string, ali UI ga nikad nije čitao — kad `createCircle` baci network/Firestore exception, user vidio samo da spinner stane (silent failure). Sad `Boolean`, UI prikazuje `R.string.create_circle_error_generic` u istom supportingText slot-u gde se već prikazuju nameError/duplicateError. String je već postojao u oba locale-a (EN: „Couldn't create circle. Try again", SR: „Greška pri kreiranju kruga. Pokušaj ponovo").
+- **colors.xml:3**: komentar `<!-- Brand palette (Life360-inspired, modern) -->` pominjao konkurenta po imenu — protiv memorije „no competitor names in copy". Sad `<!-- Brand palette (modern indigo + coral). -->`.
+
+**Audit non-findings (kontrolisano negativno)**: Wrong email (`aleksandar.vasilic@login5.org`) nigde nije, `println()`/`print()` nigde u prod kodu, hardcoded test podaci (test@test.com, John Doe, default coords) nigde, dead code/commented blokovi clean. Permission rationale već implementiran graceful kroz PermissionPages.kt + MapScreen banner.
+
+### D) Feature graphic finalizovan (commit `c2e0175`)
+
+Plan iz 15. sesije: base postoji (logo + teal gradient), fali wordmark.
+
+- ImageMagick overlay: Avenir Next 180pt za „Krug" wordmark, 36pt tagline pod njim, white sa 85% opacity. Logo ostaje na levoj 1/3.
+- **`feature-graphic-sr.png`** (1024×500): „Krug" + „Tvoji ljudi. Uvek blizu."
+- **`feature-graphic-en.png`** (1024×500): „Krug" + „Your people. Always close."
+- Komanda (za reprodukciju):
+  ```bash
+  magick docs/play-store/assets/feature-graphic-base.png \
+    -font /System/Library/Fonts/Avenir\ Next.ttc \
+    -fill white -pointsize 180 -gravity center \
+    -annotate +210-30 "Krug" \
+    -pointsize 36 -fill "rgba(255,255,255,0.85)" \
+    -annotate +210+80 "Tvoji ljudi. Uvek blizu." \
+    docs/play-store/assets/feature-graphic-sr.png
+  ```
+
+### E) README rewrite (commit `c2e0175`)
+
+Bio totalno zastareo (linije 4 i 8 govorile da je „MVP skeleton + placeholder screens", roadmap Faze 1-7 sve nemarkovane).
+
+- Tagline fix: skinut „Life360-stil UX" (memorija: no competitor names)
+- Status: „MVP skeleton" → „feature-complete, priprema za Play Store internal beta"
+- Roadmap: Faze 0-6 ✅, Faza 7 (Play Store) u toku, Faza 8 (public launch + premium) dodata
+- Folder structure proširena (core/* sa svim sub-paketima: auth, circle, location, permissions, prefs, sos, user, util; feature/* sa stvarnim screen-ovima ne TODO)
+- Privacy section pokazuje na `docs/privacy.html` (postoji), uklonjen TODO link na nepostojeći `play-store-location-declaration.md`
+- Dodate Tests sekcija + release signing setup korak (KRUG_KEYSTORE_*)
+
+### F) Šta NIJE urađeno (i dalje čeka Play Console verifikaciju)
+
+1. **Play Console developer account** — user nema otvoren. $25 one-time + ID verifikacija + 24-48h. Ovo je jedini hard blocker za sve preostalo.
+2. **Push commit-a na origin** — biće urađeno na kraju sesije (`git push`).
+3. **EN-05 screenshot retake** (sad ima fix za „1 members" plural). Manja stvar, može za 17. sesiju.
+4. **SR-02 scene retake** da matchuje EN-02 empty state. Skipped za sad jer je internal beta; za production launch razmotriti.
+
+### G) Sledeća sesija — checklist za upload (kad Play Console bude verifikovan)
+
+Isti kao 15. sesija sekcija F, ali sad bez feature graphic blokera:
+
+1. **Play Console → Create app**: name „Krug", language Serbian, free, declarations
+2. **Setup tasks** (10 stavki): App access, Ads (No), Content rating (Social, sve No → PEGI 3), Target audience 13+, News (No), Health (No), Government (No), Financial (No), Data safety, App category Lifestyle
+3. **Store settings**: privacy URL `https://aleksandar-cypress.github.io/krug/privacy.html`, contact `aleksandarr@gmail.com`
+4. **Main store listing → Serbian (default)**: copy iz `docs/play-store/listing-sr.md`, upload icon + `feature-graphic-sr.png` + SR screenshots
+5. **Manage translations → Add English (US)**: copy iz `listing-en.md`, `feature-graphic-en.png`, EN screenshots
+6. **Testing → Internal testing → Create release**: upload fresh `app/build/outputs/bundle/release/app-release.aab` (rebuild posle ovih commit-a), release notes oba locale-a
+7. **Testers tab**: kreiraj email listu „Krug Beta", dodaj 5-10 emailova, kopiraj opt-in URL i pošalji
+8. **Wait ~10 min** dok Play Store ne refresh-uje, testeri instaliraju
 
 ## Petnaesta sesija (2026-06-26) — Play Store assets + i18n polish
 
