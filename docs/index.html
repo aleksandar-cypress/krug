@@ -467,17 +467,15 @@
     object-fit: cover;
     display: block;
   }
-  /* Subtle stagger animation when entering viewport via .reveal */
+  /* Subtle stagger: 4 phone-a u jednom redu sa asimetričnom rotacijom za dinamiku */
   .phone-mock:nth-child(1) { transform: rotate(-2deg); }
   .phone-mock:nth-child(1):hover { transform: translateY(-12px) rotate(-3deg); }
-  .phone-mock:nth-child(2) { transform: translateY(-20px); }
-  .phone-mock:nth-child(2):hover { transform: translateY(-32px); }
-  .phone-mock:nth-child(3) { transform: rotate(2deg); }
-  .phone-mock:nth-child(3):hover { transform: translateY(-12px) rotate(3deg); }
-  .phone-mock:nth-child(4) { transform: translateY(-12px) rotate(-1deg); }
-  .phone-mock:nth-child(4):hover { transform: translateY(-24px) rotate(-2deg); }
-  .phone-mock:nth-child(5) { transform: rotate(1deg); }
-  .phone-mock:nth-child(5):hover { transform: translateY(-12px) rotate(2deg); }
+  .phone-mock:nth-child(2) { transform: translateY(-16px) rotate(1deg); }
+  .phone-mock:nth-child(2):hover { transform: translateY(-28px) rotate(2deg); }
+  .phone-mock:nth-child(3) { transform: translateY(-8px) rotate(-1deg); }
+  .phone-mock:nth-child(3):hover { transform: translateY(-20px) rotate(-2deg); }
+  .phone-mock:nth-child(4) { transform: rotate(2deg); }
+  .phone-mock:nth-child(4):hover { transform: translateY(-12px) rotate(3deg); }
 
   /* SR/EN screenshot swap */
   .phone-mock .shot-en { display: none; }
@@ -1086,10 +1084,6 @@
     <div class="phone-mock">
       <img class="shot-sr" src="screenshots/03-create-circle-sr.webp" alt="Kreiranje novog kruga" loading="lazy" width="540" height="1080">
       <img class="shot-en" src="screenshots/03-create-circle-en.webp" alt="Create a new circle" loading="lazy" width="540" height="1080">
-    </div>
-    <div class="phone-mock">
-      <img class="shot-sr" src="screenshots/04-join-circle-sr.webp" alt="Pridruživanje krugu sa kodom" loading="lazy" width="540" height="1080">
-      <img class="shot-en" src="screenshots/04-join-circle-en.webp" alt="Join circle with a code" loading="lazy" width="540" height="1080">
     </div>
   </div>
 </section>
