@@ -614,16 +614,11 @@ class LocationTrackingService : Service() {
             this, 0, openAppIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        // Large icon je color logo sa safe padding-om (41% radijusa od centra) — Samsung
-        // One UI prikazuje notification badge sa kružnim crop-om, koji bi inače sekao
-        // glave figura ako bi se koristio default launcher app icon. IconCompat umesto
-        // Bitmap-a zato što neki Samsung One UI build-ovi prefer-uju Icon nad bitmap-om
-        // za large icon.
-        val largeIcon = ContextCompat.getDrawable(this, R.drawable.ic_notification_large)
-            ?.toBitmap(192, 192)
+        // setLargeIcon namerno NIJE postavljen — Samsung One UI ionako prikazuje launcher
+        // app icon levo od notification-a kao "app source indicator", pa setLargeIcon je
+        // pravio drugu redundantnu ikonu desno. Single icon = clean look.
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setLargeIcon(largeIcon)
             .setContentTitle(getString(R.string.loc_notif_title))
             .setContentText(getString(R.string.loc_notif_text))
             .setContentIntent(pi)

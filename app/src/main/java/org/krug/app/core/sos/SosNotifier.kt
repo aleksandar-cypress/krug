@@ -76,11 +76,10 @@ class SosNotifier @Inject constructor(
             context.getString(R.string.sos_notif_body)
         }
         val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-        val largeIcon = ContextCompat.getDrawable(context, R.drawable.ic_notification_large)
-            ?.toBitmap(192, 192)
+        // setLargeIcon namerno NIJE postavljen — Samsung One UI prikazuje launcher icon
+        // levo. Druga large ikona desno je pravila redundantni duplikat.
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .apply { if (largeIcon != null) setLargeIcon(largeIcon) }
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))

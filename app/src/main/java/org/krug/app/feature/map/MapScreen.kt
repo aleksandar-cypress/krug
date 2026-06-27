@@ -67,6 +67,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -904,26 +905,27 @@ private fun CircleIconButton(
     description: String,
     onClick: () -> Unit,
 ) {
-    // 360° spin na svaki tap — ista vrsta animacije kao splash logo spin. Spring-bouncy
-    // zamenjuje prethodni scale-down (user feedback: "umesto smanjivanja, isto tako
-    // zarotiras logo kao na pocetku"). spinTrigger se inkrementira tako da svaki tap
-    // okida novu animaciju (umesto da se zaustavi na 360° posle prvog).
+    // 360° spin na svaki tap. Tween 600ms FastOutSlowIn. Navigation delay 250ms — bez
+    // ovog, screen transition (280ms) starts immediately i animacija nestaje sa screen-om
+    // pre nego što stigne da bude vidljiva. Sa 250ms delay-em user vidi ~150° rotacije
+    // pre nego što ekran krene, pa još malo tokom samog transition-a.
     var spinTrigger by remember { mutableIntStateOf(0) }
     val rotation by animateFloatAsState(
         targetValue = spinTrigger * 360f,
-        animationSpec = androidx.compose.animation.core.spring(
-            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
-        ),
+        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
         label = "icon-spin",
     )
+    val scope = rememberCoroutineScope()
     Box(
         modifier = Modifier
             .size(48.dp)
             .krugGlass(CircleShape)
             .clickable {
                 spinTrigger += 1
-                onClick()
+                scope.launch {
+                    kotlinx.coroutines.delay(250L)
+                    onClick()
+                }
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -949,19 +951,20 @@ private fun CircleLogoButton(
     var spinTrigger by remember { mutableIntStateOf(0) }
     val rotation by animateFloatAsState(
         targetValue = spinTrigger * 360f,
-        animationSpec = androidx.compose.animation.core.spring(
-            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
-        ),
+        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
         label = "logo-spin",
     )
+    val scope = rememberCoroutineScope()
     Box(
         modifier = Modifier
             .size(48.dp)
             .krugGlass(CircleShape)
             .clickable {
                 spinTrigger += 1
-                onClick()
+                scope.launch {
+                    kotlinx.coroutines.delay(250L)
+                    onClick()
+                }
             },
         contentAlignment = Alignment.Center,
     ) {
