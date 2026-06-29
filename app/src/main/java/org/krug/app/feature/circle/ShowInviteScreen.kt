@@ -183,7 +183,9 @@ private fun CopyButton(code: String, context: Context) {
             modifier = Modifier.size(18.dp),
         )
         Text(
-            text = if (copied) "Kopirano" else "Kopiraj kod",
+            text = stringResource(
+                if (copied) R.string.invite_copy_code_copied else R.string.invite_copy_code,
+            ),
             style = MaterialTheme.typography.labelLarge,
             color = if (copied) LogoBlue else MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold,

@@ -110,6 +110,7 @@ class SplashViewModel @Inject constructor(
             when (recovered) {
                 true -> {
                     localPrefs.pendingDeleteUid = null
+                    localPrefs.clearForAccountReset()
                     _decision.value = SplashDecision.SignedOut
                     return
                 }
@@ -120,6 +121,7 @@ class SplashViewModel @Inject constructor(
                     Timber.w("Splash: Auth.delete still fails, forcing signOut")
                     runCatching { authRepository.signOut(context) }
                     localPrefs.pendingDeleteUid = null
+                    localPrefs.clearForAccountReset()
                     _decision.value = SplashDecision.SignedOut
                     return
                 }

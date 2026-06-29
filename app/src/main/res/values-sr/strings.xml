@@ -93,6 +93,8 @@
     <string name="invite_share_cta">Podeli kod</string>
     <string name="invite_done_cta">Gotovo</string>
     <string name="invite_share_template">Pridruži mi se u krugu \"%1$s\" na Krug aplikaciji. Kod: %2$s</string>
+    <string name="invite_copy_code">Kopiraj kod</string>
+    <string name="invite_copy_code_copied">Kopirano</string>
 
     <!-- Enter code -->
     <string name="enter_code_title">Pridruži se krugu</string>
@@ -105,6 +107,7 @@
     <string name="enter_code_error_cooldown">Previše pokušaja. Sačekaj malo pa pokušaj ponovo</string>
     <string name="enter_code_cooldown_countdown">Sačekaj %1$d s pa pokušaj ponovo</string>
     <string name="enter_code_cooldown_button">Sačekaj %1$d s</string>
+    <string name="enter_code_joining_status">Pridružujem se krugu…</string>
 
     <!-- Location tracking notification -->
     <string name="loc_notif_channel">Deljenje lokacije</string>

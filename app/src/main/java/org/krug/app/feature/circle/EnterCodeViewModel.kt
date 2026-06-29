@@ -9,11 +9,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.krug.app.core.auth.AuthRepository
+import org.krug.app.core.circle.CircleRepository
 import org.krug.app.core.circle.InviteRepository
 import org.krug.app.core.circle.JoinResult
+import org.krug.app.core.prefs.LocalPrefs
 
 data class EnterCodeUiState(
     val code: String = "",
@@ -32,6 +36,8 @@ data class EnterCodeUiState(
 class EnterCodeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val inviteRepository: InviteRepository,
+    private val circleRepository: CircleRepository,
+    private val localPrefs: LocalPrefs,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EnterCodeUiState())
@@ -75,6 +81,17 @@ class EnterCodeViewModel @Inject constructor(
                     is JoinResult.Success -> {
                         consecutiveFailures = 0
                         cooldownUntilMs = 0L
+                        // Aktiviraj novi krug odmah — Map će ga fokusirati po povratku.
+                        localPrefs.setActiveCircleId(result.circleId)
+                        // Sačekaj da Firestore snapshot listener vidi novi krug pre navigacije.
+                        // Bez ovog, Map briefly renderuje empty-state CTA ("Imam pozivnicu")
+                        // dok server snapshot ne stigne (race između tx commit i listener emit).
+                        // Timeout 3s — ako Firestore kasni, navigiramo svejedno; live listener
+                        // će svejedno popuniti listu kad stigne.
+                        withTimeoutOrNull(3_000L) {
+                            circleRepository.observeMyCircles(uid)
+                                .first { circles -> circles.any { it.id == result.circleId } }
+                        }
                         _state.update {
                             it.copy(joining = false, joinedCircleId = result.circleId)
                         }

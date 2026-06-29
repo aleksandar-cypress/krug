@@ -1,7 +1,9 @@
 package org.krug.app
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -54,9 +56,26 @@ class MainActivity : ComponentActivity() {
         val uid = intent?.getStringExtra(SosNotifier.EXTRA_FOCUS_SOS_UID)
             ?.takeIf { it.isNotBlank() }
             ?: return
+        // Pređi lock screen SAMO za SOS wake (full-screen notification). Bez ovog,
+        // user koji primi SOS dok je telefon zaključan ne bi video mapu odmah, a SOS
+        // je upravo use-case koji opravdava lock-screen bypass.
+        enableShowWhenLocked()
         SosFocusBus.request(uid)
         // Skini extra da rotacija/configChange ne re-trigger-uje fokus.
         intent.removeExtra(SosNotifier.EXTRA_FOCUS_SOS_UID)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun enableShowWhenLocked() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
+            )
+        }
     }
 }
 

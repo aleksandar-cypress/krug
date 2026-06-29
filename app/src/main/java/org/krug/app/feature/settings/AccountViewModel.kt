@@ -129,6 +129,9 @@ class AccountViewModel @Inject constructor(
                     .onFailure { Timber.w(it, "anonymous signOut: circle cleanup failed") }
                 runCatching { userRepository.deleteUser(uid) }
                     .onFailure { Timber.w(it, "anonymous signOut: user doc delete failed") }
+                // Anonimni uid je obrisan zauvek — local state vezan za taj uid (active circle,
+                // SOS dedup, onboarding) ne sme da nasledi sledeća sesija.
+                localPrefs.clearForAccountReset()
             }
             authRepository.signOut(context)
             _state.update { it.copy(signingOut = false, signedOut = true) }
@@ -172,8 +175,10 @@ class AccountViewModel @Inject constructor(
                 _state.update { it.copy(deleting = false, deleteNeedsReauth = true) }
                 return@launch
             }
-            // Clean delete uspeo — clear pending flag.
+            // Clean delete uspeo — clear pending flag i per-account local state da novi
+            // sign-in ne nasledi stari activeCircleId / SOS dedup / onboarding flag.
             localPrefs.pendingDeleteUid = null
+            localPrefs.clearForAccountReset()
             // 5. Sign-out cleanup (clear credentials).
             runCatching { authRepository.signOut(context) }
             Timber.i("Account delete completed uid=%s", uid)
@@ -214,6 +219,7 @@ class AccountViewModel @Inject constructor(
                 return@launch
             }
             localPrefs.pendingDeleteUid = null
+            localPrefs.clearForAccountReset()
             runCatching { authRepository.signOut(context) }
             Timber.i("Account delete completed via reauth uid=%s", uid)
             _state.update {

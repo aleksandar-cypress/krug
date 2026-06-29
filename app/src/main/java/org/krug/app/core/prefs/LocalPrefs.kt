@@ -90,6 +90,22 @@ class LocalPrefs @Inject constructor(
         get() = prefs.getBoolean(KEY_ACTIVITY_REC_PROMPT_SHOWN, false)
         set(value) = prefs.edit(commit = false) { putBoolean(KEY_ACTIVITY_REC_PROMPT_SHOWN, value) }
 
+    /**
+     * GDPR — pozvati nakon delete-account ili reinstall recovery-ja. Briše sve per-account
+     * state da novi sign-in ne nasledi stari `activeCircleId` (ne postoji više), `sos_notified`
+     * dedup ili `onboardingCompleted` flag (novi nalog treba čist onboarding). `pendingDeleteUid`
+     * čisti pozivalac eksplicitno (recovery logic to drži).
+     */
+    fun clearForAccountReset() {
+        prefs.edit(commit = false) {
+            remove(KEY_ONBOARDING_DONE)
+            remove(KEY_ACTIVE_CIRCLE)
+            remove(KEY_SOS_NOTIFIED)
+            remove(KEY_ACTIVITY_REC_PROMPT_SHOWN)
+        }
+        _activeCircleId.value = null
+    }
+
     private companion object {
         const val KEY_ONBOARDING_DONE = "onboarding_completed"
         const val KEY_ACTIVE_CIRCLE = "active_circle_id"

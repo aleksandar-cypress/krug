@@ -107,11 +107,11 @@ fun EnterCodeScreen(
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
+      Box(modifier = Modifier.fillMaxSize().padding(padding)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding()
-                .padding(padding)
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top,
@@ -178,6 +178,34 @@ fun EnterCodeScreen(
                 onClick = viewModel::submit,
             )
         }
+
+        // Splash-style overlay tokom joining-a — rotirajući logo + status text. Pokriva
+        // sadržaj da user ne vidi statičan ekran dok čekamo Firestore commit + listener
+        // sync. Kad pop-back-stack na Map nakon ovog, Map ima već non-empty circles
+        // pa empty-state CTA ("Imam pozivnicu") više ne flickeruje.
+        if (state.joining) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.96f))
+                    .clickable(enabled = false) {},
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    KrugLogo(
+                        modifier = Modifier.size(140.dp),
+                        continuousSpin = true,
+                    )
+                    Spacer(Modifier.size(24.dp))
+                    Text(
+                        text = stringResource(R.string.enter_code_joining_status),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
+      }
     }
 }
 

@@ -91,6 +91,8 @@
     <string name="invite_share_cta">Share code</string>
     <string name="invite_done_cta">Done</string>
     <string name="invite_share_template">Join me in the \"%1$s\" circle on Krug. Code: %2$s</string>
+    <string name="invite_copy_code">Copy code</string>
+    <string name="invite_copy_code_copied">Copied</string>
 
     <!-- Enter code -->
     <string name="enter_code_title">Join a circle</string>
@@ -103,6 +105,7 @@
     <string name="enter_code_error_cooldown">Too many attempts. Wait a moment and try again</string>
     <string name="enter_code_cooldown_countdown">Wait %1$ds and try again</string>
     <string name="enter_code_cooldown_button">Wait %1$ds</string>
+    <string name="enter_code_joining_status">Joining circle…</string>
 
     <!-- Location tracking notification -->
     <string name="loc_notif_channel">Location sharing</string>

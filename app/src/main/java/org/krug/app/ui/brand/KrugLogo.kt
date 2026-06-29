@@ -2,6 +2,11 @@ package org.krug.app.ui.brand
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
@@ -47,11 +52,27 @@ fun KrugLogo(
      * Prvi composition se preskače (samo realne promene okidaju spin).
      */
     spinKey: Any? = null,
+    /**
+     * Kontinualna 360° rotacija dok je true (loading state — npr. dok se pridružuje krugu).
+     * Pokreće se infinite transition koji se super-poniraje sa `spin`/entrance animacijom.
+     */
+    continuousSpin: Boolean = false,
     contentDescription: String? = null,
 ) {
     val parts = remember { LogoParts.parse() }
 
     val spin = remember { Animatable(0f) }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "krug-logo-infinite")
+    val continuousAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = if (continuousSpin) 360f else 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1_400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "krug-logo-continuous-angle",
+    )
 
     // Prati da li je prvi composition prošao — preskačemo "lažni" trigger pri prvom render-u.
     var spinKeyInitialized by remember { mutableStateOf(false) }
@@ -88,7 +109,7 @@ fun KrugLogo(
         modifier
     }
 
-    val spinAngle = spin.value
+    val spinAngle = spin.value + continuousAngle
     // Logo se prikazuje odmah na finalnoj veličini, sa istim izgledom kao sistemski splash
     // (ic_splash_icon = puni logo) — bez tranzicije izmedju, samo spin daje animaciju.
 
