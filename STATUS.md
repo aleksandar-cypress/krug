@@ -2,9 +2,9 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-06-27, kraj dvadesete sesije — sajt LIVE na krugapp.com + brand email migracija + landing polish)
+## Gde smo stali (2026-06-29, kraj dvadeset prve sesije — pre-launch polish + release artefakti spremni)
 
-Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `9407c14`. **Sajt LIVE na https://krugapp.com/** (i `privacy.html`, `terms.html`, `robots.txt`, `sitemap.xml`, `screenshots/`). SSL aktivan, sve HTTP 200. Hosting na user-ovom shared planu (nije GitHub Pages — proper domen sa custom email forwarding capability).
+Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `6b99a55` (pushed na origin/main). **Sajt LIVE na https://krugapp.com/** (i `privacy.html`, `terms.html`, `robots.txt`, `sitemap.xml`, `screenshots/`). SSL aktivan, sve HTTP 200. Hosting na user-ovom shared planu (nije GitHub Pages — proper domen sa custom email forwarding capability).
 
 **Brand split**: User je 2026-06-27 napravio dedicated `krugappteam@gmail.com` Gmail nalog za Krug brand operacije:
 - Firebase Console: dodat kao Owner (ownership migration završen)
@@ -12,7 +12,9 @@ Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `9
 - Sav user-facing copy (privacy/terms/landing/listing) prebačen sa `aleksandarr@gmail.com` (lični) na `krugappteam@gmail.com` (brand)
 - Lični nalog ostaje za personal git/SSH, ne za Krug user-facing kontekste
 
-**Release APK** i dalje na `~/Desktop/krug-release.apk` (69 MB, sa NDK Crashlytics), spreman za beta distribuciju.
+**Release artefakti** osveženi na kraju 21. sesije:
+- `~/Desktop/krug-release.apk` (69 MB) — sa svim polish izmenama, za beta distribuciju
+- `app/build/outputs/bundle/release/app-release.aab` (36 MB) — signed bundle, spreman za Play Console upload čim approval stigne
 
 **Play Console signup** kompletan na kraju sesije (2026-06-27 popodne):
 - Developer name: **„Krug Team"**
@@ -25,7 +27,59 @@ Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `9
 Firebase: Firestore + RTDB rules deployovane. Release SHA-1 dodat u Firebase Console (`21:6A:94:24:64:98:08:4A:42:02:D6:4F:13:77:40:26:3C:A8:E0:36`), Google sign-in radi i u release build-u.
 **Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — release build verifikovan na S24 (`R5CWC1F9FND`).
 
-**Health stanja**: `compileDebugKotlin` 0 warning-a. `testDebugUnitTest` zelen — 46 testova prolaze (TimeBucket 18, Geo 11, StringFormat 7, DeviceNames 10). `assembleRelease` prošao (1m 29s, R8 + lintVital + Crashlytics mapping upload). `:benchmark` Gradle modul i dalje validan. Nova UI infrastruktura: `Haptics.kt` util, SettingsSubScaffold sa SnackbarHostState parametrom, MapMarkers.pinMarker sa isSelf flag-om, novi GpsWaitingBanner Composable, OnboardingPage.isAlreadyGranted().
+**Health stanja**: `compileDebugKotlin` 0 warning-a. `testDebugUnitTest` zelen — 46 testova prolaze (TimeBucket 18, Geo 11, StringFormat 7, DeviceNames 10). `assembleRelease` prošao u 21. sesiji (2m 11s, R8 + lintVital + Crashlytics mapping upload). `bundleRelease` prošao (14s). `:benchmark` Gradle modul i dalje validan. Nove UI/core pomoćne stvari iz 21. sesije: `KrugLogo.continuousSpin` parametar, `LocalPrefs.clearForAccountReset()` GDPR helper, splash-style overlay u `EnterCodeScreen`, programmatic show-when-locked u `MainActivity` (SOS-only).
+
+## Dvadeset prva sesija (2026-06-29) — pre-launch polish + release verifikacija
+
+Kratka sesija dok čeka Play Console approval. Tri user-prijavljene stvari + audit polish round + commit `6b99a55` pushed.
+
+### A) User bug reports na S24 (commit `6b99a55`)
+
+User testirao APK na S24 Ultra, prijavio tri problema:
+
+**1. „Imam pozivnicu" button posle pridruživanja krugu**: kada je peti član uneo invite kod i pridružio se, na MapScreen-u i dalje vidi empty-state CTA (Napravi prvi krug + Imam pozivnicu) iako je već u krugu.
+- Root cause: `acceptInvite` transakcija commit-uje, navigacija odmah ide `popBackStack(Map)`, ali `observeMyCircles` Firestore listener tek treba da emit-uje novi snapshot. Map briefly renderuje sa `circlesLoaded=true && circles.isEmpty()` pre nego što listener uhvati update.
+- Fix: u `EnterCodeViewModel.submit` posle `JoinResult.Success` set `localPrefs.setActiveCircleId` odmah + `withTimeoutOrNull(3_000L) { observeMyCircles(uid).first { it.any { c -> c.id == result.circleId } } }` pre nav-a. Inject `CircleRepository` + `LocalPrefs` u ViewModel.
+- UX: tokom čekanja prikazuje splash-style overlay (full-screen `Box` sa background.copy(alpha=0.96f) preko EnterCode sadržaja) sa rotirajućim `KrugLogo` + tekst „Pridružujem se krugu…". Novi `continuousSpin: Boolean` parametar u `KrugLogo.kt` koji super-ponira `rememberInfiniteTransition` 360°/1400ms nad postojećim `spin` Animatable-om. Novi string `enter_code_joining_status` u SR + EN.
+
+**2. Mapa se otvara preko lock screen-a**: kada user otvori app sa launchera dok je telefon zaključan, mapa se odmah vidi bez unlock-a — privacy leak.
+- Root cause: `AndroidManifest.xml` ima `android:showWhenLocked="true"` i `android:turnScreenOn="true"` statički na `MainActivity` (dodato ranije za SOS full-screen intent). To važi za SVAKI launch, ne samo za SOS.
+- Fix: ti atributi uklonjeni iz manifesta. `MainActivity.handleSosFocusExtra()` programmatic-ki poziva `setShowWhenLocked(true)` + `setTurnScreenOn(true)` (sa Build.VERSION_CODES.O_MR1 fallback na `window.addFlags(FLAG_SHOW_WHEN_LOCKED or FLAG_TURN_SCREEN_ON)`) — SAMO kad notification intent ima `EXTRA_FOCUS_SOS_UID`. SOS wake-screen i dalje radi, normalan launch sad traži unlock.
+
+**3. Privacy/Terms linkovi vode na github.io**: korisnik klikne Privacy ili Terms u About ekranu, vodi ga na stari github.io URL umesto krugapp.com.
+- Provera: trenutni kod (`AboutScreen.kt:53-54`) već koristi `https://krugapp.com/privacy.html` i `https://krugapp.com/terms.html` od commita `f8e0596` (2026-06-27 15:17:28). APK na S24 (installed 2026-06-27 13:22:43, ~2h pre commit-a) je STARI build. Fix = rebuild + reinstall, ne code change. Urađeno u istom installDebug ciklusu kao gornji fix-evi.
+
+### B) Polish audit round (isti commit)
+
+**Hardcoded „Kopirano"/„Kopiraj kod"** (ShowInviteScreen.kt:186) → `R.string.invite_copy_code` + `R.string.invite_copy_code_copied` (SR „Kopiraj kod" / „Kopirano", EN „Copy code" / „Copied"). Jedini nalaz iz feature/ hardcoded-string audit-a koji je legitiman user-facing (ostalo: clipboard label-ovi koji nisu vidljivi, % i counter formati koji su tehnički).
+
+**GDPR local prefs leak**: posle `deleteAccount` / `reauthAndDelete` / anonymous `signOut`, lokalni `SharedPreferences` flag-ovi (`onboardingCompleted`, `activeCircleId`, `sos_notified`, `activityRecPromptShown`) su preživeli — sledeći sign-in nasleđivao stari activeCircleId koji više ne postoji (i SOS dedup mapu za stare uid-ove).
+- Dodat `LocalPrefs.clearForAccountReset()` koji briše sve te flag-ove (osim `pendingDeleteUid` koji recovery logic handluje eksplicitno).
+- Pozvan iz: `AccountViewModel.deleteAccount` (clean delete path), `AccountViewModel.reauthAndDelete` (reauth recovery), `AccountViewModel.signOut` (anonymous granu samo, posle data cleanup-a), `SplashViewModel.decide` pending-delete recovery (oba: clean recovery + force-signOut fallback).
+
+### C) Audit pass-ovi koji su pokazali clean code
+
+- **Code audit (core/)**: Explore agent našao 12 potencijalnih problema. Pregled rezultata: realno 0 problema. Volatile fields već postoje (`lastPublishedLat/Lng/AtMs` na LocationTrackingService:92-93,695), `PowerSaveMonitor` već ima `awaitClose { runCatching { unregisterReceiver } }`, `DirectionsRepository.scope` koristi SupervisorJob koji nikad ne cancel-uje (Singleton). `knownSosTriggered` ConcurrentHashMap je marginal defensive — preskočeno.
+- **i18n parity**: 252 ključa u `values/strings.xml` == 252 u `values-sr/strings.xml`. Svi `%1$d` / `%1$s` placeholders match preko key-eva.
+- **Accessibility**: 28 `contentDescription = null` lokacija pregledan — sve dekorativne ikone uz vidljiv tekst label u istom Row/Column. Sve `IconButton`-i imaju smislen description preko `stringResource()`. Clean.
+- **Firestore indexes**: 4 query-a (`whereArrayContains memberIds + orderBy createdAt` ima index, ostala 3 su single-field — ne trebaju composite). Sve pokriveno.
+- **Em-dash check**: `app/src/main/res` strings.xml čist, sva preostala `—` su u XML komentarima (`data_extraction_rules.xml`, drawable comments) — ne user-facing.
+
+### D) Release build verifikacija
+
+`./gradlew assembleRelease` prošao za 2m 11s (R8 obfuscation, lintVital, Crashlytics mapping upload OK). `bundleRelease` 14s. Artefakti:
+- `app/build/outputs/apk/release/app-release.apk` (69 MB) → kopiran na `~/Desktop/krug-release.apk` za beta distribuciju
+- `app/build/outputs/bundle/release/app-release.aab` (36 MB) → spreman za Play Console upload
+
+Metadata: `org.krug.app` v0.1.0 (versionCode=1), minSdk 26, targetSdk 36, compileSdk 36.
+
+### Stanje na kraju 21. sesije
+
+- Commit `6b99a55` pushed na origin/main
+- Play Console signup i dalje u „Google is verifying your identity" — čeka se odobrenje (status quo od 2026-06-27 popodne)
+- Build green: 0 compile warning-a, 46 unit testova prolaze, release + bundle prolaze
+- APK svež na ~/Desktop sa svim fix-evima, instaliran na S24 (`R5CWC1F9FND`) i A37 (`RFGL30L2A5Z`) u sesiji
+- Sledeća sesija: čeka se Play Console approval. Dok ne stigne, opcije za polish: dark mode pass (61 hardcoded color literal, većina legit), test coverage extension za `InviteRepository` (Firestore tx logic nikad testiran), perf profiling.
 
 ## Dvadeseta sesija (2026-06-27) — sajt live + brand split + landing polish
 
