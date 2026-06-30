@@ -2,6 +2,51 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-06-30, Play Console identity verification ODOBRENA + app entry kreiran + 6 declaracija završeno)
+
+**🎉 Play Console identity verification PROŠLA** (2026-06-30): Google poslao „Your identity has been verified / Your identity verification was successful" notifikaciju na `krugappteam@gmail.com`. Developer account aktivan, publishing odblokiran.
+
+**App entry kreiran u Play Console-u** (2026-06-30, dvadeset druga sesija):
+- App name: `Krug`
+- Package name: `org.krug.app` (zaključano zauvek)
+- Default language: Serbian (Latin) `sr-Latn`
+- Type: App, Free
+- Sve declarations prihvaćene (Developer Policies, Play App Signing ToS, US export laws)
+- Play Integrity installer check: ON (default)
+
+**App content — 6 od 10 declaracija završeno**:
+- ✓ Privacy policy URL → `https://krugapp.com/privacy.html`
+- ✓ Ads → No
+- ✓ Government apps → No
+- ✓ Financial features → No (premium subscriptions NE računaju se kao financial features)
+- ✓ Health apps → No (SOS nije medical service, peer-to-peer alert)
+- ✓ Advertising ID → Yes, purpose: Analytics (Firebase Analytics SDK pulluje `play-services-ads-identifier`, verifikovano u `releaseRuntimeClasspath`)
+
+**App content — preostalo 4 declaracije**:
+- ⏸️ **Sign in details** (PRIORITET — blokira Target audience) — čeka kreiranje dedicated test Gmail naloga (predlog: `krug.review.tester@gmail.com` ili sl.) sa instrukcijama za reviewer-a kako da uđe preko „Sign in with Google"
+- ⏸️ **Target audience and content** — blokirano dok Sign in details nije završen. Plan: Ages 13-15, 16-17, 18+; not appealing to children
+- ⏸️ **Content ratings** — IARC questionnaire (sve „No" za Krug, expected rating Everyone/PEGI 3)
+- ⏸️ **Data safety** — najduži form, treba detaljno popuniti šta sakupljamo (location precise foreground+background, email, name, device ID, app activity) + svrhe + sharing (No) + encryption (Yes Firebase HTTPS) + user deletion (Yes preko Settings → Delete account)
+
+**Store presence — neotkrivene sekcije** (sledeća sesija):
+- Main store listing (icon, screenshots, feature graphic, descriptions SR+EN — sve assets postoje već)
+- Store settings (kategorija — Social ili Communication, kontakt info)
+- Permissions and APIs declaration (background location justification — kritično, Google strogo proverava, često traži demo video)
+
+**Sledeća sesija — TODO redosled**:
+1. Napraviti test Gmail nalog (predlog: `krug.review.tester@gmail.com`, 10 min)
+2. Popuniti Sign in details sa test credentials + instrukcijama
+3. Target audience and content (5 min)
+4. Content ratings (15-20 min)
+5. Data safety (30-60 min)
+6. Main store listing (30-60 min)
+7. Store settings (5 min)
+8. Permissions and APIs (može potrebovati demo video za background location)
+9. Internal testing release — upload AAB
+10. Closed testing — recrutuj 12+ testera (14 dana min za production access)
+
+**Bitno za buduće sesije**: personal developer account Google requirement (od 2023) — MORA closed testing sa **minimum 12 opt-in testera** **minimum 14 dana** pre nego što se može aplicirati za Production access. Launch je realno ~2 nedelje od kompletiranja closed test setup-a.
+
 ## Gde smo stali (2026-06-29, kraj dvadeset prve sesije — pre-launch polish + release artefakti spremni)
 
 Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `6b99a55` (pushed na origin/main). **Sajt LIVE na https://krugapp.com/** (i `privacy.html`, `terms.html`, `robots.txt`, `sitemap.xml`, `screenshots/`). SSL aktivan, sve HTTP 200. Hosting na user-ovom shared planu (nije GitHub Pages — proper domen sa custom email forwarding capability).
@@ -16,13 +61,13 @@ Repo public: **https://github.com/aleksandar-cypress/krug**, poslednji commit `6
 - `~/Desktop/krug-release.apk` (69 MB) — sa svim polish izmenama, za beta distribuciju
 - `app/build/outputs/bundle/release/app-release.aab` (36 MB) — signed bundle, spreman za Play Console upload čim approval stigne
 
-**Play Console signup** kompletan na kraju sesije (2026-06-27 popodne):
+**Play Console signup** kompletan + identity verification ODOBRENA (2026-06-30):
 - Developer name: **„Krug Team"**
 - Email: `krugappteam@gmail.com`
 - Tip: Personal account
-- $25 plaćeno, ID + selfie upload-ovan
-- Status: **„Google is verifying your identity"** — čeka se odobrenje 24-72h (možda do 7 dana). Phone verifikacija će se automatski završiti posle identity approve-a.
-- App publishing zaključan dok status ne pređe u „Approved" (email će stići na `krugappteam@gmail.com`)
+- $25 plaćeno, ID + selfie upload-ovan 2026-06-27
+- Status: **VERIFIED** ✅ — Google poslao „Your identity has been verified" potvrdu 2026-06-30 (~3 dana od submission-a)
+- App publishing **odblokiran** — može se kreirati app entry i upload-ovati AAB
 - Sve assets su spremni za Play Store upload — listing copy SR+EN, screenshots, feature graphics, AAB.
 Firebase: Firestore + RTDB rules deployovane. Release SHA-1 dodat u Firebase Console (`21:6A:94:24:64:98:08:4A:42:02:D6:4F:13:77:40:26:3C:A8:E0:36`), Google sign-in radi i u release build-u.
 **Flota uređaja**: A37 (SM-A376B), Xiaomi Mi 11 (21081111RG), Samsung S24 Ultra (SM-S928B) — release build verifikovan na S24 (`R5CWC1F9FND`).
