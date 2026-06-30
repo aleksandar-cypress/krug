@@ -559,10 +559,20 @@ fun MapScreen(
             )
             // GPS waiting — pokazuj samo ako imamo permission ali još nema fix-a.
             // Bez permission-a, PermissionWarningBanner gore ionako kaže šta da uradi.
-            GpsWaitingBanner(
-                isWaiting = state.selfLocation == null &&
-                    org.krug.app.core.permissions.PermissionUtils.hasForegroundLocation(context),
-            )
+            // Debounce 500ms: na cold start RTDB cache obično emituje fix unutar
+            // ~100-300ms; bez debounce-a banner bi blesnuo (fade-in pa odmah fade-out).
+            val rawGpsWaiting = state.selfLocation == null &&
+                org.krug.app.core.permissions.PermissionUtils.hasForegroundLocation(context)
+            var debouncedGpsWaiting by remember { mutableStateOf(false) }
+            LaunchedEffect(rawGpsWaiting) {
+                if (rawGpsWaiting) {
+                    kotlinx.coroutines.delay(500)
+                    debouncedGpsWaiting = true
+                } else {
+                    debouncedGpsWaiting = false
+                }
+            }
+            GpsWaitingBanner(isWaiting = debouncedGpsWaiting)
             PowerSaveBanner(isOnSaver = state.isPowerSaveMode)
             AnimatedVisibility(
                 visible = activeSosMembers.isNotEmpty(),
