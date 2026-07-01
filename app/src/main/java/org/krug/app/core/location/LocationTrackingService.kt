@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -92,6 +93,14 @@ class LocationTrackingService : Service() {
     @Volatile private var lastPublishedLat: Double? = null
     @Volatile private var lastPublishedLng: Double? = null
 
+    /**
+     * elapsedRealtimeNanos poslednjeg PUBLISHED fix-a. Koristi se za monotonic guard
+     * (odbaci fix koji je stariji od objavljenog) i plausibility check (implied brzina).
+     * SystemClock.elapsedRealtimeNanos je monotonic since boot, nije osetljiv na promenu
+     * sistemskog sata (nije loc.time koji je walll-clock).
+     */
+    @Volatile private var lastPublishedElapsedNanos: Long = 0L
+
     /** Trenutak start-a ove instance — onDestroy ga koristi za FGS lifetime telemetry. */
     @Volatile private var startedAtMs: Long = 0L
 
@@ -118,12 +127,7 @@ class LocationTrackingService : Service() {
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             val loc = result.lastLocation ?: return
-            // Accuracy filter — dropujemo unreliable fixes (indoor, tunnel, slab GPS sat).
-            // Threshold 100m je liberalan: pravi GPS fix retko prelazi 50m čak u zgradama.
-            if (loc.accuracy > MAX_ACCEPTABLE_ACCURACY_M) {
-                Timber.d("Drop low-accuracy fix: ${loc.accuracy}m (threshold ${MAX_ACCEPTABLE_ACCURACY_M}m)")
-                return
-            }
+            if (!passesQualityGate(loc, isCachedLastLocation = false)) return
             val (battery, charging) = readBattery()
             reconfigureIfNeeded()
             if (!currentSettings.shareLocationGlobal) {
@@ -150,6 +154,7 @@ class LocationTrackingService : Service() {
                     lastPublishAtMs = System.currentTimeMillis()
                     lastPublishedLat = loc.latitude
                     lastPublishedLng = loc.longitude
+                    lastPublishedElapsedNanos = loc.elapsedRealtimeNanos
                 }.onFailure { ex ->
                     // FGS shutdown / scope cancel je normalan lifecycle event — ne loguj kao W
                     // (CrashlyticsTree bi to forward-ovao u dashboard kao false-positive).
@@ -158,6 +163,58 @@ class LocationTrackingService : Service() {
                 }
             }
         }
+    }
+
+    /**
+     * Kvalitetni filteri koji sprečavaju "vraćanje unazad" na mapi kod peer-a:
+     *  1) Age filter (samo za cached lastLocation) — Wi-Fi fingerprint iz fused cache-a
+     *     može biti sat vremena star, i publish bi teleportovao člana.
+     *  2) Accuracy — accuracy iznad thresholda znači unreliable fix.
+     *  3) Monotonic guard — Android ponekad vrati fix čiji je elapsedRealtimeNanos
+     *     stariji od poslednjeg objavljenog (fused interpolira iz starijih senzor sample-a).
+     *  4) Plausibility (implied speed) — ako je implied brzina između poslednjeg fix-a i
+     *     ovog iznad ~200 km/h, to je GPS outlier a ne stvarno kretanje.
+     */
+    private fun passesQualityGate(
+        loc: android.location.Location,
+        isCachedLastLocation: Boolean,
+    ): Boolean {
+        if (isCachedLastLocation) {
+            val ageMs = (SystemClock.elapsedRealtimeNanos() - loc.elapsedRealtimeNanos) / 1_000_000L
+            if (ageMs > LAST_LOCATION_MAX_AGE_MS) {
+                Timber.d("Drop stale cached fix: ${ageMs}ms old (threshold ${LAST_LOCATION_MAX_AGE_MS}ms)")
+                return false
+            }
+        }
+        if (loc.accuracy > MAX_ACCEPTABLE_ACCURACY_M) {
+            Timber.d("Drop low-accuracy fix: ${loc.accuracy}m (threshold ${MAX_ACCEPTABLE_ACCURACY_M}m)")
+            return false
+        }
+        val lastElapsedNs = lastPublishedElapsedNanos
+        if (lastElapsedNs > 0L && loc.elapsedRealtimeNanos < lastElapsedNs) {
+            Timber.d("Drop non-monotonic fix (older than last published)")
+            return false
+        }
+        val lastLat = lastPublishedLat
+        val lastLng = lastPublishedLng
+        if (lastLat != null && lastLng != null && lastElapsedNs > 0L) {
+            val deltaSec = (loc.elapsedRealtimeNanos - lastElapsedNs) / 1_000_000_000.0
+            if (deltaSec > 0.0) {
+                val results = FloatArray(1)
+                android.location.Location.distanceBetween(
+                    lastLat, lastLng, loc.latitude, loc.longitude, results,
+                )
+                val impliedSpeed = results[0] / deltaSec
+                if (impliedSpeed > MAX_PLAUSIBLE_SPEED_MPS) {
+                    Timber.d(
+                        "Drop implausible fix: ${results[0].toInt()}m in ${"%.1f".format(deltaSec)}s " +
+                            "(${impliedSpeed.toInt()}m/s, threshold ${MAX_PLAUSIBLE_SPEED_MPS.toInt()}m/s)",
+                    )
+                    return false
+                }
+            }
+        }
+        return true
     }
 
     /**
@@ -353,6 +410,11 @@ class LocationTrackingService : Service() {
     }
 
     private fun publishLocation(uid: String, loc: android.location.Location, source: String) {
+        // Cached fix iz fused.lastLocation može biti sat vremena star (Wi-Fi fingerprint
+        // od pre — user je u međuvremenu prešao 5km). Age gate mora da bude tu SAMO za
+        // taj slučaj; "one-shot-updates" callback je uvek fresh fix.
+        val isCachedFix = source == "last-location"
+        if (!passesQualityGate(loc, isCachedLastLocation = isCachedFix)) return
         val (battery, charging) = readBattery()
         // Bearing i speed iz Android Location-a. `hasBearing()` / `hasSpeed()` su false ako
         // GPS još nije fix-ovao smer (statičan user, indoor, fresh launch). 0 default je OK
@@ -372,6 +434,9 @@ class LocationTrackingService : Service() {
                     speed = speed,
                 )
                 lastPublishAtMs = System.currentTimeMillis()
+                lastPublishedLat = loc.latitude
+                lastPublishedLng = loc.longitude
+                lastPublishedElapsedNanos = loc.elapsedRealtimeNanos
                 Timber.d("Published $source fix (lat=${loc.latitude}, lng=${loc.longitude}, acc=${loc.accuracy})")
             }.onFailure { ex ->
                 if (ex is CancellationException) Timber.d("publish $source cancelled (scope dying)")
@@ -675,6 +740,16 @@ class LocationTrackingService : Service() {
         const val FORCE_PUBLISH_INTERVAL_MS = 90_000L
         /** Maksimum prihvatljive accuracy — fixevi gori od ovog su nepouzdani. */
         const val MAX_ACCEPTABLE_ACCURACY_M = 100f
+        /**
+         * Age gate za cached lastLocation (fused.lastLocation). Cache može biti star
+         * satima (Wi-Fi fingerprint iz drugog kraja grada), publish bi teleportovao člana.
+         */
+        const val LAST_LOCATION_MAX_AGE_MS = 30_000L
+        /**
+         * Implied brzina prag (~200 km/h). Iznad je GPS outlier ne stvarno kretanje —
+         * pokriva slučaj cell-tower fallback fix-a koji "vrati unazad 200m za par sekundi".
+         */
+        const val MAX_PLAUSIBLE_SPEED_MPS = 55f
         /** Battery below this % i ne puni se → throttle profile na ×2 interval. */
         const val LOW_BATTERY_THRESHOLD = 15
         private const val EXTRA_FORCE_REFRESH = "force_refresh"
