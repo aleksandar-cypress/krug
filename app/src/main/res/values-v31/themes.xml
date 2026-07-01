@@ -12,4 +12,12 @@
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_icon</item>
         <item name="android:windowSplashScreenBackground">#FFFFFF</item>
     </style>
+
+    <!-- API 31+ splash tema — koristi native android:* atribute jer sistem uzima
+         direktno iz activity theme, ne prolazi kroz core-splashscreen compat sloj. -->
+    <style name="Theme.Krug.Splash" parent="Theme.SplashScreen">
+        <item name="android:windowSplashScreenBackground">#FFFFFF</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_icon</item>
+        <item name="postSplashScreenTheme">@style/Theme.Krug</item>
+    </style>
 </resources>

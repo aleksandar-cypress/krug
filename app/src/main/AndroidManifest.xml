@@ -83,7 +83,7 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.Krug">
+            android:theme="@style/Theme.Krug.Splash">
             <!-- showWhenLocked/turnScreenOn se NE postavljaju ovde — to bi značilo da
                  mapa može da se prikaže preko lock screen-a pri svakom launch-u (privacy
                  leak). Umesto toga, MainActivity ih programmatic-ki uključuje SAMO kad

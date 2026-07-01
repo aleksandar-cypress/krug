@@ -7,4 +7,14 @@
         <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
     </style>
+
+    <!-- Activity theme za launch: mora nasleđivati Theme.SplashScreen jer
+         installSplashScreen() na API <31 inflate-uje interni layout koji koristi
+         ?attr/windowSplashScreenAnimatedIconSize (definisan samo u Theme.SplashScreen).
+         Bez ovog, MainActivity padne na cold start na starijim uređajima. -->
+    <style name="Theme.Krug.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@android:color/white</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_icon</item>
+        <item name="postSplashScreenTheme">@style/Theme.Krug</item>
+    </style>
 </resources>
