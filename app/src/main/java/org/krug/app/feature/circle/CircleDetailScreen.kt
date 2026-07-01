@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.krug.app.R
+import org.krug.app.core.util.rejectHaptic
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,6 +72,7 @@ fun CircleDetailScreen(
     viewModel: CircleDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val view = LocalView.current
     var showLeaveConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showEditSheet by remember { mutableStateOf(false) }
@@ -273,6 +276,9 @@ fun CircleDetailScreen(
             text = { Text(stringResource(R.string.circle_detail_leave_confirm_body)) },
             confirmButton = {
                 TextButton(onClick = {
+                    // Napustiti krug je destruktivno — jak haptik potvrđuje akciju
+                    // (isti pattern kao SOS confirm i account delete).
+                    view.rejectHaptic()
                     showLeaveConfirm = false
                     viewModel.leave()
                 }) { Text(stringResource(R.string.circle_detail_leave_cta)) }
@@ -291,6 +297,7 @@ fun CircleDetailScreen(
             text = { Text(stringResource(R.string.circle_detail_delete_confirm_body)) },
             confirmButton = {
                 TextButton(onClick = {
+                    view.rejectHaptic()
                     showDeleteConfirm = false
                     viewModel.delete()
                 }) {

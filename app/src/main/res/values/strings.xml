@@ -227,6 +227,8 @@
 
     <!-- Map: SOS -->
     <string name="map_sos_button">SoS</string>
+    <string name="map_sos_button_cd">Trigger emergency SOS alert</string>
+    <string name="map_sos_button_active_cd">Cancel active SOS alert</string>
     <string name="map_sos_self_active">SOS active. Your circles have been notified</string>
     <string name="map_sos_member_needs_help">%1$s is asking for urgent help</string>
     <string name="map_sos_banner_one_help">%1$s needs help</string>
@@ -245,6 +247,7 @@
     <string name="member_chip_last_seen">Last seen</string>
     <string name="member_state_private">Private mode</string>
     <string name="member_state_offline">Offline</string>
+    <string name="member_state_offline_body">Lost network connection. Showing last known position, will reconnect automatically.</string>
     <string name="member_state_sos_help">SOS: needs help</string>
     <string name="member_state_private_body">This member is not currently sharing location or is offline. The last known position is shown</string>
     <string name="member_state_long_offline_title">Inactive %1$d d</string>

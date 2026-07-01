@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.semantics.Role
 
 /**
  * Replikuje `Modifier.clickable` ali sa dodatkom press scale animacije — kad user
@@ -24,11 +25,16 @@ import androidx.compose.ui.draw.scale
  *
  * Koristi se na primary CTA-ima (gradient pill button-ima) gde Material Button visual
  * feedback nije dovoljan ili button koristi custom Modifier-baziran layout.
+ *
+ * TalkBack: default `role = Role.Button` da screen reader izgovori "Button" umesto
+ * generičkog "clickable" — pomaže user-u sa TalkBack-om da razlikuje button od običnog
+ * kliktavog reda. Prosleđuj `role = null` ako element nije semantički button.
  */
 @Composable
 fun Modifier.pressScaleClickable(
     pressedScale: Float = 0.96f,
     enabled: Boolean = true,
+    role: Role? = Role.Button,
     onClick: () -> Unit,
 ): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
@@ -47,6 +53,7 @@ fun Modifier.pressScaleClickable(
             interactionSource = interactionSource,
             indication = LocalIndication.current,
             enabled = enabled,
+            role = role,
             onClick = onClick,
         )
 }

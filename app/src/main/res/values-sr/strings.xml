@@ -229,6 +229,8 @@
 
     <!-- Map: SOS -->
     <string name="map_sos_button">SoS</string>
+    <string name="map_sos_button_cd">Pošalji hitno SOS upozorenje</string>
+    <string name="map_sos_button_active_cd">Otkaži aktivni SOS</string>
     <string name="map_sos_self_active">SOS aktivan, tvoji krugovi su obavešteni</string>
     <string name="map_sos_member_needs_help">%1$s traži hitnu pomoć</string>
     <string name="map_sos_banner_one_help">%1$s traži pomoć</string>
@@ -247,6 +249,7 @@
     <string name="member_chip_last_seen">Poslednje</string>
     <string name="member_state_private">Privatni mod</string>
     <string name="member_state_offline">Van mreže</string>
+    <string name="member_state_offline_body">Izgubio je mrežnu konekciju. Prikazana je poslednja poznata pozicija, sync će se automatski nastaviti.</string>
     <string name="member_state_sos_help">SOS: traži pomoć</string>
     <string name="member_state_private_body">Član trenutno ne deli lokaciju ili je offline. Prikazana je poslednja poznata pozicija</string>
     <string name="member_state_long_offline_title">Nije aktivan %1$d d</string>

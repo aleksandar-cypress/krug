@@ -32,12 +32,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import org.krug.app.R
+import org.krug.app.core.util.rejectHaptic
 
 @Composable
 fun AccountScreen(
@@ -47,6 +49,7 @@ fun AccountScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val view = LocalView.current
 
     var showSignOutConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -192,6 +195,9 @@ fun AccountScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        // Jak haptik na account delete — irreversible, korisnik treba da
+                        // OSETI da se okinula destruktivna akcija (isti pattern kao SOS).
+                        view.rejectHaptic()
                         showDeleteConfirm = false
                         viewModel.deleteAccount(context)
                     },

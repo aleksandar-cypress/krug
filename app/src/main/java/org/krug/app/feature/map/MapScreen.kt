@@ -90,7 +90,10 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import org.krug.app.core.util.clickHaptic
+import org.krug.app.core.util.confirmHaptic
 import org.krug.app.core.util.rejectHaptic
 import androidx.compose.ui.res.painterResource
 import org.krug.app.ui.brand.pressScaleClickable
@@ -607,7 +610,13 @@ fun MapScreen(
                                 mapViewState.flyTo(loc.lng, loc.lat)
                             }
                         },
-                        onCancelSelf = { viewModel.clearSos() },
+                        onCancelSelf = {
+                            // Laki confirm haptic — user reševa SOS svojevoljno, potvrda
+                            // da je action prošla (razlikuje od "digao SOS greškom pa
+                            // nastaje panika"). rejectHaptic bi bio previše dramatičan.
+                            view.confirmHaptic()
+                            viewModel.clearSos()
+                        },
                     )
                 }
             }
@@ -1020,11 +1029,21 @@ private fun SosFab(
         .shadow(elevation = 14.dp, shape = CircleShape, clip = false)
         .clip(CircleShape)
         .background(SosRedDark)
+    // Semantic label prati state: TalkBack user čuje jasan opis akcije koju klik radi
+    // (trigger vs cancel), ne samo tekst "SoS" iz Text-a.
+    val semanticLabel = stringResource(
+        if (active) R.string.map_sos_button_active_cd
+        else R.string.map_sos_button_cd,
+    )
     Box(
         modifier = modifier
             .size(48.dp)
             .then(if (active) activeModifier else Modifier.krugGlass(CircleShape))
-            .clickable(onClick = onClick),
+            // pressScaleClickable umesto clickable — daje press-feedback identičan drugim
+            // CTA-ovima u app-u, plus role=Button za TalkBack. Kritični action treba OSETI
+            // i vizuelno (scale) i tactilno (haptic okinut u onClick lambda).
+            .pressScaleClickable(pressedScale = 0.92f, onClick = onClick)
+            .semantics { contentDescription = semanticLabel },
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -1479,9 +1498,15 @@ private fun MapboxContainer(
                     .ifBlank { if (member.isSelf) labelYou else labelMember }
                     .take(18)
                 val batteryPct = member.location.batteryPct.takeIf { it in 0..100 }
-                // Long-offline member (>24h) dobija 40% alpha pin ("ghost") — vizuelno
-                // signaliziraš da nije aktivan dugo, možda je obrisao app.
-                val iconOpacity = if (member.isLongOffline()) 0.4 else 1.0
+                // Vizuelna gradacija pina po stepenu odsutnosti — isti pattern kao rowAlpha
+                // u member listi. 24h+ ghost (0.4), trenutno offline (30s+ disconnect) blaži
+                // fade (0.65), online normalno. Bez srednjeg stepena, offline peer i online
+                // peer izgledaju identično na mapi.
+                val iconOpacity = when {
+                    member.isLongOffline() -> 0.4
+                    member.isOffline() -> 0.65
+                    else -> 1.0
+                }
                 val annotation = manager.create(
                     PointAnnotationOptions()
                         .withPoint(Point.fromLngLat(loc.lng, loc.lat))
@@ -1876,11 +1901,17 @@ private fun MemberRow(
         member.isSelf -> MaterialTheme.colorScheme.primary
         else -> Color(android.graphics.Color.parseColor(MapMarkers.colorForUid(member.uid)))
     }
-    // Long-offline članovi (24h+ bez publish-a) imaju ghost prikaz — pomaže user-u da
-    // odmah vizuelno razlikuje aktivne od potencijalno-uninstalled članova bez čitanja
-    // "poslednje viđen" labele.
+    // Vizuelna gradacija po stepenu odsutnosti: long-offline (24h+, verovatno uninstalled)
+    // najjači fade → offline (server-side disconnect, trenutno u tunelu/dead battery)
+    // srednji fade → online punom vidljivošću. Bez ovog, offline peer u listi izgleda isto
+    // kao aktivan.
     val isLongOffline = member.isLongOffline()
-    val rowAlpha = if (isLongOffline) 0.55f else 1f
+    val isOffline = member.isOffline()
+    val rowAlpha = when {
+        isLongOffline -> 0.55f
+        isOffline -> 0.72f
+        else -> 1f
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2121,6 +2152,7 @@ private fun MemberDetailSheet(
 
         val isPrivate = member.isPrivate()
         val isLongOffline = member.isLongOffline()
+        val isOffline = member.isOffline()
 
         if (member.sos != null) {
             Spacer(Modifier.height(16.dp))
@@ -2172,6 +2204,43 @@ private fun MemberDetailSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
+                }
+            }
+        } else if (isOffline) {
+            // Offline banner: prekid RTDB konekcije (onDisconnect handler firirao ~30s posle
+            // stvarnog gubitka veze). Različito od long-offline (24h+) — ovde je high-prob
+            // da će se vratiti (tunel, lift, dead battery, force-stop). User razume "sync
+            // će se automatski nastaviti" pa ne pokušava manual refresh koji ionako neće raditi.
+            Spacer(Modifier.height(16.dp))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = PrivateGray.copy(alpha = 0.12f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CloudOff,
+                        contentDescription = null,
+                        tint = PrivateGray,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = stringResource(R.string.member_state_offline),
+                            color = PrivateGray,
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.member_state_offline_body),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
             }
         } else if (isPrivate) {
