@@ -157,6 +157,7 @@
     <string name="circle_detail_delete_confirm_body">Krug i svi članovi će biti uklonjeni. Ova akcija se ne može poništiti</string>
     <string name="circle_detail_role_owner">Vlasnik</string>
     <string name="circle_detail_role_member">Član</string>
+    <string name="circle_detail_role_child">Dete</string>
     <string name="circle_detail_owner_cannot_leave">Vlasnik ne može da napusti svoj krug. Obriši ga ili prebaci na drugog člana</string>
 
     <!-- Account -->
@@ -331,6 +332,9 @@
 
     <!-- Member: child indicator -->
     <string name="member_child_cd">Dete</string>
+    <string name="member_options_cd">Opcije člana</string>
+    <string name="member_menu_mark_child">Označi kao dete</string>
+    <string name="member_menu_unmark_child">Ukloni oznaku deteta</string>
 
     <!-- Circle icon labels (icon picker) -->
     <string name="icon_label_family">Porodica</string>

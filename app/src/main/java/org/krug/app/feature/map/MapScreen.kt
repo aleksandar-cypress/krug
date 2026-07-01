@@ -1719,6 +1719,10 @@ private fun CirclePickerRow(
     val bgColor = if (selected) accent.copy(alpha = 0.10f)
         else MaterialTheme.colorScheme.surfaceContainerHigh
     val borderColor = if (selected) accent else Color.Transparent
+    // Ako je krug već aktivan, `onPick` bi bio no-op (isti krug) — čitav red vodi na
+    // detail umesto, pa user ne mora da cilja malu strelicu. Za neaktivne redove,
+    // click i dalje prebacuje aktivan krug.
+    val rowClick = if (selected) onOpenDetail else onPick
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1729,7 +1733,7 @@ private fun CirclePickerRow(
                 color = borderColor,
                 shape = RoundedCornerShape(16.dp),
             )
-            .pressScaleClickable(pressedScale = 0.98f, onClick = onPick)
+            .pressScaleClickable(pressedScale = 0.98f, onClick = rowClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -451,7 +451,7 @@ private fun MemberRow(
             Text(
                 text = when {
                     m.isOwner -> stringResource(R.string.circle_detail_role_owner)
-                    m.isChild -> "Dete"
+                    m.isChild -> stringResource(R.string.circle_detail_role_child)
                     else -> stringResource(R.string.circle_detail_role_member)
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -462,7 +462,10 @@ private fun MemberRow(
         if (canManage) {
             Box {
                 IconButton(onClick = { menuOpen = true }) {
-                    Icon(Icons.Outlined.MoreVert, contentDescription = "Opcije člana")
+                    Icon(
+                        Icons.Outlined.MoreVert,
+                        contentDescription = stringResource(R.string.member_options_cd),
+                    )
                 }
                 DropdownMenu(
                     expanded = menuOpen,
@@ -471,8 +474,10 @@ private fun MemberRow(
                     DropdownMenuItem(
                         text = {
                             Text(
-                                if (m.isChild) "Ukloni oznaku deteta"
-                                else "Označi kao dete",
+                                stringResource(
+                                    if (m.isChild) R.string.member_menu_unmark_child
+                                    else R.string.member_menu_mark_child,
+                                ),
                             )
                         },
                         leadingIcon = {
