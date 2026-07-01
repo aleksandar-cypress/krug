@@ -137,6 +137,11 @@ class LocationTrackingService : Service() {
             if (!passesQualityGate(loc, isCachedLastLocation = false)) return
             val (battery, charging) = readBattery()
             reconfigureIfNeeded()
+            // Temporary sharing auto-expiry: proverava na svaki fix. Ako je timer istekao,
+            // gasi share + čisti flag. Peer-i odmah dobijaju "paused" preko Firestore
+            // listener-a (ne moraju da čekaju sledeći publish jer sledeći publish ne dolazi
+            // — share je off). Idempotentno: ako je već isteklo, sledeći callback samo skip.
+            checkAndExpireTemporarySharing()
             if (!currentSettings.shareLocationGlobal) {
                 Timber.d("Location sharing paused; skipping publish")
                 return
@@ -238,6 +243,24 @@ class LocationTrackingService : Service() {
         val results = FloatArray(1)
         android.location.Location.distanceBetween(lastLat, lastLng, loc.latitude, loc.longitude, results)
         return results[0] >= SIGNIFICANT_MOVEMENT_M
+    }
+
+    /**
+     * Temporary sharing auto-off. Ako je user postavio "deli 1h/4h/do kraja dana", ova
+     * metoda ga na svakom fix-u proverava. Kad istekne, gasi share + čisti expiry field.
+     * Idempotentno — sledeći poziv nakon expire samo vidi shareUntilMs=null i vrati odmah.
+     */
+    private fun checkAndExpireTemporarySharing() {
+        val until = currentSettings.shareUntilMs ?: return
+        if (System.currentTimeMillis() < until) return
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        Timber.i("Temporary sharing expired (until=%d), auto-pausing", until)
+        scope.launch {
+            runCatching {
+                settingsRepository.updateShareGlobal(uid, false)
+                settingsRepository.updateShareUntil(uid, null)
+            }.onFailure { Timber.w(it, "Failed to auto-expire temporary sharing") }
+        }
     }
 
     override fun onCreate() {
@@ -362,7 +385,8 @@ class LocationTrackingService : Service() {
         val forceRefresh = intent?.getBooleanExtra(EXTRA_FORCE_REFRESH, false) == true
         val sincePublish = System.currentTimeMillis() - lastPublishAtMs
         if (forceRefresh || lastPublishAtMs == 0L || sincePublish > ONE_SHOT_COOLDOWN_MS) {
-            requestOneShotFix()
+            // forceRefresh = user tap "Osveži"; ide u HIGH_ACCURACY GPS bez cache-a.
+            requestOneShotFix(userInitiated = forceRefresh)
         } else {
             Timber.d("Skip one-shot fix; last publish was ${sincePublish}ms ago")
         }
@@ -385,33 +409,47 @@ class LocationTrackingService : Service() {
     }
 
     @SuppressLint("MissingPermission")
-    private fun requestOneShotFix() {
-        Timber.d("requestOneShotFix invoked (shareGlobal=${currentSettings.shareLocationGlobal})")
+    private fun requestOneShotFix(userInitiated: Boolean = false) {
+        Timber.d(
+            "requestOneShotFix invoked (userInitiated=%s, shareGlobal=%s)",
+            userInitiated, currentSettings.shareLocationGlobal,
+        )
         if (!currentSettings.shareLocationGlobal) return
         val uid = firebaseAuth.currentUser?.uid ?: run {
             Timber.w("requestOneShotFix: no firebase user")
             return
         }
-        // Korak 1: instant publish keširane lokacije (Wi-Fi/cell/GPS cache, bez čekanja satelita).
-        // Bez ovoga, u zatvorenom prostoru getCurrentLocation vrati null i nikad se ne publish-uje
-        // dok ne istekne FGS interval (15 min na LOW profilu).
-        try {
-            fused.lastLocation.addOnSuccessListener { loc ->
-                if (loc != null) {
-                    publishLocation(uid, loc, "last-location")
-                } else {
-                    Timber.d("lastLocation returned null")
-                }
-            }.addOnFailureListener { Timber.w(it, "getLastLocation failed") }
-        } catch (e: SecurityException) {
-            Timber.w(e, "getLastLocation missing permission")
+        // User-initiated refresh (tap "Osveži" ili peer refresh ping): PRESKOČI cache
+        // publish. User očekuje FRESH GPS, ne 30s stari Wi-Fi fingerprint. Cache pub
+        // ima smisla za automatic entry-je (boot, worker) gde je "brz answer" > "svež".
+        if (!userInitiated) {
+            try {
+                fused.lastLocation.addOnSuccessListener { loc ->
+                    if (loc != null) {
+                        publishLocation(uid, loc, "last-location")
+                    } else {
+                        Timber.d("lastLocation returned null")
+                    }
+                }.addOnFailureListener { Timber.w(it, "getLastLocation failed") }
+            } catch (e: SecurityException) {
+                Timber.w(e, "getLastLocation missing permission")
+            }
         }
-        // Korak 2: jednokratni location update — pouzdaniji od getCurrentLocation indoors.
-        // BALANCED priority koristi i mrežu i GPS, pa skoro uvek vrati nešto.
-        val req = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 0L)
+        // Korak 2: jednokratni location update.
+        //  - User-initiated → HIGH_ACCURACY (stvarno GPS satelit), 5s max age, čekaj fresh fix.
+        //    Bez ovog, "Osveži" vraća stari Wi-Fi cache dok su user-i u kolima 300m dalje.
+        //  - Automatic → BALANCED (Wi-Fi/cell OK), 60s cache, ne čeka GPS. Brz odgovor važniji.
+        val priority = if (userInitiated) Priority.PRIORITY_HIGH_ACCURACY
+        else Priority.PRIORITY_BALANCED_POWER_ACCURACY
+        val maxAge = if (userInitiated) 5_000L else 60_000L
+        val waitForAccurate = userInitiated
+        val req = LocationRequest.Builder(priority, 0L)
             .setMaxUpdates(1)
-            .setMaxUpdateAgeMillis(60_000L)
-            .setWaitForAccurateLocation(false)
+            .setMaxUpdateAgeMillis(maxAge)
+            .setWaitForAccurateLocation(waitForAccurate)
+            // Ako user-initiated, ne odustaj brzo od GPS fix-a. 15s je razuman timeout
+            // (obično fresh GPS stigne u 3-8s u otvorenom, do 15s indoor).
+            .setDurationMillis(if (userInitiated) 15_000L else Long.MAX_VALUE)
             .build()
         val cb = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
@@ -585,7 +623,10 @@ class LocationTrackingService : Service() {
                 if (accepted.isNotEmpty()) {
                     Timber.i("Refresh request accepted from ${accepted.size} member(s) — pulling fresh fix + boost")
                     accepted.keys.forEach { lastBoostByRequester[it] = now }
-                    requestOneShotFix()
+                    // Peer explicit refresh ping — isti kao user-tap "Osveži": HIGH_ACCURACY
+                    // GPS, ne stari Wi-Fi cache. Peer je verovatno prekinuo šta radi da bi
+                    // dobio svežu lokaciju, nema smisla vratiti mu keš.
+                    requestOneShotFix(userInitiated = true)
                     // Plus prebaci na BURST profil 5min — ako se kreće, peer ga vidi uživo
                     // umesto samo jedan fix na ping.
                     refreshBoostUntilMs = System.currentTimeMillis() + REFRESH_BOOST_DURATION_MS

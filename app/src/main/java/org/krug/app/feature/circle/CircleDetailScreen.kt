@@ -76,6 +76,8 @@ fun CircleDetailScreen(
     var showLeaveConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showEditSheet by remember { mutableStateOf(false) }
+    // Uid člana koji se trenutno preimenjuje (dijalog vidljiv). null = zatvoren.
+    var renamingUid by remember { mutableStateOf<String?>(null) }
     val editSheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
 
@@ -195,6 +197,7 @@ fun CircleDetailScreen(
                         onToggleChild = { makeChild ->
                             viewModel.toggleChildStatus(m.uid, makeChild)
                         },
+                        onRenameClicked = { renamingUid = m.uid },
                     )
                 }
             }
@@ -315,6 +318,22 @@ fun CircleDetailScreen(
         )
     }
 
+    // Rename dialog — renderuje se samo kad je renamingUid postavljen. State (text field)
+    // je unutar RenameMemberDialog composable-a, re-init-uje se za svaki different member.
+    renamingUid?.let { uid ->
+        val member = state.members.firstOrNull { it.uid == uid }
+        if (member != null) {
+            RenameMemberDialog(
+                member = member,
+                onDismiss = { renamingUid = null },
+                onSave = { newName ->
+                    viewModel.setMemberNickname(uid, newName)
+                    renamingUid = null
+                },
+            )
+        }
+    }
+
     if (showEditSheet) {
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { showEditSheet = false },
@@ -407,8 +426,15 @@ private fun MemberRow(
     m: CircleDetailMember,
     canManage: Boolean = false,
     onToggleChild: (Boolean) -> Unit = {},
+    onRenameClicked: () -> Unit = {},
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    // Prikazano ime: nickname (ako je postavljen u ovom krugu) > real display name > fallback.
+    val displayed = m.nickname?.takeIf { it.isNotBlank() }
+        ?: m.displayName.ifBlank {
+            if (m.isSelf) stringResource(R.string.member_label_you)
+            else stringResource(R.string.circle_detail_role_member)
+        }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -424,7 +450,9 @@ private fun MemberRow(
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
-            val initial = m.displayName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+            // Inicijal iz PRIKAZANOG imena (nickname prvo) — konzistentno sa vizuelnim
+            // identity-jem koji vidi user u istom redu.
+            val initial = displayed.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
             Text(
                 text = initial,
                 style = MaterialTheme.typography.titleMedium,
@@ -435,10 +463,7 @@ private fun MemberRow(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = m.displayName.ifBlank {
-                        if (m.isSelf) stringResource(R.string.member_label_you)
-                        else stringResource(R.string.circle_detail_role_member)
-                    },
+                    text = displayed,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
@@ -455,12 +480,18 @@ private fun MemberRow(
                     )
                 }
             }
+            // Ako je nickname postavljen, pokaži real name kao suptilan pod-tekst (tako
+            // owner uvek vidi ko je pravi user, i member nema iznenađenja "ko je Klinac?").
+            // Ako nema nickname-a, prikaži rol (owner/child/member) kao pre.
+            val subLine = when {
+                m.nickname != null && m.displayName.isNotBlank() ->
+                    stringResource(R.string.member_real_name_label, m.displayName)
+                m.isOwner -> stringResource(R.string.circle_detail_role_owner)
+                m.isChild -> stringResource(R.string.circle_detail_role_child)
+                else -> stringResource(R.string.circle_detail_role_member)
+            }
             Text(
-                text = when {
-                    m.isOwner -> stringResource(R.string.circle_detail_role_owner)
-                    m.isChild -> stringResource(R.string.circle_detail_role_child)
-                    else -> stringResource(R.string.circle_detail_role_member)
-                },
+                text = subLine,
                 style = MaterialTheme.typography.bodySmall,
                 color = if (m.isChild) MaterialTheme.colorScheme.secondary
                 else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -495,10 +526,74 @@ private fun MemberRow(
                             onToggleChild(!m.isChild)
                         },
                     )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.member_menu_rename)) },
+                        leadingIcon = {
+                            Icon(Icons.Outlined.Edit, contentDescription = null)
+                        },
+                        onClick = {
+                            menuOpen = false
+                            onRenameClicked()
+                        },
+                    )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun RenameMemberDialog(
+    member: CircleDetailMember,
+    onDismiss: () -> Unit,
+    onSave: (String?) -> Unit,
+) {
+    var text by remember(member.uid) { mutableStateOf(member.nickname.orEmpty()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.member_rename_title)) },
+        text = {
+            Column {
+                androidx.compose.material3.OutlinedTextField(
+                    value = text,
+                    onValueChange = { if (it.length <= 24) text = it },
+                    placeholder = { Text(stringResource(R.string.member_rename_placeholder)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    text = stringResource(R.string.member_rename_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val trimmed = text.trim()
+                onSave(trimmed.ifBlank { null })
+            }) {
+                Text(stringResource(R.string.action_save))
+            }
+        },
+        dismissButton = {
+            // Ako je nickname već postavljen, dugme za brzo brisanje. Bez ovog, user bi
+            // morao da ručno obriše slova pa da klikne Save — više klikova nego treba.
+            if (member.nickname != null) {
+                TextButton(onClick = { onSave(null) }) {
+                    Text(
+                        text = stringResource(R.string.member_rename_clear_cta),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        },
+    )
 }
 
 // region @Preview

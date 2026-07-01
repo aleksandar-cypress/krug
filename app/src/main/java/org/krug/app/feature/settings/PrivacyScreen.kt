@@ -9,18 +9,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChildCare
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.util.Calendar
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -74,10 +80,35 @@ class PrivacyViewModel @Inject constructor(
         if (state.value.isChildAnywhere) return
         viewModelScope.launch {
             settingsRepository.updateShareGlobal(uid, value)
+            // Ako user gasi share, očisti temp timer (nema smisla držati istek koji bi se
+            // realizovao dok je već off).
+            if (!value && state.value.settings.shareUntilMs != null) {
+                settingsRepository.updateShareUntil(uid, null)
+            }
             // Sync u RTDB tako da peers odmah vide "Privatni mod" (bez čekanja 15min
             // staleness threshold-a). Kad uključi nazad, paused=false + FGS će ubrzo
             // publish-ovati svežu lokaciju.
             locationRepository.setPaused(uid, paused = !value)
+        }
+    }
+
+    /**
+     * Postavlja trajanje temporary sharing-a. `durationMs = null` → clear temp (uvek).
+     * Non-null → set shareUntilMs = now + durationMs, uključi share (u slučaju da je bio off).
+     */
+    fun setShareDuration(durationMs: Long?) {
+        val uid = authRepository.currentUser?.uid ?: return
+        if (state.value.isChildAnywhere) return
+        viewModelScope.launch {
+            if (durationMs == null) {
+                settingsRepository.updateShareUntil(uid, null)
+            } else {
+                val until = System.currentTimeMillis() + durationMs
+                settingsRepository.updateShareGlobal(uid, true)
+                settingsRepository.updateShareUntil(uid, until)
+                // Peer sees paused=false odmah, kao pri manual toggle.
+                locationRepository.setPaused(uid, paused = false)
+            }
         }
     }
 }
@@ -125,7 +156,118 @@ fun PrivacyScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // Duration picker se pokazuje samo kad je share ON i nije child-locked. Bez
+            // ovog, izbor 1h/4h u pause modu bi bio ambigvitetan (uključuje deljenje?
+            // ne uključuje?). Sada čist model: hoćeš deliš — biraš koliko.
+            if (state.settings.shareLocationGlobal && !state.isChildAnywhere) {
+                Spacer(Modifier.size(8.dp))
+                ShareDurationPicker(
+                    activeUntilMs = state.settings.shareUntilMs,
+                    onSelect = viewModel::setShareDuration,
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun ShareDurationPicker(
+    activeUntilMs: Long?,
+    onSelect: (Long?) -> Unit,
+) {
+    Text(
+        text = stringResource(R.string.privacy_share_duration_label),
+        style = MaterialTheme.typography.titleMedium,
+    )
+    Spacer(Modifier.size(6.dp))
+    Text(
+        text = stringResource(R.string.privacy_share_duration_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.size(10.dp))
+    // Row sa 4 chip-a. FlowRow bi bio bolji za male ekrane, ali standard Row + weight
+    // dovoljno za 4 kratke labele. Ako se ne uklopi, chip label se elipsira.
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        val alwaysSelected = activeUntilMs == null
+        FilterChip(
+            selected = alwaysSelected,
+            onClick = { if (!alwaysSelected) onSelect(null) },
+            label = { Text(stringResource(R.string.privacy_share_duration_always)) },
+            modifier = Modifier.weight(1f),
+        )
+        // Aproksimacija — chip "1h" je selected ako je aktivan timer i traje manje od 2h.
+        // Precizniji match zahtevao bi da pamtimo original duration, ne remaining time.
+        val remaining = activeUntilMs?.let { it - System.currentTimeMillis() }
+        val is1h = remaining != null && remaining in 1..(2 * 60 * 60_000L)
+        val is4h = remaining != null && remaining in (2 * 60 * 60_000L + 1)..(6 * 60 * 60_000L)
+        val isEod = remaining != null && remaining > (6 * 60 * 60_000L)
+        FilterChip(
+            selected = is1h,
+            onClick = { onSelect(60 * 60_000L) },
+            label = { Text(stringResource(R.string.privacy_share_duration_1h)) },
+            modifier = Modifier.weight(1f),
+        )
+        FilterChip(
+            selected = is4h,
+            onClick = { onSelect(4 * 60 * 60_000L) },
+            label = { Text(stringResource(R.string.privacy_share_duration_4h)) },
+            modifier = Modifier.weight(1f),
+        )
+        FilterChip(
+            selected = isEod,
+            onClick = { onSelect(millisUntilEndOfDay()) },
+            label = { Text(stringResource(R.string.privacy_share_duration_eod)) },
+            modifier = Modifier.weight(1f),
+        )
+    }
+    // Countdown labela kad je timer aktivan — user vidi koliko još ostaje. Tick svakih
+    // 30s (dovoljno precizno da nije prevrsen); LaunchedEffect ponovo pokreće.
+    if (activeUntilMs != null) {
+        var nowTick by remember { mutableStateOf(System.currentTimeMillis()) }
+        LaunchedEffect(activeUntilMs) {
+            while (true) {
+                kotlinx.coroutines.delay(30_000L)
+                nowTick = System.currentTimeMillis()
+            }
+        }
+        val remainingMs = (activeUntilMs - nowTick).coerceAtLeast(0L)
+        val human = formatRemainingHuman(remainingMs)
+        Spacer(Modifier.size(8.dp))
+        Text(
+            text = stringResource(R.string.privacy_share_active_until, human),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+/**
+ * Vraća broj ms do kraja dana (23:59:59.999) u user timezone-u. Koristi se za
+ * "Do kraja dana" chip — auto-off u ponoć lokalnog vremena.
+ */
+private fun millisUntilEndOfDay(): Long {
+    val cal = Calendar.getInstance()
+    cal.set(Calendar.HOUR_OF_DAY, 23)
+    cal.set(Calendar.MINUTE, 59)
+    cal.set(Calendar.SECOND, 59)
+    cal.set(Calendar.MILLISECOND, 999)
+    return (cal.timeInMillis - System.currentTimeMillis()).coerceAtLeast(60_000L)
+}
+
+/** "1h 23m", "23m", "45s" — kratka human-readable countdown labela. */
+private fun formatRemainingHuman(ms: Long): String {
+    val totalSec = ms / 1000
+    val h = totalSec / 3600
+    val m = (totalSec % 3600) / 60
+    return when {
+        h > 0 -> "${h}h ${m}m"
+        m > 0 -> "${m}m"
+        else -> "${totalSec}s"
     }
 }
 

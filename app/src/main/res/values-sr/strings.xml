@@ -247,6 +247,16 @@
     <string name="member_chip_distance">Udaljenost</string>
     <string name="member_chip_distance_aerial">Udalj. (vazd.)</string>
     <string name="member_chip_last_seen">Poslednje</string>
+    <string name="member_chip_speed">Brzina</string>
+    <string name="member_chip_speed_value">%1$d km/h</string>
+    <!-- Privacy: temporary sharing duration -->
+    <string name="privacy_share_duration_label">Trajanje deljenja</string>
+    <string name="privacy_share_duration_hint">Auto-gašenje po isteku vremena. Deljenje lokacije se automatski isključuje.</string>
+    <string name="privacy_share_duration_always">Uvek</string>
+    <string name="privacy_share_duration_1h">1 sat</string>
+    <string name="privacy_share_duration_4h">4 sata</string>
+    <string name="privacy_share_duration_eod">Do kraja dana</string>
+    <string name="privacy_share_active_until">Auto-gašenje za %1$s</string>
     <string name="member_state_private">Privatni mod</string>
     <string name="member_state_offline">Van mreže</string>
     <string name="member_state_offline_body">Izgubio je mrežnu konekciju. Prikazana je poslednja poznata pozicija, sync će se automatski nastaviti.</string>
@@ -339,6 +349,12 @@
     <string name="member_options_cd">Opcije člana</string>
     <string name="member_menu_mark_child">Označi kao dete</string>
     <string name="member_menu_unmark_child">Ukloni oznaku deteta</string>
+    <string name="member_menu_rename">Preimenuj u ovom krugu</string>
+    <string name="member_rename_title">Preimenuj člana</string>
+    <string name="member_rename_placeholder">Nadimak (max 24 znaka)</string>
+    <string name="member_rename_hint">Vidljivo samo u ovom krugu. Ne menja pravo ime člana.</string>
+    <string name="member_rename_clear_cta">Ukloni nadimak</string>
+    <string name="member_real_name_label">Pravo ime: %1$s</string>
 
     <!-- Circle icon labels (icon picker) -->
     <string name="icon_label_family">Porodica</string>

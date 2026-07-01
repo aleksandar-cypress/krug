@@ -57,3 +57,22 @@ fun formatDistance(context: Context, meters: Double): String = when (val b = buc
     is DistanceBucket.KmDecimal -> String.format(Locale.getDefault(), "%.1f km", b.km)
     is DistanceBucket.KmInt -> "${b.km} km"
 }
+
+/**
+ * Forward bearing (početni azimut) od tačke 1 ka tački 2, u stepenima [0..360).
+ * 0 = sever, 90 = istok, 180 = jug, 270 = zapad.
+ *
+ * Koristi se za "kompas ka drugu" — strelica u MemberDetailSheet rotira se za ovaj
+ * ugao pa vizuelno pokazuje pravac ka peer-u (pretpostavlja north-up mapu ili
+ * north-oriented ekran; ne kompenzuje device compass sensor).
+ */
+fun bearingDegrees(fromLat: Double, fromLng: Double, toLat: Double, toLng: Double): Float {
+    val phi1 = Math.toRadians(fromLat)
+    val phi2 = Math.toRadians(toLat)
+    val dlambda = Math.toRadians(toLng - fromLng)
+    val y = sin(dlambda) * cos(phi2)
+    val x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(dlambda)
+    val theta = Math.toDegrees(atan2(y, x)).toFloat()
+    // atan2 vraća (-180, 180], normalizuj u [0, 360).
+    return (theta + 360f) % 360f
+}

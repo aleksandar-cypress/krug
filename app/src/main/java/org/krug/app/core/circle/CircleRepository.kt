@@ -164,6 +164,22 @@ class CircleRepository @Inject constructor(
         Timber.i("Child status set id=%s uid=%s isChild=%s", circleId, memberUid, isChild)
     }
 
+    /**
+     * Per-circle nadimak za člana. Owner-only akcija — daje mu ime samo u ovom krugu
+     * (npr. "Mama", "Klinac") koje se prikazuje umesto global displayName. `nickname=null`
+     * (prazan) briše nadimak — vraća se na displayName.
+     *
+     * Rules moraju dozvoliti owner-u da update-uje `nickname` field na members docu.
+     */
+    suspend fun setMemberNickname(circleId: String, memberUid: String, nickname: String?) {
+        val clean = nickname?.trim()?.takeIf { it.isNotBlank() }?.take(24)
+        val value: Any = clean ?: FieldValue.delete()
+        members(circleId).document(memberUid)
+            .update("nickname", value)
+            .await()
+        Timber.i("Nickname set id=%s uid=%s nickname=%s", circleId, memberUid, clean ?: "<cleared>")
+    }
+
     /** Observe member docs za uid kroz sve krugove. True ako je isChild u BAR JEDNOM. */
     fun observeUserIsChildAnywhere(uid: String): Flow<Boolean> =
         observeMyCircleIds(uid).flatMapLatest { circleIds ->
@@ -184,6 +200,27 @@ class CircleRepository @Inject constructor(
             val map = snap?.documents.orEmpty().associate { d ->
                 d.id to (d.getBoolean("isChild") == true)
             }
+            trySend(map)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    /**
+     * Mapa uid → per-circle nickname (samo članovi koji imaju set). Odvojen flow od
+     * child-map zbog nezavisnog konzumiranja — MapVM prati samo child-status za sada,
+     * CircleDetail prati nickname za edit UI.
+     */
+    fun observeMemberNicknames(circleId: String): Flow<Map<String, String>> = callbackFlow {
+        val reg = members(circleId).addSnapshotListener { snap, error ->
+            if (error != null) {
+                Timber.w(error, "observeMemberNicknames error for $circleId")
+                trySend(emptyMap())
+                return@addSnapshotListener
+            }
+            val map = snap?.documents.orEmpty().mapNotNull { d ->
+                val nick = d.getString("nickname")?.takeIf { it.isNotBlank() }
+                nick?.let { d.id to it }
+            }.toMap()
             trySend(map)
         }
         awaitClose { reg.remove() }

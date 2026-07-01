@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.CloudOff
@@ -48,6 +49,7 @@ import androidx.compose.material.icons.outlined.ChildCare
 import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.NearMe
+import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
@@ -132,6 +134,7 @@ import com.mapbox.maps.plugin.scalebar.scalebar
 import android.view.Gravity
 import org.krug.app.R
 import org.krug.app.core.location.LocationTrackingService
+import org.krug.app.core.util.bearingDegrees
 import org.krug.app.core.util.compactLastSeen
 import org.krug.app.core.util.formatDistance
 import org.krug.app.core.util.haversineMeters
@@ -2290,11 +2293,22 @@ private fun MemberDetailSheet(
                         selfLocation.lat, selfLocation.lng,
                         member.location.lat, member.location.lng,
                     )
+                // Kompas: bearing ka peer-u. Navigation ikona (arrow up) rotirana za taj
+                // ugao daje user-u vizuelni pokazivač ka drugu (pretpostavlja north-up
+                // mapu). Nema smisla za rastojanja < 30m — user je već blizu, smer nije
+                // informativan (default 0 = strelica stoji ka gore).
+                val bearing = if (displayMeters >= 30.0) {
+                    bearingDegrees(
+                        selfLocation.lat, selfLocation.lng,
+                        member.location.lat, member.location.lng,
+                    )
+                } else 0f
                 StatChip(
                     label = if (drivingMeters != null) stringResource(R.string.member_chip_distance) else stringResource(R.string.member_chip_distance_aerial),
                     value = formatDistance(LocalContext.current, displayMeters),
                     accentColor = MaterialTheme.colorScheme.primary,
-                    icon = Icons.Outlined.NearMe,
+                    icon = Icons.AutoMirrored.Filled.NavigateNext,
+                    iconRotationDeg = bearing - 90f, // NavigateNext pokazuje desno (=90° u kompas prostoru), pa oduzmi
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -2305,6 +2319,21 @@ private fun MemberDetailSheet(
                 icon = Icons.Outlined.AccessTime,
                 modifier = Modifier.weight(1f),
             )
+            // Speed chip — prikazuje se SAMO ako se peer stvarno kreće (> 1 m/s = 3.6 km/h).
+            // Bez ovog uslova, statičan član bi imao "0 km/h" chip koji nije informativan
+            // i troši prostor. Cutoff od 1 m/s filtrira GPS noise (drift kod mirujućeg
+            // uređaja može dati fake 0.3-0.8 m/s). isPrivate skriva sve, isto kao battery.
+            val speedMps = member.location?.speed ?: 0f
+            if (!isPrivate && speedMps > 1f) {
+                val kmh = (speedMps * 3.6f).toInt()
+                StatChip(
+                    label = stringResource(R.string.member_chip_speed),
+                    value = stringResource(R.string.member_chip_speed_value, kmh),
+                    accentColor = MaterialTheme.colorScheme.tertiary,
+                    icon = Icons.Outlined.Speed,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
 
         Spacer(Modifier.height(20.dp))
@@ -2361,9 +2390,21 @@ private fun StatChip(
     accentColor: Color,
     modifier: Modifier = Modifier,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    iconRotationDeg: Float = 0f,
 ) {
     // Chip pozadina je vrlo blagi tint accent boje (8% alpha) — daje brand prisustvo
     // svakom chip-u bez "vrišti" boje. Border iste boje sa 22% alpha za suptilnu ivicu.
+    // iconRotationDeg za "kompas ka drugu" — Distance chip prosleđuje bearing (0=sever)
+    // pa Navigation strelica rotira ka peer-u. Animiran spring za smooth rotaciju kad se
+    // brzo krećeš (bez ovoga strelica bi "trznula" na svaki fix).
+    val animatedRotation by animateFloatAsState(
+        targetValue = iconRotationDeg,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessLow,
+        ),
+        label = "chip-icon-rotation",
+    )
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
@@ -2389,7 +2430,9 @@ private fun StatChip(
                     imageVector = icon,
                     contentDescription = null,
                     tint = accentColor,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier
+                        .size(16.dp)
+                        .then(if (iconRotationDeg != 0f) Modifier.rotate(animatedRotation) else Modifier),
                 )
                 Spacer(Modifier.width(4.dp))
             }

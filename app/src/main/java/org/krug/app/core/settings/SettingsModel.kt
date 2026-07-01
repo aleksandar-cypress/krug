@@ -14,4 +14,11 @@ data class UserSettings(
     val shareLocationGlobal: Boolean = true,
     val notificationsEnabled: Boolean = true,
     val language: String = "sr",
+    /**
+     * Temporary sharing — kad je set, deljenje se automatski gasi u tom trenutku
+     * (System.currentTimeMillis()). null = trajno deljenje (default). FGS na svaki
+     * fix proveri i ako je isteklo, postavi shareLocationGlobal=false + očisti flag.
+     * Peer UI prikazuje countdown banner kad je aktivan.
+     */
+    val shareUntilMs: Long? = null,
 )

@@ -245,6 +245,16 @@
     <string name="member_chip_distance">Distance</string>
     <string name="member_chip_distance_aerial">Dist. (line)</string>
     <string name="member_chip_last_seen">Last seen</string>
+    <string name="member_chip_speed">Speed</string>
+    <string name="member_chip_speed_value">%1$d km/h</string>
+    <!-- Privacy: temporary sharing duration -->
+    <string name="privacy_share_duration_label">Sharing duration</string>
+    <string name="privacy_share_duration_hint">Auto-off after selected time. Location sharing turns off automatically when the timer expires.</string>
+    <string name="privacy_share_duration_always">Always</string>
+    <string name="privacy_share_duration_1h">1 hour</string>
+    <string name="privacy_share_duration_4h">4 hours</string>
+    <string name="privacy_share_duration_eod">Until end of day</string>
+    <string name="privacy_share_active_until">Auto-off in %1$s</string>
     <string name="member_state_private">Private mode</string>
     <string name="member_state_offline">Offline</string>
     <string name="member_state_offline_body">Lost network connection. Showing last known position, will reconnect automatically.</string>
@@ -337,6 +347,12 @@
     <string name="member_options_cd">Member options</string>
     <string name="member_menu_mark_child">Mark as child</string>
     <string name="member_menu_unmark_child">Remove child mark</string>
+    <string name="member_menu_rename">Rename in this circle</string>
+    <string name="member_rename_title">Rename member</string>
+    <string name="member_rename_placeholder">Nickname (max 24 chars)</string>
+    <string name="member_rename_hint">Only visible in this circle. Doesn\'t change their real name.</string>
+    <string name="member_rename_clear_cta">Remove nickname</string>
+    <string name="member_real_name_label">Real name: %1$s</string>
 
     <!-- Circle icon labels (icon picker) -->
     <string name="icon_label_family">Family</string>

@@ -37,6 +37,23 @@ class SettingsRepository @Inject constructor(
         docFor(uid).set(mapOf("shareLocationGlobal" to share), SetOptions.merge()).await()
     }
 
+    /**
+     * Temporary sharing setter. `untilMs = null` briše field (trajno deljenje).
+     * `untilMs = System.currentTimeMillis() + N` znači "deli još N ms pa auto-stop".
+     * NE dira shareLocationGlobal — caller poziva zajedno sa updateShareGlobal za
+     * kompletan flow (start temp: shareGlobal=true + untilMs=N; expire: shareGlobal=false
+     * + untilMs=null).
+     */
+    suspend fun updateShareUntil(uid: String, untilMs: Long?) {
+        val payload: Map<String, Any> = if (untilMs == null) {
+            // Firestore null-safe brisanje polja — set(null) bi bilo tipska greška.
+            mapOf("shareUntilMs" to com.google.firebase.firestore.FieldValue.delete())
+        } else {
+            mapOf("shareUntilMs" to untilMs)
+        }
+        docFor(uid).set(payload, SetOptions.merge()).await()
+    }
+
     private fun parse(data: Map<String, Any?>?): UserSettings {
         if (data == null) return UserSettings()
         return UserSettings(
@@ -44,6 +61,7 @@ class SettingsRepository @Inject constructor(
             shareLocationGlobal = data["shareLocationGlobal"] as? Boolean ?: true,
             notificationsEnabled = data["notificationsEnabled"] as? Boolean ?: true,
             language = data["language"] as? String ?: "sr",
+            shareUntilMs = (data["shareUntilMs"] as? Number)?.toLong(),
         )
     }
 
