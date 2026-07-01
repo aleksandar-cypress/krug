@@ -2,6 +2,131 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-07-01, dvadeset treća sesija — Crashlytics fix, konkurencija analiza, V1 grupa)
+
+Duga sesija fokusirana na: (1) rešavanje kritičnog cold-start crash-a iz Crashlytics-a, (2) istraživanje konkurencije (Paralino, HeyPolo, FamilyWall, Zood, Traccar, Dawarich) i mapiranje šta Krug nema, (3) implementacija V1 grupe feature-a i backend osnove za buduće premium tier. Radilo na SM-S928B (S24 Ultra) preko debug APK-a, poslednji commit `276b75b` (push-ed na origin/main).
+
+### A) Kritični crash fix — cold-start na Android <12 (commit `6a13bf4`)
+
+**Simptom** (Crashlytics): `Fatal Exception: java.lang.RuntimeException Unable to start activity ComponentInfo{org.krug.app/org.krug.app.MainActivity}: android.view.InflateException: Binary XML file line #28 in org.krug.app:layout/splash_screen_view: Failed to resolve attribute at index 0`.
+
+**Root cause**: `installSplashScreen()` iz `androidx.core:core-splashscreen 1.0.1` na API <31 inflate-uje interni `splash_screen_view.xml` layout koji koristi `?attr/windowSplashScreenAnimatedIconSize` — atribut definisan SAMO u `Theme.SplashScreen`. `Theme.Krug` je nasleđivao `android:Theme.Material.Light.NoActionBar` pa je `TypedArray.getLayoutDimension` bacao `UnsupportedOperationException`.
+
+**Fix**: novi `Theme.Krug.Splash` (parent `Theme.SplashScreen`) sa `postSplashScreenTheme=@style/Theme.Krug`. Activity theme u manifestu promenjen sa `Theme.Krug` na `Theme.Krug.Splash`. Isti pattern za `values-v31` (native atributi sa `android:` prefiksom).
+
+### B) Circle picker + i18n polish (commit `472b056`)
+
+- Circle picker row: klik na aktivan krug je bio no-op — sad ceo red vodi na detail ako je selected, na switch ako nije.
+- Uklonjeni hard-coded srpski stringovi u CircleDetailScreen (three-dots menu "Označi kao dete", role label "Dete", content description "Opcije člana"). Dodati novi ključevi u EN + SR.
+
+### C) Location "backward jump" fix — tri kvalitetna filtera (commit `406ffad`)
+
+**Simptom** (user report): peer prati člana koji ide kolima, pozicija normalno napreduje, pa iznenada skoči 200-300m unazad, sledeći refresh ispravi. Klasičan cache/stale fix problem.
+
+**Fix**: novi `passesQualityGate(loc, isCachedLastLocation)` u FGS-u, poziva se iz i stream callback-a i one-shot publish-a:
+1. **Age gate** — cached `fused.lastLocation` stariji od 30s se odbacuje (Wi-Fi fingerprint može biti sat vremena star).
+2. **Monotonic guard** — pamti `lastPublishedElapsedNanos`, drop-uje fix čiji je elapsed nanos stariji.
+3. **Plausibility** — ako implied brzina iznad ~200 km/h (55 m/s), drop (GPS outlier, ne stvarno kretanje).
+
+Novi state `lastPublishedElapsedNanos`, konstante `LAST_LOCATION_MAX_AGE_MS` (30s), `MAX_PLAUSIBLE_SPEED_MPS` (55).
+
+### D) Null-safety + locale + lint (commit `ce58afa`)
+
+- `handleSosUpdate` refactor: `sos!!.triggeredAt` zamenjen sa `sos?.takeIf { ... }` pattern.
+- `UserRepository.upsertOnSignIn`: `user.displayName!!` zamenjen sa `?.takeIf { it.isNotBlank() }` chain.
+- `Geo.formatDistance`: `String.format` sad koristi `Locale.getDefault()` — SR daje "1,5 km" umesto "1.5 km".
+- `PowerSaveMonitor.registerReceiver` prebačen na `ContextCompat.registerReceiver` sa `RECEIVER_NOT_EXPORTED` — Android 14+ zahteva flag.
+- Lint 2 errors → 0.
+
+### E) Server-side presence — onDisconnect (commit `d601720`) + rules deploy
+
+**Problem**: peer koji uđe u tunel, umre baterija, ili force-stop-uje app, ostavlja stari `updatedAt`. Nema signala razlike "offline" vs "paused" vs "stale fix".
+
+**Solution**: RTDB `.info/connected` + `onDisconnect()`:
+- Novi `LocationRepository.bindOnlinePresence(uid)` — observe-uje connected, kad true registruje `onDisconnect().setValue(false)` na `locations/{uid}/online` + `setValue(true)`.
+- FGS drži cleanup Runnable, poziva u onDestroy sa eksplicitnim `setValue(false)`.
+- Server automatski postavlja `online=false` ~30s posle stvarnog disconnect-a.
+- `LocationModel` dobio `online: Boolean = true` polje (default true za legacy record-e).
+- `publish()` uključuje `online=true` u payload (belt-and-suspenders da `setValue(data)` ne izbriše polje).
+
+**RTDB rules deployed 2026-07-01**: dodat `"online": { ".validate": "newData.isBoolean()" }` u `locations/$uid`. `firebase deploy --only database` prošao bez incidenata.
+
+UI: `MemberWithLocation.isOffline()` helper, member row statusLine prikazuje "Van mreže" / "Offline" umesto "Poslednje: pre X min" kad je flag false. `MemberDetailSheet` dobio CloudOff banner "izgubio je konekciju, sync će se automatski nastaviti".
+
+### F) Offline vizuelni signali + haptic + a11y (commit `355c5fd`)
+
+- Member row `rowAlpha` gradient: 1.0 (online) → 0.72 (offline) → 0.55 (long-offline 24h+).
+- Map pin `iconOpacity`: 1.0 → 0.65 → 0.4.
+- `rejectHaptic` dodat na account delete / leave circle / delete circle confirm.
+- `confirmHaptic` na SOS cancel self.
+- `pressScaleClickable` dobio `role: Role? = Role.Button` default za TalkBack.
+- SosFab: prebacen na `pressScaleClickable` (0.92 pressScale), state-aware `contentDescription` ("Pošalji hitno SOS upozorenje" vs "Otkaži aktivni SOS").
+
+### G) Istraživanje konkurencije + strateški plan
+
+Istražene 6 aplikacija (search + docs + Play Store scrape): **Paralino** (privatnost + E2E), **HeyPolo** (SOS + teen driver), **FamilyWall** (all-in-one organizer + lokacija), **Zood** (samo E2E, dev-early), **Traccar** (enterprise open-source), **Dawarich** (self-hosted history).
+
+**Šta Krug NEMA vs konkurencija**:
+- Tier 1: Places / geofence alerts, location history, battery alerts, arrival/departure notifs
+- Tier 2: Compass ka drugu, speed monitoring, approximate location, temporary sharing, rename member, multiple devices/account
+- Tier 3: Recipe/meal/expenses (FamilyWall - off-scope), heatmaps (Dawarich)
+
+**Šta Krug JEDINSTVENO ima**: SOS emergency (Paralino/FamilyWall/Zood/Traccar/Dawarich nemaju), Parental control (mark as child), Refresh ping, Server-side presence.
+
+**Plan**:
+- **V1 (odmah, sve free)**: Compass, Speed, Temporary sharing, Rename (→ Rename REJEKTOVAN od user-a, videti H4)
+- **V1.1 Premium (paid tier)**: Places/geofence alerts, Location history 30d, Battery alerts, Approximate location toggle
+- **V1.2+**: Multiple devices, E2E encryption, heatmap, import Google Timeline
+
+### H) V1 grupa implementacija (commits `fb2c6e5`, `276b75b`)
+
+**H1. Compass to member** (`Geo.bearingDegrees` + `StatChip.iconRotationDeg`)
+- Forward bearing izračun (0=sever, 90=istok).
+- `StatChip` dobio animirani rotation (spring low stiffness) za smooth okretanje.
+- Distance chip u MemberDetailSheet koristi `Icons.Filled.Navigation` (kite/kompas arrow) rotiran ka peer-u. Prvo je bio `NavigateNext` (chevron) što nije ličilo na kompas — user feedback → menja se u Navigation.
+
+**H2. Speed chip** — LocationModel.speed već postojao; novi chip `Icons.Outlined.Speed` prikazuje "45 km/h" ako `speed > 1 m/s` (mirujući član nema chip da ne troši prostor).
+
+**H3. Temporary sharing (auto-off)**:
+- `UserSettings.shareUntilMs: Long?` novi field.
+- `SettingsRepository.updateShareUntil()` piše/briše polje (FieldValue.delete za null).
+- FGS `checkAndExpireTemporarySharing()` — na svaki fix proverava, gasi share + čisti flag kad istekne.
+- PrivacyScreen: FlowRow sa 4 chip-a "Uvek / 1 sat / 4 sata / Do kraja dana" + live countdown labela ("Auto-gašenje za 59m 30s"). Prvo bio Row+weight, "Do kraja dana" se lomio na sr-Latn — user feedback → prebačen na FlowRow.
+
+**H4. Rename in circle — REJEKTOVAN i vraćen**
+Implementiran + Firestore rules deployed sa `hasOnly(['isChild', 'nickname'])`. Ali user rekao "izbaci rename" — UX nije bio zreo, klik na Save je pokazivao novo ime pa se posle par sekundi vraćalo. Kompletno uklonjeno: UI, VM, Repository setter, `observeMemberNicknames`, strings, Firestore rules revert. `firebase deploy --only firestore:rules` puštan 2× (add pa revert).
+
+### I) Bug fix — "300m razmak kolima" (u commitu `fb2c6e5`)
+
+**Simptom** (user report): dva člana fizički zajedno u kolima, na mapi 300m razdvojeni. User osvežio na oba više puta, ne pomaže.
+
+**Root cause**: `requestOneShotFix()` na tap "Osveži" koristio `PRIORITY_BALANCED_POWER_ACCURACY` + `setMaxUpdateAgeMillis(60_000L)` + `setWaitForAccurateLocation(false)`. Rezultat: Google Play Services vraćao Wi-Fi cache fingerprint stariji od 30-60s.
+
+**Fix**: nova signature `requestOneShotFix(userInitiated: Boolean)`. Kad je user-initiated (refreshSelf iz UI dugme ILI peer refresh ping):
+- Preskače cache-publish korak (`fused.lastLocation` publish).
+- `PRIORITY_HIGH_ACCURACY` (pravi GPS satelit).
+- `maxUpdateAge = 5s` (skoro nula cache).
+- `waitForAccurateLocation = true` + `setDurationMillis = 15_000L` (čeka fresh fix, 15s timeout).
+
+Automatic entry-pointi (boot, worker) i dalje koriste BALANCED + 60s cache za brz odgovor bez battery drain-a.
+
+### Health stanja (kraj sesije)
+
+- `compileDebugKotlin`: 0 grešaka, 0 warning-a.
+- `lintDebug`: 0 errors, ~150 low-priority warnings.
+- `testDebugUnitTest`: 46 testova zeleni.
+- APK je debug (92MB), release build nije re-generisan ove sesije.
+- Firebase rules deployed: RTDB (online field), Firestore (samo isChild — nickname reverted).
+- Debug APK u `~/Downloads/krug-debug.apk` za sideload testiranje.
+
+### Sledeća sesija — TODO redosled
+
+1. **Play Console 4 preostale declaracije** (blokada za Internal Testing): Sign in details (test Gmail nalog), Target audience, Content ratings, Data safety.
+2. **Store listing** (screenshots, feature graphic, descriptions SR+EN — assets postoje).
+3. **Permissions and APIs declaration** (background location — možda demo video).
+4. **Testiranje V1 grupe** — reci šta radi kako treba, gde još fali polish.
+5. **V1.1 Premium** (kad ide bekhend): Places (geofence alerts, najveći gap), Location history 30d, Battery alerts, Approximate location.
+
 ## Gde smo stali (2026-06-30, Play Console identity verification ODOBRENA + app entry kreiran + 6 declaracija završeno)
 
 **🎉 Play Console identity verification PROŠLA** (2026-06-30): Google poslao „Your identity has been verified / Your identity verification was successful" notifikaciju na `krugappteam@gmail.com`. Developer account aktivan, publishing odblokiran.
