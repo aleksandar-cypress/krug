@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.PowerManager
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -37,7 +38,15 @@ class PowerSaveMonitor @Inject constructor(
             }
         }
         val filter = IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
-        context.registerReceiver(receiver, filter)
+        // Android 14+ zahteva eksplicitan flag (SecurityException bez njega). RECEIVER_NOT_EXPORTED
+        // je bezbedno jer je ACTION_POWER_SAVE_MODE_CHANGED protected system broadcast
+        // (samo sistem ga može poslati, ne treba prihvatati od trećih strana).
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         awaitClose { runCatching { context.unregisterReceiver(receiver) } }
     }.distinctUntilChanged()
 

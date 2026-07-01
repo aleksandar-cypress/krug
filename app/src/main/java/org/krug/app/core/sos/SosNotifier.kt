@@ -102,6 +102,9 @@ class SosNotifier @Inject constructor(
             .setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_VIBRATE)
             .build()
         runCatching {
+            // POST_NOTIFICATIONS (Android 13+) je runtime permission; user je može opozvati
+            // između app start-a i SOS trigger-a. runCatching pokriva SecurityException.
+            @Suppress("MissingPermission")
             NotificationManagerCompat.from(context).notify(notificationIdFor(uid), notification)
             Timber.d("notifySos posted for $uid")
         }.onFailure { Timber.w(it, "notifySos failed") }

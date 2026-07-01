@@ -1,6 +1,7 @@
 package org.krug.app.core.util
 
 import android.content.Context
+import java.util.Locale
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -52,6 +53,7 @@ fun bucketDistance(meters: Double): DistanceBucket = when {
 fun formatDistance(context: Context, meters: Double): String = when (val b = bucketDistance(meters)) {
     DistanceBucket.Nearby -> context.getString(R.string.distance_nearby)
     is DistanceBucket.Meters -> "${b.value} m"
-    is DistanceBucket.KmDecimal -> String.format("%.1f km", b.km)
+    // Locale.getDefault() → SR koristi zarez ("1,5 km"), EN tačku ("1.5 km").
+    is DistanceBucket.KmDecimal -> String.format(Locale.getDefault(), "%.1f km", b.km)
     is DistanceBucket.KmInt -> "${b.km} km"
 }

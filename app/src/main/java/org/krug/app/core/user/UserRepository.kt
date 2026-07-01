@@ -28,11 +28,9 @@ class UserRepository @Inject constructor(
 
         // Fallback name iz device-a koristi FRIENDLY oblik ("Galaxy A37 5G" umesto
         // sirovog "SM-A376B") da bi novi anonimni user-i imali čitljivo ime odmah.
-        val computedName = when {
-            user.displayName.orEmpty().isNotBlank() -> user.displayName!!
-            user.email.orEmpty().isNotBlank() -> user.email!!.substringBefore('@')
-            else -> DeviceNames.friendly(deviceLabel)
-        }
+        val computedName = user.displayName?.takeIf { it.isNotBlank() }
+            ?: user.email?.substringBefore('@')?.takeIf { it.isNotBlank() }
+            ?: DeviceNames.friendly(deviceLabel)
         val finalName = existingName.ifBlank { computedName }
 
         val data = mapOf(

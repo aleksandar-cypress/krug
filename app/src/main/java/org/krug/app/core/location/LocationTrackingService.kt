@@ -308,6 +308,9 @@ class LocationTrackingService : Service() {
         val client = activityClient ?: return
         val pi = activityPendingIntent ?: return
         runCatching {
+            // ACTIVITY_RECOGNITION je runtime permission; user je može povući između
+            // register/unregister-a. runCatching pokriva SecurityException.
+            @Suppress("MissingPermission")
             client.removeActivityUpdates(pi)
             pi.cancel()
         }
@@ -492,25 +495,27 @@ class LocationTrackingService : Service() {
 
     private suspend fun handleSosUpdate(uid: String, sos: SosModel?, myCircleIds: Set<String>) {
         val now = System.currentTimeMillis()
-        val freshEnough = sos != null && sos.triggeredAt > 0L &&
-            (now - sos.triggeredAt) < SOS_TTL_MS
-        // Scope: sender mora biti u krugu koji ja pratim. Legacy SOS bez circleId-a
-        // prolazi kao fallback (postoji za backward compat sa starim klijentima).
-        val inScope = sos?.circleId == null || sos.circleId in myCircleIds
-        val isActive = freshEnough && inScope
+        // Aktivni SOS: (1) postoji, (2) triggeredAt validan i unutar TTL, (3) u scope-u
+        // (legacy SOS bez circleId-a prolazi kao fallback za backward compat sa starim
+        // klijentima). takeIf uklanja !! ispod jer smart-cast održava non-null.
+        val activeSos = sos?.takeIf {
+            it.triggeredAt > 0L &&
+                (now - it.triggeredAt) < SOS_TTL_MS &&
+                (it.circleId == null || it.circleId in myCircleIds)
+        }
         val previousTs = knownSosTriggered[uid]
         when {
-            isActive && previousTs != sos!!.triggeredAt -> {
+            activeSos != null && previousTs != activeSos.triggeredAt -> {
                 // Prvo iz payload-a (zero-latency, set u trenutku trigger-a). Legacy SOS-i
                 // (pre v0.2) nemaju senderName — fallback na observeUser fetch.
-                val name = sos.senderName?.takeIf { it.isNotBlank() } ?: fetchDisplayName(uid)
-                val circleName = sos.circleName?.takeIf { it.isNotBlank() }
+                val name = activeSos.senderName?.takeIf { it.isNotBlank() } ?: fetchDisplayName(uid)
+                val circleName = activeSos.circleName?.takeIf { it.isNotBlank() }
                 sosNotifier.notifySos(uid, name, circleName)
-                knownSosTriggered[uid] = sos.triggeredAt
+                knownSosTriggered[uid] = activeSos.triggeredAt
                 localPrefs.saveSosNotified(knownSosTriggered)
-                Timber.d("SOS notification fired for $uid ($name) circleId=${sos.circleId}")
+                Timber.d("SOS notification fired for $uid ($name) circleId=${activeSos.circleId}")
             }
-            !isActive && previousTs != null -> {
+            activeSos == null && previousTs != null -> {
                 sosNotifier.cancelSos(uid)
                 knownSosTriggered.remove(uid)
                 localPrefs.saveSosNotified(knownSosTriggered)
