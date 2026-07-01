@@ -14,6 +14,7 @@
         "bearing":    { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 360" },
         "speed":      { ".validate": "newData.isNumber() && newData.val() >= 0" },
         "updatedAt":  { ".validate": "newData.isNumber()" },
+        "online":     { ".validate": "newData.isBoolean()" },
         "$other":     { ".validate": false }
       }
     },

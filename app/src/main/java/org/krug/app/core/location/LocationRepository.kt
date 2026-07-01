@@ -42,8 +42,67 @@ class LocationRepository @Inject constructor(
             "bearing" to bearing,
             "speed" to speed,
             "updatedAt" to ServerValue.TIMESTAMP,
+            // Svaki uspešan publish znači da je klijent online. bindOnlinePresence već
+            // pišee true, ali ovaj setValue overwrite-uje ceo child, pa bez ovog online
+            // bi bio prepisan na null default. Belt-and-suspenders — ako presence handler
+            // nije stigao da registruje pre prvog publish-a, ovaj write pokriva slučaj.
+            "online" to true,
         )
         locationRef(uid).setValue(data).await()
+    }
+
+    /**
+     * Server-side presence tracking preko RTDB `.info/connected` + `onDisconnect()`.
+     *
+     * Kako radi:
+     *  1. Observe-ujemo `.info/connected` — RTDB SDK signal koji ide true/false na osnovu
+     *     stvarne konekcije klijenta ka server-u (ne samo network sistema, već aktivne
+     *     WebSocket sesije).
+     *  2. Kad connected==true, registrujemo `onDisconnect().setValue(false)` handler na
+     *     `locations/{uid}/online`. RTDB server će ga automatski izvršiti kada detektuje
+     *     da smo se disconnect-ovali (~30s posle gubitka konekcije).
+     *  3. Odmah posle registracije, postavljamo `online=true` da peer-i vide sveže stanje.
+     *
+     * Peer-i sad razlikuju:
+     *  - `online=true` + fresh updatedAt → live tracking
+     *  - `online=false` + fresh updatedAt → recently offline (kanjon, tunel)
+     *  - `online=true` + stale updatedAt → app aktivan ali GPS ne dobija fix (indoor)
+     *  - `paused=true` → deliberatno pauzirao deljenje
+     *
+     * Vraća Runnable koji caller MORA da pozove pri shutdown-u (removes listener +
+     * cancels onDisconnect + explicit setValue(false) za clean shutdown).
+     */
+    fun bindOnlinePresence(uid: String): Runnable {
+        val connectedRef = database.getReference(".info/connected")
+        val onlineRef = locationRef(uid).child("online")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val connected = snapshot.getValue(Boolean::class.java) == true
+                if (connected) {
+                    // Register onDisconnect PRE setValue(true) — ako se telefon disconnect-uje
+                    // između ovih linija, onDisconnect je već registrovan i firira false.
+                    onlineRef.onDisconnect().setValue(false)
+                    onlineRef.setValue(true)
+                    Timber.d("Online presence bound for uid=%s", uid)
+                } else {
+                    Timber.d("RTDB .info/connected → false (server sees us offline)")
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {
+                Timber.w(error.toException(), ".info/connected observer cancelled")
+            }
+        }
+        connectedRef.addValueEventListener(listener)
+        return Runnable {
+            connectedRef.removeEventListener(listener)
+            // Otkači onDisconnect handler i eksplicitno postavi false — clean shutdown
+            // (npr. user zatvori app deliberatno). Bez `.cancel()`, handler bi ostao
+            // registrovan i firirao false posle sledećeg connect-a — false positive.
+            runCatching {
+                onlineRef.onDisconnect().cancel()
+                onlineRef.setValue(false)
+            }
+        }
     }
 
     /**

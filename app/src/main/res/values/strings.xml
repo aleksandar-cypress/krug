@@ -244,6 +244,7 @@
     <string name="member_chip_distance_aerial">Dist. (line)</string>
     <string name="member_chip_last_seen">Last seen</string>
     <string name="member_state_private">Private mode</string>
+    <string name="member_state_offline">Offline</string>
     <string name="member_state_sos_help">SOS: needs help</string>
     <string name="member_state_private_body">This member is not currently sharing location or is offline. The last known position is shown</string>
     <string name="member_state_long_offline_title">Inactive %1$d d</string>

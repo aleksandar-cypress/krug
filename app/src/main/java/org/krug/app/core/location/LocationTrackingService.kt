@@ -108,6 +108,13 @@ class LocationTrackingService : Service() {
     @Volatile private var boostExpiryJob: kotlinx.coroutines.Job? = null
 
     /**
+     * Cleanup handle za `LocationRepository.bindOnlinePresence`. onDestroy ga zove da
+     * otkači `.info/connected` listener + cancel-uje onDisconnect handler + eksplicitno
+     * upisuje `online=false` (clean shutdown umesto da čekamo RTDB timeout).
+     */
+    @Volatile private var presenceCleanup: Runnable? = null
+
+    /**
      * BURST profil: SOS aktivan ili peer-ov refresh ping. Drži veoma frequent
      * fix interval kratko vreme (30min SOS, 5min refresh). Posle isteka, profil
      * se prirodno vraća na battery mode default.
@@ -269,6 +276,13 @@ class LocationTrackingService : Service() {
         // Override defensive empty init sa stvarnim disk-loaded podacima (sa TTL prune).
         knownSosTriggered = localPrefs.loadSosNotified(SOS_TTL_MS)
         Timber.i("FGS start (loaded %d SOS dedup entries)", knownSosTriggered.size)
+        // Bind server-side presence — dok FGS živi, RTDB drži `online=true` na naš record.
+        // Kad process umre (force stop, low memory kill, network loss > ~30s), server sam
+        // postavlja online=false preko onDisconnect handler-a. Peer-i tako imaju precizan
+        // signal umesto da moraju da izračunavaju iz updatedAt staleness-a.
+        firebaseAuth.currentUser?.uid?.let { uid ->
+            presenceCleanup = locationRepository.bindOnlinePresence(uid)
+        }
         observeSettings()
         observeRefreshRequests()
         observeCircleSos()
@@ -658,6 +672,10 @@ class LocationTrackingService : Service() {
         // fused klijent.
         boostExpiryJob?.cancel()
         boostExpiryJob = null
+        // Presence cleanup pre scope.cancel — otkači RTDB listener + eksplicitno online=false,
+        // pa peer-i odmah vide "offline" umesto da čekaju RTDB server-side disconnect timeout.
+        presenceCleanup?.run()
+        presenceCleanup = null
         try {
             fused.removeLocationUpdates(locationCallback)
         } catch (_: Exception) { /* no-op */ }

@@ -191,6 +191,20 @@ private fun MemberWithLocation.isLongOffline(now: Long = System.currentTimeMilli
     return (now - updatedAt) > LONG_OFFLINE_THRESHOLD_MS
 }
 
+/**
+ * Trenutno offline: server-side onDisconnect handler je označio member-a kao izgubio
+ * vezu (~30s posle stvarnog disconnect-a). Različito od `isPrivate` (deliberatno pauza)
+ * i `isLongOffline` (24h+ tišina — verovatno uninstalled). "Van mreže" je *kratkotrajno*
+ * stanje: tunel, lift, dead battery, force-stop.
+ */
+private fun MemberWithLocation.isOffline(): Boolean {
+    if (isSelf) return false
+    val loc = location ?: return false
+    if (loc.paused) return false // paused ima svoj chip, nije isto
+    if (loc.updatedAt <= 0L) return false // nikad nije publikovao — ne pokazuj offline
+    return !loc.online
+}
+
 
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1927,11 +1941,16 @@ private fun MemberRow(
                 }
             }
             val priv = member.isPrivate()
+            val offline = member.isOffline()
             val sosLabel = stringResource(R.string.member_state_sos_help)
             val privateLabel = stringResource(R.string.member_state_private)
+            val offlineLabel = stringResource(R.string.member_state_offline)
             val statusLine = when {
                 member.sos != null -> sosLabel
                 priv -> privateLabel
+                // Offline uzima prednost nad "last seen" — kaže user-u ZAŠTO nema svežih
+                // podataka umesto da čita "pre 5 min" i pita se da li je peer pauzirao.
+                offline -> offlineLabel
                 else -> lastSeenLabel(member.location?.updatedAt)
             }
             // Ako je displayName već device naziv (anon user bez nicknamea), ne ponavljaj
