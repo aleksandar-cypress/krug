@@ -81,14 +81,12 @@ service cloud.firestore {
         //    bi mogao direktnim API pozivom da obori isChild=false i zaobiđe roditeljsku
         //    kontrolu, ili shareLocation=false ako se taj field jednog dana koristi za
         //    per-circle privacy.
-        //  - Owner sme da menja `isChild` (roditeljska kontrola) i/ili `nickname`
-        //    (per-circle nadimak — daje deci/prijateljima ime samo u ovom krugu). Poslednji
-        //    piše ima prednost ako i self i owner pišu nickname (retko u praksi).
+        //  - Owner sme da menja SAMO `isChild` field (roditeljska kontrola).
         allow update: if (isSelf(memberUid)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nickname']))
           || (isAuthed()
             && request.auth.uid == circleData(cid).ownerId
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isChild', 'nickname']));
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isChild']));
         allow delete: if isSelf(memberUid)
           || (isAuthed() && request.auth.uid == circleData(cid).ownerId);
       }

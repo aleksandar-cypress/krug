@@ -349,12 +349,6 @@
     <string name="member_options_cd">Opcije člana</string>
     <string name="member_menu_mark_child">Označi kao dete</string>
     <string name="member_menu_unmark_child">Ukloni oznaku deteta</string>
-    <string name="member_menu_rename">Preimenuj u ovom krugu</string>
-    <string name="member_rename_title">Preimenuj člana</string>
-    <string name="member_rename_placeholder">Nadimak (max 24 znaka)</string>
-    <string name="member_rename_hint">Vidljivo samo u ovom krugu. Ne menja pravo ime člana.</string>
-    <string name="member_rename_clear_cta">Ukloni nadimak</string>
-    <string name="member_real_name_label">Pravo ime: %1$s</string>
 
     <!-- Circle icon labels (icon picker) -->
     <string name="icon_label_family">Porodica</string>

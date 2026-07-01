@@ -35,8 +35,6 @@ data class CircleDetailMember(
     val isOwner: Boolean,
     val isSelf: Boolean,
     val isChild: Boolean,
-    /** Per-circle nickname postavljen od owner-a. Prikazuje se umesto displayName. */
-    val nickname: String? = null,
 )
 
 data class CircleDetailUiState(
@@ -53,14 +51,6 @@ data class CircleDetailUiState(
     val deleting: Boolean = false,
     val leftOrDeleted: Boolean = false,
     val errorMessage: String? = null,
-)
-
-/** Helper za combine sa 4 flows — Kotlin std ima Triple ali ne Tuple4. */
-private data class MemberCombineTuple(
-    val circle: CircleModel?,
-    val childMap: Map<String, Boolean>,
-    val nicknames: Map<String, String>,
-    val selfUid: String?,
 )
 
 @HiltViewModel
@@ -85,11 +75,10 @@ class CircleDetailViewModel @Inject constructor(
         combine(
             observeCircle(circleId),
             circleRepository.observeMembersChildMap(circleId),
-            circleRepository.observeMemberNicknames(circleId),
             authRepository.observeAuthState(),
-        ) { circle, memberDocs, nicknames, user ->
-            MemberCombineTuple(circle, memberDocs, nicknames, user?.uid)
-        }.onEach { (circle, memberDocs, nicknames, uid) ->
+        ) { circle, memberDocs, user ->
+            Triple(circle, memberDocs, user?.uid)
+        }.onEach { (circle, memberDocs, uid) ->
             if (circle == null) {
                 // Krug obrisan dok je user gledao detail — auto-back.
                 if (hadCircle) {
@@ -121,7 +110,6 @@ class CircleDetailViewModel @Inject constructor(
                             isOwner = profile.uid == circle.ownerId,
                             isSelf = profile.uid == uid,
                             isChild = memberDocs[profile.uid] == true,
-                            nickname = nicknames[profile.uid],
                         )
                     },
                 )
@@ -136,18 +124,6 @@ class CircleDetailViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { circleRepository.setChildStatus(circleId, memberUid, makeChild) }
                 .onFailure { Timber.w(it, "setChildStatus failed for $circleId/$memberUid") }
-        }
-    }
-
-    /**
-     * Owner-only setter za per-circle nickname. Prazan string briše nickname. Ne dira
-     * global displayName — samo prikaz u ovom krugu.
-     */
-    fun setMemberNickname(memberUid: String, nickname: String?) {
-        if (!_state.value.isOwner) return
-        viewModelScope.launch {
-            runCatching { circleRepository.setMemberNickname(circleId, memberUid, nickname) }
-                .onFailure { Timber.w(it, "setMemberNickname failed for $circleId/$memberUid") }
         }
     }
 

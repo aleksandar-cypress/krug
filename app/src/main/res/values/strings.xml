@@ -347,12 +347,6 @@
     <string name="member_options_cd">Member options</string>
     <string name="member_menu_mark_child">Mark as child</string>
     <string name="member_menu_unmark_child">Remove child mark</string>
-    <string name="member_menu_rename">Rename in this circle</string>
-    <string name="member_rename_title">Rename member</string>
-    <string name="member_rename_placeholder">Nickname (max 24 chars)</string>
-    <string name="member_rename_hint">Only visible in this circle. Doesn\'t change their real name.</string>
-    <string name="member_rename_clear_cta">Remove nickname</string>
-    <string name="member_real_name_label">Real name: %1$s</string>
 
     <!-- Circle icon labels (icon picker) -->
     <string name="icon_label_family">Family</string>

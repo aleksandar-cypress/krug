@@ -36,8 +36,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Warning
@@ -2307,8 +2307,11 @@ private fun MemberDetailSheet(
                     label = if (drivingMeters != null) stringResource(R.string.member_chip_distance) else stringResource(R.string.member_chip_distance_aerial),
                     value = formatDistance(LocalContext.current, displayMeters),
                     accentColor = MaterialTheme.colorScheme.primary,
-                    icon = Icons.AutoMirrored.Filled.NavigateNext,
-                    iconRotationDeg = bearing - 90f, // NavigateNext pokazuje desno (=90° u kompas prostoru), pa oduzmi
+                    // Navigation icon (kite/paper-plane oblik) pokazuje UP by default (=0° u
+                    // kompas prostoru = sever). Rotacija = bearing direktno bez offset-a.
+                    // Klasičan "kompas arrow" simbol koji ljudi prepoznaju.
+                    icon = Icons.Filled.Navigation,
+                    iconRotationDeg = bearing,
                     modifier = Modifier.weight(1f),
                 )
             }

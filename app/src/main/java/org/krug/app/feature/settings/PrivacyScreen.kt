@@ -2,6 +2,8 @@ package org.krug.app.feature.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -170,6 +172,7 @@ fun PrivacyScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ShareDurationPicker(
     activeUntilMs: Long?,
@@ -186,42 +189,39 @@ private fun ShareDurationPicker(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Spacer(Modifier.size(10.dp))
-    // Row sa 4 chip-a. FlowRow bi bio bolji za male ekrane, ali standard Row + weight
-    // dovoljno za 4 kratke labele. Ako se ne uklopi, chip label se elipsira.
-    Row(
+    // FlowRow: chip-ovi se lome u drugi red kad prekorače širinu ekrana. "Do kraja dana"
+    // je najduži label, u Row+weight se sekao/prelomio. FlowRow ostavi svakom chip-u
+    // svoju punu širinu i wrap-uje ostatak dole. Bez ovog, na sr-Latn (duži tekstovi)
+    // UI se raspada.
+    val remaining = activeUntilMs?.let { it - System.currentTimeMillis() }
+    val is1h = remaining != null && remaining in 1..(2 * 60 * 60_000L)
+    val is4h = remaining != null && remaining in (2 * 60 * 60_000L + 1)..(6 * 60 * 60_000L)
+    val isEod = remaining != null && remaining > (6 * 60 * 60_000L)
+    val alwaysSelected = activeUntilMs == null
+    FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        val alwaysSelected = activeUntilMs == null
         FilterChip(
             selected = alwaysSelected,
             onClick = { if (!alwaysSelected) onSelect(null) },
             label = { Text(stringResource(R.string.privacy_share_duration_always)) },
-            modifier = Modifier.weight(1f),
         )
-        // Aproksimacija — chip "1h" je selected ako je aktivan timer i traje manje od 2h.
-        // Precizniji match zahtevao bi da pamtimo original duration, ne remaining time.
-        val remaining = activeUntilMs?.let { it - System.currentTimeMillis() }
-        val is1h = remaining != null && remaining in 1..(2 * 60 * 60_000L)
-        val is4h = remaining != null && remaining in (2 * 60 * 60_000L + 1)..(6 * 60 * 60_000L)
-        val isEod = remaining != null && remaining > (6 * 60 * 60_000L)
         FilterChip(
             selected = is1h,
             onClick = { onSelect(60 * 60_000L) },
             label = { Text(stringResource(R.string.privacy_share_duration_1h)) },
-            modifier = Modifier.weight(1f),
         )
         FilterChip(
             selected = is4h,
             onClick = { onSelect(4 * 60 * 60_000L) },
             label = { Text(stringResource(R.string.privacy_share_duration_4h)) },
-            modifier = Modifier.weight(1f),
         )
         FilterChip(
             selected = isEod,
             onClick = { onSelect(millisUntilEndOfDay()) },
             label = { Text(stringResource(R.string.privacy_share_duration_eod)) },
-            modifier = Modifier.weight(1f),
         )
     }
     // Countdown labela kad je timer aktivan — user vidi koliko još ostaje. Tick svakih
