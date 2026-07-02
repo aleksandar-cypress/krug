@@ -2,6 +2,103 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-07-02, dvadeset četvrta sesija — Play Console kompletiran, Closed testing submitted za review)
+
+Cela sesija fokusirana na Play Console workflow: popuniti sve preostale App content declaracije, postaviti Internal + Closed testing tracks, snimiti demo video za background location, i submit-ovati za Google-ov app review. Radilo na S24 Ultra preko Play Store instalirane release verzije (org.krug.app "unreviewed"). Nijedan code commit ove sesije, ali dodati novi assets/docs.
+
+### A) Play Console — App content deklaracije završene
+
+**Sign in details** — kreiran test reviewer nalog `bajkeizmaste@gmail.com` (password: `Druhi4bre3`), password-only login, 2SV off, no passkey. Prošao kroz Krug flow, joinovan u „Review test" krug preko invite koda `488214` (dohvatio kroz Firestore REST API pošto se paste ne provalilo iz clipboard-a između account switch-eva). Reviewer instrukcije: max 500 chars, EN, opisan Google Sign-In flow i testovi (SOS, Refresh, temp share, Delete account).
+
+**Target audience** — 13-15 / 16-17 / 18+. Not appealing to children.
+
+**Content ratings** — IARC questionnaire kroz Social/Communication kategoriju, Communication tip (Skype/SMS model, ne social broadcasting). Location shared = Yes, purchases = No, block/report/moderation = No (nema chat), invite-only = Yes. Ratings: All ages/Everyone/PEGI Parental guidance/12+ u ostalim regionima (zbog „Shares Location" flag-a).
+
+**Data safety** — Collected: precise location, name, email, User IDs, crash logs, diagnostics, app interactions, other user-generated content (imena krugova), device IDs. Sve encrypted in transit. Shared: nothing (Firebase i Mapbox tretirani kao service providers, ne third parties). Auth: OAuth only. Deletion URL: `https://krugapp.com/delete-account.html` (nova stranica, videti B).
+
+**App category** — Communication. Contact email `krugappteam@gmail.com`, website `https://krugapp.com`.
+
+### B) Delete account page (nova stranica na sajtu)
+
+Napravljen dedicated `docs/delete-account.html` (SR+EN, matched styling privacy.html/terms.html) sa dve metode brisanja:
+- Method 1 (in-app): Settings → Delete account
+- Method 2 (email): `krugappteam@gmail.com` fallback za slučaj gubitka pristupa
+
+Opisano šta se briše (profil, lokacija, SOS, članstva, krugovi ako je jedini vlasnik, settings, Firebase Auth), rok (30 dana za backup snapshots), i šta se ne briše (agregirani Crashlytics podaci bez ličnih identifikatora). Warning box: brisanje je nepovratno.
+
+Ažuriran privacy.html sekcija 7.2 — više ne kaže „in-app feature is in development" (ta funkcija je već implementirana od ranije), sada linkuje na delete-account.html. Dodat URL u sitemap.xml. Fajlovi kopirani u `~/Desktop/krugapp-upload/` i live na `https://krugapp.com/delete-account.html`.
+
+### C) Feature graphic redizajniran
+
+Stara `feature-graphic-sr.png` imala je plavu pozadinu koja se stapala sa teal figurom u logu (nedovoljan kontrast) i „g" u „Krug" se preklapao sa taglineom „Tvoji ljudi. Uvek blizu.".
+
+Generisano 4 varijante preko Python/PIL skripte (navy, cream, peach, plum) sa istim logo-tekstom kompozicijom ali proper vertical gap-om (40px) između title-a i tagline-a. User izabrao **plum** (`(55,40,90) → (35,25,65)` gradient). Finalizovano:
+- `feature-graphic-sr.png` — plum, „Tvoji ljudi. Uvek blizu."
+- `feature-graphic-en.png` — plum, „Your people. Always close." (za budući EN listing)
+
+### D) Play App Signing SHA-1 fix (kritični bug)
+
+**Simptom** (posle Play Store instalacije release verzije na S24): „No Google account found on this device" pri Continue with Google. Sign-in nije mogao da nađe nijedan nalog iako S24 ima 4+ Google naloga registrovanih.
+
+**Root cause**: Play App Signing potpisuje instaliranu APK sa Google-ovim signing certifikatom (SHA-1 `56:B5:C7:44:98:B8:8F:07:53:F0:99:58:CA:1F:5D:25:E3:DE:09:B1`) — drugačiji od upload keystore SHA-1 (`21:6a:94:24:64:98:08:4a:...`) koji je registrovan u Firebase. Google Sign-In flow validira (package + APK SHA-1) protiv OAuth Android klijenta u Firebase; nepodudaranje = credential fail.
+
+**Fix**: dodat Play App Signing SHA-1 i SHA-256 (`67:D5:26:4A:91:...`) u Firebase Console → Krug Release app → SHA certificate fingerprints. Ekstraktovan preko `apksigner verify --print-certs` na APK pulled sa S24 (`adb pull /data/app/.../base.apk`). Nije potreban AAB rebuild jer se registracija radi server-side. Propagacija ~2 min, potom Google Sign-In radio.
+
+### E) Testing tracks
+
+**Internal testing track** — kreiran, AAB 1 (0.1.0) upload-ovan, rollout aktivan. Opt-in URL: `https://play.google.com/apps/internaltest/4701482258894794361`. Testerska lista `Krug internal testers` sa 5 email-ova:
+- `krugappteam@gmail.com`
+- `aleksandarr@gmail.com`
+- `bajkeizmaste@gmail.com`
+- `jelenavasilic84@gmail.com`
+- `maslacjana@gmail.com`
+
+**Closed testing track (Alpha)** — kreiran, isti AAB iz library-ja, Serbia + Balkans (Bosnia, Croatia, Slovenia, North Macedonia, Montenegro) countries, ista testerska lista. Release preview trigerovao 3 sensitive permission errora (background location, FGS location, full-screen intent).
+
+### F) Sensitive permissions declaration
+
+**Background location (`ACCESS_BACKGROUND_LOCATION`)** — App purpose i location access opisi (~450 chars each) fokusiran na family location sharing, foreground service, private circles. Ključno: dodat demo video (30s, YouTube unlisted, user snimio sam) — link `https://youtube.com/shorts/Aq7_j1Mk9eg` paste-ovan u Video instructions polje.
+
+**Foreground Service (`FOREGROUND_SERVICE_LOCATION`)** — štriklirani „Background location updates" i „User-initiated location sharing" tasks. Isti YouTube link kao demo video.
+
+**Full-screen intent (`USE_FULL_SCREEN_INTENT`)** — kategorizovano kao „Other" sa objašnjenjem: koristi se isključivo za SOS emergency alerte koje šalje član kruga, mora biti vidljivo preko lock screen-a i drugih app-ova.
+
+### G) Health apps declaration (workaround)
+
+Play Console detektovao `ACTIVITY_RECOGNITION` permission i forsirao Health apps klasifikaciju. Krug NIJE health app — koristi permission samo za detekciju kretanja radi battery optimizacije (still/walking/vehicle → adjust GPS frequency). User odbio da uklanja permission (poklopilo bi Android Auto V1.2 idea).
+
+**Rešenje**: štriklirana **„Other"** kategorija sa objašnjenjima (250 char limit): „No health features. ACTIVITY_RECOGNITION is used only for battery optimization: detecting movement states (still/walking/vehicle) to adjust GPS polling frequency. No fitness, health, step, or workout data collected or shared." Isti draft u sekciji 2 (Activity recognition permission).
+
+### H) Publish flow
+
+Nakon svih deklaracija, submit blokiran sa „To send changes for review, complete the required steps" iako sve piše kao complete. Root cause: Closed testing rollout nije završen zbog sensitive permission errora — vratili se, popravili, kliknuli Start rollout to Alpha. Zatim Play Console pokrenuo automated policy/quality checks (do 13 min) — na kraju sesije user čekao da završe.
+
+**Status na kraju sesije**: čeka se pre-check → Send changes for review → Google app review (1-3 dana estimate).
+
+### Preostali kritični put pre production
+
+1. **Google review**: 1-3 dana za novu app, može do 7. Rezultat: „Krug" (a ne „org.krug.app (unreviewed)") u Play Store-u.
+2. **Closed testing 14 dana**: Google zahtev za personal developer account-e — minimum 12 opt-in testera koji drže app instalirano bar 14 dana pre nego što se aplicira za Production access.
+3. **Trenutno testera**: 5 na listi (jedan verifikovan da radi na S24). Treba minimum 7 dodatnih. TODO: regrutovati (familija, prijatelji).
+
+### V1.2+ roadmap update
+
+Dodat u Plan/V1.2+ listu: **Android Auto integracija (opcija B — full mapa sa članovima kao Waze)**. Koristi Navigation template iz CarAppLibrary, zahteva Google approval process 2-4 nedelje, rizik odbijanja jer Krug nije primarno nav app. Opcija A (messaging kategorija samo za SOS TTS notifikacije) odbačena — user hoće punu vizuelizaciju kruga.
+
+### Health stanja (kraj sesije)
+
+- `bundleRelease`: prošao (2m 25s), AAB 36 MB, sa svim commit-ovima do `276b75b`.
+- Nema code changes ove sesije, samo docs (`delete-account.html`, `privacy.html` sekcija 7.2, `sitemap.xml`) i assets (`feature-graphic-sr.png`, `feature-graphic-en.png`, obrisane 4 eksperimentalne varijante v2-v6).
+- Play Console: 90%+ complete, čeka se pre-check pass i Send for review.
+
+### Sledeća sesija — TODO redosled
+
+1. **Proveri Google review status** (Play Console → Publishing overview → Submission activity). Ako je approved, „org.krug.app (unreviewed)" postaje „Krug".
+2. **Regrutuj još testera**: minimum 7 novih do 12 total. Deljenje Closed testing opt-in linka (pojaviće se u Testing → Closed testing → Testers tab kad rollout završi).
+3. **Prati Crashlytics** — svaki crash od testera treba da vidiš u Firebase Console.
+4. **14-dnevni brojač**: čeka se od dana kad 12+ testera opt-in kroz Closed testing. Cilj: apply for Production access ~mid-July.
+5. **V1.1 Premium**: kada bekhend krene za tier support — Places (geofence alerts, glavni gap), Location history 30d, Battery alerts, Approximate location.
+
 ## Gde smo stali (2026-07-01, dvadeset treća sesija — Crashlytics fix, konkurencija analiza, V1 grupa)
 
 Duga sesija fokusirana na: (1) rešavanje kritičnog cold-start crash-a iz Crashlytics-a, (2) istraživanje konkurencije (Paralino, HeyPolo, FamilyWall, Zood, Traccar, Dawarich) i mapiranje šta Krug nema, (3) implementacija V1 grupe feature-a i backend osnove za buduće premium tier. Radilo na SM-S928B (S24 Ultra) preko debug APK-a, poslednji commit `276b75b` (push-ed na origin/main).
@@ -76,7 +173,7 @@ Istražene 6 aplikacija (search + docs + Play Store scrape): **Paralino** (priva
 **Plan**:
 - **V1 (odmah, sve free)**: Compass, Speed, Temporary sharing, Rename (→ Rename REJEKTOVAN od user-a, videti H4)
 - **V1.1 Premium (paid tier)**: Places/geofence alerts, Location history 30d, Battery alerts, Approximate location toggle
-- **V1.2+**: Multiple devices, E2E encryption, heatmap, import Google Timeline
+- **V1.2+**: Multiple devices, E2E encryption, heatmap, import Google Timeline, **Android Auto integracija (opcija B: full mapa sa članovima, kao Waze)** — koristi Navigation template iz CarAppLibrary-ja, zahteva Google approval (review 2-4 nedelje, rizik odbijanja jer Krug nije primarno nav app); opcija A (messaging kategorija, samo SOS TTS notifikacije) odbačena — user hoće punu vizuelizaciju kruga
 
 ### H) V1 grupa implementacija (commits `fb2c6e5`, `276b75b`)
 

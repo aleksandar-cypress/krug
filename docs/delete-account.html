@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Kako da obrišete svoj nalog i podatke u aplikaciji Krug.">
+<meta name="theme-color" content="#3A86C8">
+<link rel="canonical" href="https://krugapp.com/delete-account.html">
+<link rel="icon" type="image/png" href="app-icon.png">
+<title>Brisanje naloga · Krug</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #0f172a;
+    --muted: #475569;
+    --accent: #6366f1;
+    --border: #e2e8f0;
+    --code-bg: #f1f5f9;
+    --warn-bg: #fef3c7;
+    --warn-border: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.65;
+  }
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+    gap: 16px;
+  }
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 14px;
+  }
+  .back:hover { text-decoration: underline; }
+  .lang-switch {
+    display: inline-flex;
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 2px;
+  }
+  .lang-switch button {
+    background: transparent;
+    border: 0;
+    padding: 4px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 6px;
+  }
+  .lang-switch button.active {
+    background: white;
+    color: var(--fg);
+    box-shadow: 0 1px 2px rgba(15,23,42,0.08);
+  }
+  h1 { font-size: 32px; letter-spacing: -0.5px; margin: 0 0 8px; }
+  .updated { color: var(--muted); font-size: 14px; margin: 0 0 32px; }
+  h2 { font-size: 22px; margin-top: 40px; margin-bottom: 8px; letter-spacing: -0.3px; }
+  h3 { font-size: 16px; margin-top: 20px; margin-bottom: 4px; }
+  p, li { font-size: 16px; color: #1e293b; }
+  ul, ol { padding-left: 20px; }
+  ul li, ol li { margin-bottom: 6px; }
+  a { color: var(--accent); }
+  .contact { background: var(--code-bg); padding: 20px; border-radius: 12px; margin-top: 16px; }
+  .warn {
+    background: var(--warn-bg);
+    border-left: 4px solid var(--warn-border);
+    padding: 14px 18px;
+    border-radius: 8px;
+    margin: 24px 0;
+  }
+  .warn p { margin: 0; }
+  ol.steps {
+    counter-reset: step;
+    list-style: none;
+    padding-left: 0;
+  }
+  ol.steps > li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 40px;
+    margin-bottom: 14px;
+  }
+  ol.steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 28px;
+    height: 28px;
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  /* Language toggle */
+  .t-en { display: none; }
+  html[lang="en"] .t-en { display: inline; }
+  html[lang="en"] .t-sr { display: none; }
+  html[lang="en"] .t-en-block { display: block; }
+  .t-en-block { display: none; }
+  html[lang="en"] .t-sr-block { display: none; }
+  .t-sr-block { display: block; }
+</style>
+</head>
+<body>
+<main>
+  <div class="topbar">
+    <a class="back" href="index.html">
+      <span class="t-sr">← Nazad</span><span class="t-en">← Back</span>
+    </a>
+    <div class="lang-switch" role="tablist" aria-label="Language">
+      <button type="button" data-lang="sr" class="active">SR</button>
+      <button type="button" data-lang="en">EN</button>
+    </div>
+  </div>
+
+  <h1>
+    <span class="t-sr">Brisanje naloga i podataka</span>
+    <span class="t-en">Account and data deletion</span>
+  </h1>
+  <p class="updated">
+    <span class="t-sr">Poslednja izmena: 2. jul 2026.</span>
+    <span class="t-en">Last updated: July 2, 2026.</span>
+  </p>
+
+  <p>
+    <span class="t-sr">Ova stranica objašnjava kako da obrišete svoj Krug nalog i sve povezane podatke. Postoje dva načina: kroz samu aplikaciju (preporučeno) ili slanjem email zahteva.</span>
+    <span class="t-en">This page explains how to delete your Krug account and all associated data. There are two ways: through the app itself (recommended) or by sending an email request.</span>
+  </p>
+
+  <h2><span class="t-sr">Način 1: Brisanje unutar aplikacije</span><span class="t-en">Method 1: Delete within the app</span></h2>
+  <ol class="steps t-sr-block">
+    <li>Otvorite Krug aplikaciju na vašem uređaju.</li>
+    <li>Idite u <strong>Podešavanja</strong> (ikona zupčanika u donjem meniju).</li>
+    <li>Skrolujte do dna i tapnite <strong>„Obriši nalog"</strong>.</li>
+    <li>Pročitajte upozorenje i potvrdite tapom na <strong>„Obriši nalog"</strong> u dijalogu.</li>
+    <li>Nalog i svi podaci se odmah brišu; bićete odjavljeni iz aplikacije.</li>
+  </ol>
+  <ol class="steps t-en-block">
+    <li>Open the Krug app on your device.</li>
+    <li>Go to <strong>Settings</strong> (gear icon in the bottom navigation).</li>
+    <li>Scroll to the bottom and tap <strong>"Delete account"</strong>.</li>
+    <li>Read the warning and confirm by tapping <strong>"Delete account"</strong> in the dialog.</li>
+    <li>Your account and all data are deleted immediately; you will be signed out of the app.</li>
+  </ol>
+
+  <h2><span class="t-sr">Način 2: Zahtev preko email-a</span><span class="t-en">Method 2: Request by email</span></h2>
+  <p>
+    <span class="t-sr">Ako nemate pristup aplikaciji (npr. izgubljen ili deinstaliran uređaj), možete zatražiti brisanje slanjem email-a:</span>
+    <span class="t-en">If you cannot access the app (e.g. lost or uninstalled device), you can request deletion by email:</span>
+  </p>
+  <div class="contact">
+    <p style="margin:0">
+      <a href="mailto:krugappteam@gmail.com?subject=Zahtev%20za%20brisanje%20naloga"><strong>krugappteam@gmail.com</strong></a>
+    </p>
+    <p style="margin:12px 0 0; font-size:14px; color: var(--muted)">
+      <span class="t-sr">U poruci navedite email adresu sa kojom ste registrovani na Krugu. Odgovorićemo u roku od 7 radnih dana.</span>
+      <span class="t-en">In your message include the email address associated with your Krug account. We will respond within 7 business days.</span>
+    </p>
+  </div>
+
+  <h2><span class="t-sr">Šta se briše</span><span class="t-en">What gets deleted</span></h2>
+  <ul class="t-sr-block">
+    <li><strong>Profil naloga:</strong> ime, email, foto URL, Firebase UID, FCM token.</li>
+    <li><strong>Podaci o lokaciji:</strong> poslednja poznata pozicija u realno-time bazi.</li>
+    <li><strong>SOS istorija:</strong> svi aktivni ili istekli SOS događaji vezani za vaš nalog.</li>
+    <li><strong>Članstva u krugovima:</strong> uklanjate se iz svih krugova čiji ste član; drugi članovi vas više neće videti.</li>
+    <li><strong>Krugovi u kojima ste jedini vlasnik:</strong> brišu se u celini zajedno sa svim pozivnicama.</li>
+    <li><strong>Podešavanja:</strong> lokalno sačuvana podešavanja, jezik, režim baterije.</li>
+    <li><strong>Firebase Authentication:</strong> sam nalog u Firebase Auth sistemu, tako da ne može ponovo da se uloguje bez novog kreiranja.</li>
+  </ul>
+  <ul class="t-en-block">
+    <li><strong>Account profile:</strong> name, email, photo URL, Firebase UID, FCM token.</li>
+    <li><strong>Location data:</strong> last known position in the realtime database.</li>
+    <li><strong>SOS history:</strong> all active or expired SOS events tied to your account.</li>
+    <li><strong>Circle memberships:</strong> you are removed from all circles you are a member of; other members will no longer see you.</li>
+    <li><strong>Circles you solely own:</strong> deleted entirely, together with all invitations.</li>
+    <li><strong>Settings:</strong> locally saved preferences, language, battery mode.</li>
+    <li><strong>Firebase Authentication:</strong> the account itself in the Firebase Auth system, so it cannot sign in again without creating a new account.</li>
+  </ul>
+
+  <h2><span class="t-sr">Rok brisanja</span><span class="t-en">Retention period</span></h2>
+  <p>
+    <span class="t-sr">Većina podataka (profil, lokacija, članstva) briše se odmah po pokretanju procesa. Rezervne kopije koje Firebase automatski pravi (backup snapshots) čuvaju se prema Google-ovoj standardnoj retenciji i pišu preko svakih 30 dana. Nakon 30 dana od brisanja naloga, vaši podaci više ne postoje ni u rezervnim kopijama.</span>
+    <span class="t-en">Most data (profile, location, memberships) is deleted immediately upon initiating the process. Firebase's automatic backup snapshots are retained according to Google's standard retention and overwritten every 30 days. Within 30 days of account deletion, your data no longer exists even in backups.</span>
+  </p>
+
+  <h2><span class="t-sr">Šta se ne briše</span><span class="t-en">What is not deleted</span></h2>
+  <ul class="t-sr-block">
+    <li><strong>Agregirani dijagnostički podaci (Crashlytics):</strong> anonimizovani izveštaji o padovima aplikacije, agregirani po verziji, ne sadrže lične identifikatore i čuvaju se za potrebe stabilnosti aplikacije.</li>
+    <li><strong>Vaš Google nalog:</strong> Krug ne kontroliše vaš Google nalog. Da ga obrišete, idite na <a href="https://myaccount.google.com">myaccount.google.com</a>.</li>
+  </ul>
+  <ul class="t-en-block">
+    <li><strong>Aggregated diagnostic data (Crashlytics):</strong> anonymized crash reports aggregated by version. They contain no personal identifiers and are retained for app stability purposes.</li>
+    <li><strong>Your Google account:</strong> Krug does not control your Google account. To delete it, go to <a href="https://myaccount.google.com">myaccount.google.com</a>.</li>
+  </ul>
+
+  <div class="warn">
+    <p>
+      <span class="t-sr"><strong>Napomena:</strong> Brisanje naloga je nepovratno. Ako se predomislite, biće potrebno da napravite novi nalog i ponovo se pridružite krugovima preko pozivnica.</span>
+      <span class="t-en"><strong>Note:</strong> Account deletion is irreversible. If you change your mind, you will need to create a new account and rejoin circles via invitations.</span>
+    </p>
+  </div>
+
+  <h2><span class="t-sr">Kontakt</span><span class="t-en">Contact</span></h2>
+  <div class="contact">
+    <p style="margin:0">
+      <span class="t-sr">Za pitanja u vezi sa brisanjem podataka:</span>
+      <span class="t-en">For questions about data deletion:</span><br>
+      <a href="mailto:krugappteam@gmail.com"><strong>krugappteam@gmail.com</strong></a>
+    </p>
+  </div>
+</main>
+
+<script>
+(function () {
+  var STORAGE_KEY = "krug-lang";
+  var html = document.documentElement;
+  var buttons = document.querySelectorAll(".lang-switch button");
+
+  function setLang(lang) {
+    if (lang !== "sr" && lang !== "en") lang = "sr";
+    html.setAttribute("lang", lang);
+    buttons.forEach(function (b) {
+      b.classList.toggle("active", b.dataset.lang === lang);
+    });
+    try { localStorage.setItem(STORAGE_KEY, lang); } catch (e) {}
+  }
+
+  var urlLang = new URLSearchParams(location.search).get("lang");
+  var saved = null;
+  try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+  var browser = (navigator.language || "sr").toLowerCase().startsWith("sr") ? "sr" : "en";
+  setLang(urlLang || saved || browser);
+
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () { setLang(b.dataset.lang); });
+  });
+})();
+</script>
+</body>
+</html>
