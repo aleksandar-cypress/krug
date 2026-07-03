@@ -232,6 +232,7 @@ fun MapScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val activePlaces by viewModel.activePlaces.collectAsStateWithLifecycle()
     val eventsByPlace by viewModel.eventsByPlace.collectAsStateWithLifecycle()
+    val autoStatusByUid by viewModel.autoStatusByUid.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val view = LocalView.current
     val haptic: () -> Unit = remember(view) {
@@ -786,6 +787,7 @@ fun MapScreen(
                     member = detailMember,
                     selfLocation = state.selfLocation,
                     photo = detailMember.photoUrl?.let { photoCache[it] },
+                    autoStatus = autoStatusByUid[detailMember.uid],
                     onOpenInMaps = {
                         detailMember.location?.let { loc ->
                             val uri = android.net.Uri.parse(
@@ -2270,6 +2272,7 @@ private fun MemberDetailSheet(
     member: MemberWithLocation,
     selfLocation: org.krug.app.core.location.LocationModel?,
     photo: Bitmap?,
+    autoStatus: String?,
     onOpenInMaps: () -> Unit,
     onRefresh: () -> Unit,
     onOpenHistory: () -> Unit,
@@ -2366,6 +2369,22 @@ private fun MemberDetailSheet(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                // Auto-status pill — "Kod kuće" / "U pokretu 45 km/h". Prikazuje se
+                // samo za druge (ne self) i samo ako je fresh location (< 15 min).
+                if (!member.isSelf && !autoStatus.isNullOrBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                    ) {
+                        Text(
+                            text = autoStatus,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
                 }
             }
         }

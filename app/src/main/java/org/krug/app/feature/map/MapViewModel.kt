@@ -242,6 +242,31 @@ class MapViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Auto-status po uid-u: "Kuća" / "U pokretu • 45 km/h" / null.
+     * Priority: place presence > motion > null.
+     */
+    val autoStatusByUid: StateFlow<Map<String, String>> = uiState
+        .combine(activePlaces) { state, places ->
+            state.members.mapNotNull { m ->
+                val loc = m.location ?: return@mapNotNull null
+                val now = System.currentTimeMillis()
+                if (now - loc.updatedAt > 15 * 60_000L) return@mapNotNull null
+                val place = places.firstOrNull { p ->
+                    val d = FloatArray(1)
+                    android.location.Location.distanceBetween(loc.lat, loc.lng, p.lat, p.lng, d)
+                    d[0] <= p.radius
+                }
+                if (place != null) return@mapNotNull m.uid to place.name
+                if (loc.speed > 3f) {
+                    val kmh = (loc.speed * 3.6f).toInt()
+                    return@mapNotNull m.uid to "U pokretu • $kmh km/h"
+                }
+                null
+            }.toMap()
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
     private fun combineForUser(selfUid: String): Flow<MapUiState> {
         val circlesFlow = circleRepository.observeMyCircles(selfUid)
         return combine(
