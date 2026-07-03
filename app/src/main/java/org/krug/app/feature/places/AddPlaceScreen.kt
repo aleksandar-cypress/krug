@@ -2,6 +2,9 @@ package org.krug.app.feature.places
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.Place
@@ -65,10 +69,13 @@ fun AddPlaceScreen(
     viewModel: PlacesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     var name by remember { mutableStateOf("") }
     var nameEdited by remember { mutableStateOf(false) }
     var radius by remember { mutableStateOf(PlaceModel.DEFAULT_RADIUS_M.toFloat()) }
     var category by remember { mutableStateOf(PlaceCategory.OTHER) }
+    var searchQuery by remember { mutableStateOf("") }
+    var searchVisible by remember { mutableStateOf(false) }
     val mapViewRef = remember { MapViewHolder2() }
     var initialCenterApplied by remember { mutableStateOf(false) }
     // Camera state za overlay krug — lat i zoom određuju pixels-per-meter.
@@ -109,6 +116,14 @@ fun AddPlaceScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                 },
+                actions = {
+                    IconButton(onClick = { searchVisible = !searchVisible }) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = stringResource(R.string.places_search_cta),
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
@@ -120,6 +135,69 @@ fun AddPlaceScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
+            // Search bar iznad mape
+            if (searchVisible) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { q ->
+                            searchQuery = q
+                            viewModel.searchAddress(q)
+                        },
+                        placeholder = { Text(stringResource(R.string.places_search_hint)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = null,
+                            )
+                        },
+                    )
+                    if (searchResults.isNotEmpty()) {
+                        Spacer(Modifier.size(4.dp))
+                        androidx.compose.foundation.lazy.LazyColumn(
+                            modifier = Modifier.heightIn(max = 240.dp),
+                        ) {
+                            items(
+                                items = searchResults,
+                                key = { s -> "${s.lat},${s.lng}" },
+                            ) { s ->
+                                androidx.compose.material3.ListItem(
+                                    modifier = Modifier.clickable {
+                                        mapViewRef.map?.mapboxMap?.setCamera(
+                                            CameraOptions.Builder()
+                                                .center(Point.fromLngLat(s.lng, s.lat))
+                                                .zoom(16.0)
+                                                .build(),
+                                        )
+                                        if (!nameEdited || name.isBlank()) {
+                                            name = s.displayName
+                                        }
+                                        searchQuery = ""
+                                        viewModel.clearSearchResults()
+                                        searchVisible = false
+                                    },
+                                    headlineContent = { Text(s.displayName) },
+                                    supportingContent = {
+                                        Text(
+                                            s.placeName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 2,
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Mapa sa fiksnim crosshair-om
             Box(
                 modifier = Modifier

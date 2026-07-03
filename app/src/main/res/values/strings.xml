@@ -145,6 +145,11 @@
     <string name="places_notif_unknown_user">A member</string>
     <string name="privacy_place_notifs_label">Place notifications</string>
     <string name="privacy_place_notifs_hint">Get notified when a circle member arrives at or leaves a place.</string>
+    <string name="privacy_silent_hours_label">Silent hours</string>
+    <string name="privacy_silent_hours_hint">Suppress place notifications overnight.</string>
+    <string name="privacy_silent_hours_preset_night">22:00–07:00</string>
+    <string name="privacy_silent_hours_preset_late">23:00–07:00</string>
+    <string name="privacy_silent_hours_preset_midnight">00:00–06:00</string>
     <string name="places_cat_home">Home</string>
     <string name="places_cat_school">School</string>
     <string name="places_cat_work">Work</string>
@@ -195,6 +200,9 @@
     <string name="places_discard_confirm">Discard</string>
     <string name="places_sort_by_name">Sort A-Z</string>
     <string name="places_sort_by_date">Sort by date</string>
+    <string name="places_search_cta">Search address</string>
+    <string name="places_search_hint">Address, city, POI…</string>
+    <string name="member_chip_eta">ETA</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Members</string>

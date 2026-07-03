@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.krug.app.core.circle.CircleRepository
+import org.krug.app.core.directions.GeocodingRepository
 import org.krug.app.core.location.LocationModel
 import org.krug.app.core.location.LocationRepository
 import org.krug.app.core.places.PlaceModel
@@ -44,8 +45,34 @@ class PlacesViewModel @Inject constructor(
     private val locationRepository: LocationRepository,
     private val circleRepository: CircleRepository,
     private val userRepository: UserRepository,
+    private val geocodingRepository: GeocodingRepository,
     private val auth: FirebaseAuth,
 ) : ViewModel() {
+
+    private val _searchResults = MutableStateFlow<List<GeocodingRepository.Suggestion>>(emptyList())
+    val searchResults: StateFlow<List<GeocodingRepository.Suggestion>> = _searchResults.asStateFlow()
+
+    private var searchJob: kotlinx.coroutines.Job? = null
+
+    fun searchAddress(query: String) {
+        searchJob?.cancel()
+        if (query.trim().length < 3) {
+            _searchResults.value = emptyList()
+            return
+        }
+        searchJob = viewModelScope.launch {
+            // Debounce 300ms — user tipka, ne bombardujmo Mapbox API-jem.
+            kotlinx.coroutines.delay(300)
+            val proxLat = _state.value.currentLat
+            val proxLng = _state.value.currentLng
+            _searchResults.value = geocodingRepository.search(query, proxLat, proxLng)
+        }
+    }
+
+    fun clearSearchResults() {
+        searchJob?.cancel()
+        _searchResults.value = emptyList()
+    }
 
     private val circleId: String = requireNotNull(savedStateHandle["circleId"]) {
         "PlacesViewModel requires circleId"

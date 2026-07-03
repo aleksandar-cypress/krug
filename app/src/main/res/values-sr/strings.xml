@@ -147,6 +147,11 @@
     <string name="places_notif_unknown_user">Član</string>
     <string name="privacy_place_notifs_label">Obaveštenja o mestima</string>
     <string name="privacy_place_notifs_hint">Dobij obaveštenje kada član kruga stigne ili ode sa mesta.</string>
+    <string name="privacy_silent_hours_label">Tihi sati</string>
+    <string name="privacy_silent_hours_hint">Ne javljaj obaveštenja o mestima preko noći.</string>
+    <string name="privacy_silent_hours_preset_night">22:00–07:00</string>
+    <string name="privacy_silent_hours_preset_late">23:00–07:00</string>
+    <string name="privacy_silent_hours_preset_midnight">00:00–06:00</string>
     <string name="places_cat_home">Kuća</string>
     <string name="places_cat_school">Škola</string>
     <string name="places_cat_work">Posao</string>
@@ -197,6 +202,9 @@
     <string name="places_discard_confirm">Odbaci</string>
     <string name="places_sort_by_name">Sort A-Z</string>
     <string name="places_sort_by_date">Sort po datumu</string>
+    <string name="places_search_cta">Traži adresu</string>
+    <string name="places_search_hint">Adresa, grad, POI…</string>
+    <string name="member_chip_eta">Za</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Članovi</string>

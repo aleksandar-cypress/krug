@@ -26,4 +26,9 @@ data class UserSettings(
      * iz Settings da izbegne spam ako ima puno mesta ili velikog kruga sa aktivnim članovima.
      */
     val placeNotifsEnabled: Boolean = true,
+    /**
+     * Silent hours — u ovom vremenskom intervalu (npr 23:00–07:00) ne notif-uju se
+     * Place event-i. `null` = feature isključen. Format: "HH:MM-HH:MM" 24h.
+     */
+    val silentHours: String? = null,
 )

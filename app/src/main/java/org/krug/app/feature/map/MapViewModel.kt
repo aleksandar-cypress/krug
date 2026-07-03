@@ -131,6 +131,12 @@ class MapViewModel @Inject constructor(
         toLat: Double, toLng: Double,
     ): Double? = directionsRepository.drivingDistanceMeters(fromLat, fromLng, toLat, toLng)
 
+    suspend fun loadDrivingRoute(
+        fromLat: Double, fromLng: Double,
+        toLat: Double, toLng: Double,
+    ): org.krug.app.core.directions.DirectionsRepository.DrivingRoute? =
+        directionsRepository.drivingRoute(fromLat, fromLng, toLat, toLng)
+
     init {
         localPrefs.onboardingCompleted = true
     }

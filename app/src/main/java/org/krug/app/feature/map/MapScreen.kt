@@ -819,8 +819,8 @@ fun MapScreen(
                         detailUid = null
                         onOpenHistory(detailMember.uid, detailMember.displayName)
                     },
-                    loadDrivingDistanceMeters = { fromLat, fromLng, toLat, toLng ->
-                        viewModel.loadDrivingDistance(fromLat, fromLng, toLat, toLng)
+                    loadDrivingRoute = { fromLat, fromLng, toLat, toLng ->
+                        viewModel.loadDrivingRoute(fromLat, fromLng, toLat, toLng)
                     },
                 )
             }
@@ -2253,6 +2253,16 @@ private fun batteryColor(pct: Int): Color = when {
 
 // haversineMeters / formatDistance — preseljeni u core.util.Geo radi unit testabilnosti.
 
+/** Formatiraj ETA sekunde u human-readable string: "12 min" / "1h 15m". */
+private fun formatEta(seconds: Double): String {
+    val mins = (seconds / 60).toInt()
+    return when {
+        mins < 1 -> "<1 min"
+        mins < 60 -> "$mins min"
+        else -> "${mins / 60}h ${mins % 60}m"
+    }
+}
+
 @Composable
 private fun MemberDetailSheet(
     member: MemberWithLocation,
@@ -2261,7 +2271,7 @@ private fun MemberDetailSheet(
     onOpenInMaps: () -> Unit,
     onRefresh: () -> Unit,
     onOpenHistory: () -> Unit,
-    loadDrivingDistanceMeters: suspend (Double, Double, Double, Double) -> Double?,
+    loadDrivingRoute: suspend (Double, Double, Double, Double) -> org.krug.app.core.directions.DirectionsRepository.DrivingRoute?,
 ) {
     var refreshTriggered by remember { mutableStateOf(false) }
     LaunchedEffect(refreshTriggered) {
@@ -2273,6 +2283,7 @@ private fun MemberDetailSheet(
     // Putna udaljenost — null dok se učitava ili fail, tad UI fallback-uje na haversine.
     // Refetch trigger-uje samo na promenu uid-a, ne svaku poziciju (cache bucketuje 100m).
     var drivingDistanceMeters by remember(member.uid) { mutableStateOf<Double?>(null) }
+    var drivingDurationSec by remember(member.uid) { mutableStateOf<Double?>(null) }
     val selfLat = selfLocation?.lat
     val selfLng = selfLocation?.lng
     val memberLat = member.location?.lat
@@ -2281,7 +2292,9 @@ private fun MemberDetailSheet(
         if (!member.isSelf && selfLat != null && selfLng != null &&
             memberLat != null && memberLng != null
         ) {
-            drivingDistanceMeters = loadDrivingDistanceMeters(selfLat, selfLng, memberLat, memberLng)
+            val route = loadDrivingRoute(selfLat, selfLng, memberLat, memberLng)
+            drivingDistanceMeters = route?.distanceMeters
+            drivingDurationSec = route?.durationSeconds
         }
     }
     val markerColor = when {
@@ -2515,6 +2528,18 @@ private fun MemberDetailSheet(
                     iconRotationDeg = bearing,
                     modifier = Modifier.weight(1f),
                 )
+                // ETA chip — prikazuje se samo ako Mapbox Directions vrati duration
+                // (traffic-agnostic za free tier, ali OK približna procena).
+                val etaSec = drivingDurationSec
+                if (etaSec != null && etaSec > 0.0) {
+                    StatChip(
+                        label = stringResource(R.string.member_chip_eta),
+                        value = formatEta(etaSec),
+                        accentColor = MaterialTheme.colorScheme.primary,
+                        icon = Icons.Outlined.AccessTime,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
             StatChip(
                 label = stringResource(R.string.member_chip_last_seen),

@@ -48,6 +48,15 @@ class SettingsRepository @Inject constructor(
         docFor(uid).set(mapOf("placeNotifsEnabled" to enabled), SetOptions.merge()).await()
     }
 
+    suspend fun updateSilentHours(uid: String, value: String?) {
+        val payload: Map<String, Any> = if (value == null) {
+            mapOf("silentHours" to com.google.firebase.firestore.FieldValue.delete())
+        } else {
+            mapOf("silentHours" to value)
+        }
+        docFor(uid).set(payload, SetOptions.merge()).await()
+    }
+
     suspend fun updateShareUntil(uid: String, untilMs: Long?) {
         val payload: Map<String, Any> = if (untilMs == null) {
             // Firestore null-safe brisanje polja — set(null) bi bilo tipska greška.
@@ -67,6 +76,7 @@ class SettingsRepository @Inject constructor(
             language = data["language"] as? String ?: "sr",
             shareUntilMs = (data["shareUntilMs"] as? Number)?.toLong(),
             placeNotifsEnabled = data["placeNotifsEnabled"] as? Boolean ?: true,
+            silentHours = data["silentHours"] as? String,
         )
     }
 

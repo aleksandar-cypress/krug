@@ -120,8 +120,16 @@ class PrivacyViewModel @Inject constructor(
             settingsRepository.updatePlaceNotifs(uid, enabled)
         }
     }
+
+    fun setSilentHours(value: String?) {
+        val uid = authRepository.currentUser?.uid ?: return
+        viewModelScope.launch {
+            settingsRepository.updateSilentHours(uid, value)
+        }
+    }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PrivacyScreen(
     onBack: () -> Unit,
@@ -203,6 +211,53 @@ fun PrivacyScreen(
                     checked = state.settings.placeNotifsEnabled,
                     onCheckedChange = viewModel::setPlaceNotifs,
                 )
+            }
+
+            // Silent hours toggle + preset chips
+            Spacer(Modifier.size(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.privacy_silent_hours_label),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        text = stringResource(R.string.privacy_silent_hours_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.size(8.dp))
+                Switch(
+                    checked = state.settings.silentHours != null,
+                    onCheckedChange = { enabled ->
+                        viewModel.setSilentHours(if (enabled) "23:00-07:00" else null)
+                    },
+                )
+            }
+            if (state.settings.silentHours != null) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val presets = listOf(
+                        "22:00-07:00" to stringResource(R.string.privacy_silent_hours_preset_night),
+                        "23:00-07:00" to stringResource(R.string.privacy_silent_hours_preset_late),
+                        "00:00-06:00" to stringResource(R.string.privacy_silent_hours_preset_midnight),
+                    )
+                    presets.forEach { (value, label) ->
+                        FilterChip(
+                            selected = state.settings.silentHours == value,
+                            onClick = { viewModel.setSilentHours(value) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.size(16.dp))

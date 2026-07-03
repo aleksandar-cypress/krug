@@ -202,6 +202,25 @@ class LocationTrackingService : Service() {
     @Volatile private var lastHistoryLng: Double? = null
     @Volatile private var lastHistoryTsMs: Long = 0L
 
+    /**
+     * `silentHours` format: "HH:MM-HH:MM" (24h, `null` = feature off).
+     * Podržava wrap preko ponoći (npr "23:00-07:00" pokriva 23-24 i 0-7).
+     */
+    private fun isInSilentHours(silentHours: String?): Boolean {
+        if (silentHours.isNullOrBlank()) return false
+        val parts = silentHours.split("-")
+        if (parts.size != 2) return false
+        val (fromH, fromM) = parts[0].split(":").let { it[0].toIntOrNull() to it.getOrNull(1)?.toIntOrNull() }
+        val (toH, toM) = parts[1].split(":").let { it[0].toIntOrNull() to it.getOrNull(1)?.toIntOrNull() }
+        if (fromH == null || fromM == null || toH == null || toM == null) return false
+        val cal = java.util.Calendar.getInstance()
+        val nowMin = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+        val fromMin = fromH * 60 + fromM
+        val toMin = toH * 60 + toM
+        return if (fromMin <= toMin) nowMin in fromMin..toMin
+        else nowMin >= fromMin || nowMin <= toMin // wrap preko ponoći
+    }
+
     private fun shouldWriteHistory(loc: android.location.Location): Boolean {
         val prevLat = lastHistoryLat
         val prevLng = lastHistoryLng
@@ -642,6 +661,8 @@ class LocationTrackingService : Service() {
                         notifiedPlaceEventIds.add(evt.id)
                         // Per-user opt-out — user je isključio place notif u Settings.
                         if (!currentSettings.placeNotifsEnabled) return@forEach
+                        // Silent hours filter — ne notifie u vremenskom prozoru (npr 23-07).
+                        if (isInSilentHours(currentSettings.silentHours)) return@forEach
                         placeEventNotifier.notifyEvent(evt)
                     }
                 }

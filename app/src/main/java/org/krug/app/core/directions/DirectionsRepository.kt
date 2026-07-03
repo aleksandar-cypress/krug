@@ -31,6 +31,9 @@ import timber.log.Timber
 @Singleton
 class DirectionsRepository @Inject constructor() {
 
+    data class DrivingRoute(val distanceMeters: Double, val durationSeconds: Double)
+
+    private data class CachedRoute(val route: DrivingRoute, val fetchedAt: Long)
     private data class CachedDistance(val meters: Double, val fetchedAt: Long)
 
     private val mutex = Mutex()
@@ -132,6 +135,81 @@ class DirectionsRepository @Inject constructor() {
         // od 10m oborije cache i pošalje novi request.
         fun bucket(d: Double): Long = (d * 1000.0).toLong()
         return "${bucket(fromLat)},${bucket(fromLng)}->${bucket(toLat)},${bucket(toLng)}"
+    }
+
+    // ETA (route sa distance + duration).
+    private val routeCache = object : LinkedHashMap<String, CachedRoute>(
+        MAX_CACHE_ENTRIES, 0.75f, true,
+    ) {
+        override fun removeEldestEntry(eldest: Map.Entry<String, CachedRoute>): Boolean =
+            size > MAX_CACHE_ENTRIES
+    }
+    private val inFlightRoute = mutableMapOf<String, CompletableDeferred<DrivingRoute?>>()
+
+    /**
+     * Vraća putnu udaljenost + duration u sekundama. Duration je traffic-agnostic
+     * (Mapbox besplatni tier nema live traffic). Za bolju ETA — Mapbox `driving-traffic`
+     * profil, ali on ima drugačiju kvotu.
+     */
+    suspend fun drivingRoute(
+        fromLat: Double, fromLng: Double,
+        toLat: Double, toLng: Double,
+    ): DrivingRoute? {
+        val key = cacheKey(fromLat, fromLng, toLat, toLng)
+        val now = System.currentTimeMillis()
+        val deferred: CompletableDeferred<DrivingRoute?> = mutex.withLock {
+            routeCache[key]?.let { cached ->
+                if (now - cached.fetchedAt < CACHE_TTL_MS) return cached.route
+            }
+            inFlightRoute[key]?.let { return@withLock it }
+            val fresh = CompletableDeferred<DrivingRoute?>()
+            inFlightRoute[key] = fresh
+            scope.async {
+                val result = runCatching {
+                    fetchRouteFromApi(fromLat, fromLng, toLat, toLng)
+                }.getOrNull()
+                mutex.withLock {
+                    inFlightRoute.remove(key)
+                    if (result != null) routeCache[key] = CachedRoute(result, System.currentTimeMillis())
+                }
+                fresh.complete(result)
+            }
+            fresh
+        }
+        return deferred.await()
+    }
+
+    private suspend fun fetchRouteFromApi(
+        fromLat: Double, fromLng: Double,
+        toLat: Double, toLng: Double,
+    ): DrivingRoute? = withContext(Dispatchers.IO) {
+        val token = BuildConfig.MAPBOX_PUBLIC_TOKEN
+        if (token.isBlank()) return@withContext null
+        val url = buildString {
+            append("https://api.mapbox.com/directions/v5/mapbox/driving/")
+            append("$fromLng,$fromLat;$toLng,$toLat")
+            append("?access_token=$token&overview=false&geometries=geojson")
+        }
+        runCatching {
+            val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                connectTimeout = REQUEST_TIMEOUT_MS
+                readTimeout = REQUEST_TIMEOUT_MS
+                requestMethod = "GET"
+            }
+            try {
+                if (conn.responseCode != 200) return@runCatching null
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                val obj = Json.parseToJsonElement(body).jsonObject
+                val routes = obj["routes"]?.jsonArray ?: return@runCatching null
+                if (routes.isEmpty()) return@runCatching null
+                val first = routes[0].jsonObject
+                val dist = first["distance"]?.jsonPrimitive?.doubleOrNull ?: return@runCatching null
+                val dur = first["duration"]?.jsonPrimitive?.doubleOrNull ?: return@runCatching null
+                DrivingRoute(dist, dur)
+            } finally {
+                conn.disconnect()
+            }
+        }.onFailure { Timber.w(it, "Directions route fetch failed") }.getOrNull()
     }
 
     private companion object {
