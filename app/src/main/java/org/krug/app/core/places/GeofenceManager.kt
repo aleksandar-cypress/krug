@@ -1,0 +1,144 @@
+package org.krug.app.core.places
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.Geofence
+import com.google.android.gms.location.GeofencingClient
+import com.google.android.gms.location.GeofencingRequest
+import com.google.android.gms.location.LocationServices
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.tasks.await
+import timber.log.Timber
+
+/**
+ * Wrapper oko Google Play Services GeofencingClient.
+ *
+ * Request ID format: `{circleId}:{placeId}` — BroadcastReceiver iz njega izvlači
+ * circle context da bi znao gde da upiše event.
+ *
+ * Ograničenja:
+ *  - Max 100 geofence-a po app instanci (Google-ov limit).
+ *  - Radius min 10m (praktično 50m zbog GPS accuracy).
+ *  - Zahteva ACCESS_BACKGROUND_LOCATION za pouzdano trigger-ovanje kad je app killed.
+ *  - Custom ROM-ovi (Xiaomi/Huawei) mogu zakačiti battery optimizer i suppress-ovati
+ *    geofence event-e; korisnika treba uputiti na "Whitelist Krug" u battery settings.
+ */
+@Singleton
+class GeofenceManager @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
+    private val client: GeofencingClient by lazy {
+        LocationServices.getGeofencingClient(context)
+    }
+
+    private val pendingIntent: PendingIntent by lazy {
+        val intent = Intent(context, GeofenceBroadcastReceiver::class.java).apply {
+            action = ACTION_GEOFENCE_TRANSITION
+        }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        PendingIntent.getBroadcast(context, 0, intent, flags)
+    }
+
+    /**
+     * Registruje batch places-a. Poziva se pri app start-u (preko LocationTrackingService)
+     * i kad se lista places-a promeni (nov place, obrisan, edit).
+     *
+     * Ako user nije dao BACKGROUND_LOCATION permission — logs warning i ne registruje
+     * (GeofencingClient bi bacio SecurityException).
+     */
+    @SuppressLint("MissingPermission")
+    suspend fun registerAll(entries: List<GeofenceEntry>): Boolean {
+        if (!hasRequiredPermissions()) {
+            Timber.w("GeofenceManager: missing location permissions, skip register")
+            return false
+        }
+        if (entries.isEmpty()) {
+            Timber.d("GeofenceManager: no entries to register")
+            return true
+        }
+        val geofences = entries.map { entry ->
+            Geofence.Builder()
+                .setRequestId("${entry.circleId}:${entry.placeId}")
+                .setCircularRegion(entry.lat, entry.lng, entry.radius.toFloat())
+                .setExpirationDuration(Geofence.NEVER_EXPIRE)
+                .setTransitionTypes(
+                    Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT,
+                )
+                .setNotificationResponsiveness(30_000)
+                .build()
+        }
+        val request = GeofencingRequest.Builder()
+            .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
+            .addGeofences(geofences)
+            .build()
+        return try {
+            client.addGeofences(request, pendingIntent).await()
+            Timber.i("GeofenceManager: registered %d geofences", geofences.size)
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "GeofenceManager: addGeofences failed")
+            false
+        }
+    }
+
+    suspend fun removeAll(): Boolean {
+        return try {
+            client.removeGeofences(pendingIntent).await()
+            Timber.i("GeofenceManager: removed all geofences")
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "GeofenceManager: removeGeofences failed")
+            false
+        }
+    }
+
+    suspend fun removeSpecific(requestIds: List<String>): Boolean {
+        if (requestIds.isEmpty()) return true
+        return try {
+            client.removeGeofences(requestIds).await()
+            Timber.i("GeofenceManager: removed %d specific geofences", requestIds.size)
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "GeofenceManager: removeGeofences (specific) failed")
+            false
+        }
+    }
+
+    private fun hasRequiredPermissions(): Boolean {
+        val fine = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        val bg = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+        return fine && bg
+    }
+
+    companion object {
+        const val ACTION_GEOFENCE_TRANSITION = "org.krug.app.GEOFENCE_TRANSITION"
+    }
+}
+
+data class GeofenceEntry(
+    val circleId: String,
+    val placeId: String,
+    val lat: Double,
+    val lng: Double,
+    val radius: Int,
+)

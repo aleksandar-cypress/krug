@@ -1,0 +1,71 @@
+package org.krug.app.core.places
+
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import androidx.core.app.NotificationChannelCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
+import org.krug.app.MainActivity
+import org.krug.app.R
+
+/**
+ * Lokalna notifikacija kad neko iz kruga uđe/izađe iz place-a.
+ * Nižeg prioriteta od SOS-a (DEFAULT, ne HIGH), nema alarm sound-a.
+ */
+@Singleton
+class PlaceEventNotifier @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
+
+    fun ensureChannel() {
+        val mgr = NotificationManagerCompat.from(context)
+        if (mgr.getNotificationChannel(CHANNEL_ID) != null) return
+        val channel = NotificationChannelCompat.Builder(
+            CHANNEL_ID,
+            NotificationManager.IMPORTANCE_DEFAULT,
+        )
+            .setName(context.getString(R.string.places_notif_channel))
+            .setDescription(context.getString(R.string.places_notif_channel_desc))
+            .setShowBadge(false)
+            .build()
+        mgr.createNotificationChannel(channel)
+    }
+
+    fun notifyEvent(event: PlaceEventModel) {
+        ensureChannel()
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pi = PendingIntent.getActivity(
+            context, event.id.hashCode(), openIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val userName = event.userName.ifBlank { context.getString(R.string.places_notif_unknown_user) }
+        val bodyRes = if (event.type == PlaceEventModel.TYPE_ENTER) {
+            R.string.places_notif_body_enter
+        } else {
+            R.string.places_notif_body_exit
+        }
+        val body = context.getString(bodyRes, userName, event.placeName)
+        val notif = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(context.getString(R.string.places_notif_title))
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .build()
+        NotificationManagerCompat.from(context).notify(event.id.hashCode(), notif)
+    }
+
+    companion object {
+        const val CHANNEL_ID = "places_events"
+    }
+}

@@ -2,6 +2,67 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-07-03, dvadeset peta sesija — Closed testing PUBLISHED, testeri regrutovani iz Firebase)
+
+Kratka sesija, fokus na verifikaciju Google review statusa i regrutaciju dodatnih testera za 14-dnevni Closed testing period.
+
+### A) Google review — APPROVED za 8 minuta
+
+Play Console → Publishing overview → Submission activity: **Submission 1 (Jul 02, 2026, 2:20 PM submitted → 2:28 PM Published)**. 13 changes u paketu (Countries, Testers list, Store listing SR, Content Rating, Target audience, Privacy policy, Ads declaration, Data safety, Full-screen intent, App category, itd.). Nije bio human review, već automated Play Console policy check — prošao odmah.
+
+**Šta to znači**: Closed testing track je LIVE, opt-in link radi, testeri mogu odmah da instaliraju. Sensitive permissions declarations (background location, FGS location, full-screen intent) su prihvaćene ZA Closed testing. Kada se bude apliciralo za Production access, biće još jedan review krug gde Google detaljnije gleda demo video za background location.
+
+### B) Testeri iz Firebase Auth
+
+Umesto ručne regrutacije, izvučeni postojeći useri iz Firebase Auth-a preko `firebase auth:export /tmp/krug-users.json --project krug-86527`. Total 39 accounts, 13 sa email (svi Gmail), 26 bez email-a (anonymous/phone-only auth).
+
+**Email adrese dodane u Closed testing tester listu (9 novih)**:
+- `magdalenabajic63@gmail.com` — Magdalena Bajic
+- `stamparijabajiccacak@gmail.com` — Slobodan Bajic
+- `helloaciko@gmail.com` — Aciko Website
+- `markosavicbolero@gmail.com` — Marko Savic
+- `bogdandjurovic45@gmail.com` — Bogdan Djurovic
+- `boskodjurovic12@gmail.com` — Bosko Djurovic
+- `makica09@gmail.com` — Marija Đurović
+- `matijaa.savic11@gmail.com` — Matija Savić
+- `dusica.bajic.db@gmail.com` — Dusica Bajic
+
+Plus postojećih 5 (`krugappteam@`, `aleksandarr@`, `bajkeizmaste@`, `jelenavasilic84@`, `maslacjana@`) → **ukupno 14-15 testera**, preko Google minimuma 12.
+
+### C) Opt-in link (Closed testing)
+
+Play Console pokazao dva URL-a nakon što je track objavljen:
+- `https://play.google.com/apps/testing/org.krug.app` — **opt-in link** (šalje se testerima)
+- `https://play.google.com/store/apps/details?id=org.krug.app` — Play Store stranica (koristi se posle opt-in-a za instalaciju)
+
+Napomena: format `apps/testing/PACKAGE_NAME` je za Closed testing; Internal testing koristi drugi format sa numeričkim track ID-jem (`apps/internaltest/4701482258894794361`).
+
+**Draft poruke za testere** (WhatsApp/SMS):
+```
+Testiram novu app Krug (deljenje lokacije sa porodicom i prijateljima). Ako možeš da pomogneš:
+
+1. Otvori: https://play.google.com/apps/testing/org.krug.app
+2. Klikni "Become a tester" i Accept
+3. Instaliraj Krug sa Play Store-a
+4. Ostavi je instaliranu 14 dana (Google zahtev za testing period)
+
+Hvala!
+```
+
+### Preostali kritični put pre production
+
+1. **Pošalji opt-in link** svim testerima (poruka gore). 14-dnevni brojač kreće od momenta opt-in-a, ne od dodavanja na listu.
+2. **Prati aktivnost testera** — Firebase Console → Crashlytics za crash-eve, Analytics za DAU/retention.
+3. **Production access application ~mid-July** — Play Console → Testing → Closed testing → Apply for production access. Zahtev: 12+ opt-in testera aktivnih 14 dana.
+4. **V1.1 Premium bekhend** — Places (geofence), Location history 30d, Battery alerts. Duži tračak, ne mora sad.
+
+### Health stanja (kraj sesije)
+
+- Nema code changes, samo Play Console operacije.
+- Closed testing track: **Published/LIVE**.
+- Firebase Auth export: 39 accounts total, 13 sa email.
+- Poslednji commit: `5d169e5` (Play Console: 24. sesija).
+
 ## Gde smo stali (2026-07-02, dvadeset četvrta sesija — Play Console kompletiran, Closed testing submitted za review)
 
 Cela sesija fokusirana na Play Console workflow: popuniti sve preostale App content declaracije, postaviti Internal + Closed testing tracks, snimiti demo video za background location, i submit-ovati za Google-ov app review. Radilo na S24 Ultra preko Play Store instalirane release verzije (org.krug.app "unreviewed"). Nijedan code commit ove sesije, ali dodati novi assets/docs.

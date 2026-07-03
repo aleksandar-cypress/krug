@@ -72,6 +72,9 @@ class LocationTrackingService : Service() {
     @Inject lateinit var sosRepository: SosRepository
     @Inject lateinit var sosNotifier: SosNotifier
     @Inject lateinit var localPrefs: LocalPrefs
+    @Inject lateinit var placeRepository: org.krug.app.core.places.PlaceRepository
+    @Inject lateinit var placeEventNotifier: org.krug.app.core.places.PlaceEventNotifier
+    @Inject lateinit var geofenceManager: org.krug.app.core.places.GeofenceManager
 
     /**
      * Per-uid map: poslednji `triggeredAt` koji je već notifikovan korisnika.
@@ -309,6 +312,7 @@ class LocationTrackingService : Service() {
         observeSettings()
         observeRefreshRequests()
         observeCircleSos()
+        observeCirclePlaces()
         registerActivityRecognition()
     }
 
@@ -545,8 +549,70 @@ class LocationTrackingService : Service() {
         }
     }
 
-    private suspend fun handleSosUpdate(uid: String, sos: SosModel?, myCircleIds: Set<String>) {
-        val now = System.currentTimeMillis()
+    /** Timestamp start-a listener-a. Event-e starije od ovoga ignorišemo (replay guard). */
+    @Volatile private var placesListenerStartedAt: Long = 0L
+    private val notifiedPlaceEventIds = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    /**
+     * Registruje geofence-e za sve places-e svih krugova + observe-uje placeEvents
+     * subcollection radi lokalne notifikacije. Sopstveni event-i se filtrira
+     * (ne notifikuje sebe za svoj enter/exit).
+     */
+    private fun observeCirclePlaces() {
+        val selfUid = firebaseAuth.currentUser?.uid ?: return
+        placesListenerStartedAt = System.currentTimeMillis()
+        // 1) Prati sve places i re-registruj geofence-e kad se lista promeni.
+        scope.launch {
+            circleRepository.observeMyCircles(selfUid)
+                .flatMapLatest { circles ->
+                    val circleIds = circles.map { it.id }
+                    if (circleIds.isEmpty()) flowOf(emptyList())
+                    else combine(
+                        circleIds.map { cid ->
+                            placeRepository.observePlaces(cid).map { places -> cid to places }
+                        },
+                    ) { pairs -> pairs.toList() }
+                }
+                .collectLatest { pairs ->
+                    val entries = pairs.flatMap { (cid, places) ->
+                        places.map { p ->
+                            org.krug.app.core.places.GeofenceEntry(
+                                circleId = cid, placeId = p.id,
+                                lat = p.lat, lng = p.lng, radius = p.radius,
+                            )
+                        }
+                    }
+                    geofenceManager.removeAll()
+                    if (entries.isNotEmpty()) geofenceManager.registerAll(entries)
+                }
+        }
+        // 2) Prati placeEvents svih krugova i pokazuj lokalnu notif za tuđe event-e.
+        scope.launch {
+            circleRepository.observeMyCircles(selfUid)
+                .flatMapLatest { circles ->
+                    val circleIds = circles.map { it.id }
+                    if (circleIds.isEmpty()) flowOf(emptyList())
+                    else combine(
+                        circleIds.map { cid -> placeRepository.observeRecentEvents(cid) },
+                    ) { arrays -> arrays.toList().flatten() }
+                }
+                .collectLatest { events ->
+                    events.forEach { evt ->
+                        if (evt.userId == selfUid) return@forEach
+                        if (evt.id in notifiedPlaceEventIds) return@forEach
+                        val ts = evt.timestamp?.time ?: 0L
+                        if (ts < placesListenerStartedAt) {
+                            notifiedPlaceEventIds.add(evt.id)
+                            return@forEach
+                        }
+                        notifiedPlaceEventIds.add(evt.id)
+                        placeEventNotifier.notifyEvent(evt)
+                    }
+                }
+        }
+    }
+
+    private suspend fun handleSosUpdate(uid: String, sos: SosModel?, myCircleIds: Set<String>) {        val now = System.currentTimeMillis()
         // Aktivni SOS: (1) postoji, (2) triggeredAt validan i unutar TTL, (3) u scope-u
         // (legacy SOS bez circleId-a prolazi kao fallback za backward compat sa starim
         // klijentima). takeIf uklanja !! ispod jer smart-cast održava non-null.

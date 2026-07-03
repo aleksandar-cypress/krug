@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.ChildCare
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -69,6 +70,7 @@ fun CircleDetailScreen(
     onBack: () -> Unit,
     onLeftOrDeleted: () -> Unit,
     onShowInvite: (circleId: String, circleName: String, code: String) -> Unit,
+    onOpenPlaces: (circleId: String) -> Unit,
     viewModel: CircleDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -175,6 +177,19 @@ fun CircleDetailScreen(
                     Spacer(Modifier.size(8.dp))
                     Text(stringResource(R.string.circle_detail_invite_cta))
                 }
+            }
+
+            Spacer(Modifier.size(12.dp))
+            OutlinedButton(
+                onClick = { onOpenPlaces(state.circleId) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Place,
+                    contentDescription = null,
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(stringResource(R.string.places_section_title))
             }
 
             Spacer(Modifier.size(24.dp))

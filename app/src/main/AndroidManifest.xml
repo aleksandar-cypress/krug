@@ -67,6 +67,11 @@
             android:name=".core.location.ActivityRecognitionReceiver"
             android:exported="false" />
 
+        <!-- Geofence transition receiver — Google Play Services enter/exit broadcasts. -->
+        <receiver
+            android:name=".core.places.GeofenceBroadcastReceiver"
+            android:exported="false" />
+
         <!-- Boot + package replaced receiver — restart FGS automatski. -->
         <receiver
             android:name=".core.location.BootReceiver"

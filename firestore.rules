@@ -71,6 +71,36 @@ service cloud.firestore {
 
       allow delete: if isAuthed() && resource.data.ownerId == request.auth.uid;
 
+      // circles/{cid}/places/{pid}
+      // Places (geofence lokacije) — samo članovi kruga mogu da čitaju i pišu.
+      // Free tier limit (3 po krugu) enforce-uje se na klijentu; rules ne mogu jer
+      // provera "count docs" nije podržana. Server-side enforcement u v1.2+ preko
+      // Cloud Functions ili Firestore counter document-a.
+      match /places/{pid} {
+        allow read: if isAuthed()
+          && request.auth.uid in circleData(cid).memberIds;
+        allow create: if isAuthed()
+          && request.auth.uid in circleData(cid).memberIds
+          && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isAuthed()
+          && request.auth.uid in circleData(cid).memberIds;
+        allow delete: if isAuthed()
+          && request.auth.uid in circleData(cid).memberIds;
+      }
+
+      // circles/{cid}/placeEvents/{eid}
+      // Enter/exit event-i. Klijent piše sopstveni event (userId == caller),
+      // ostali članovi listen-uju i pokazuju lokalnu notifikaciju.
+      // TTL policy briše stare event-e posle 24h (podesiti u Firebase Console).
+      match /placeEvents/{eid} {
+        allow read: if isAuthed()
+          && request.auth.uid in circleData(cid).memberIds;
+        allow create: if isAuthed()
+          && request.auth.uid in circleData(cid).memberIds
+          && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if false;
+      }
+
       // circles/{cid}/members/{memberUid}
       match /members/{memberUid} {
         allow read: if isAuthed();

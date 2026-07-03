@@ -122,6 +122,30 @@
     <string name="sos_notif_body_with_circle">Iz kruga „%1$s\".\nTapni da otvoriš mapu i vidiš gde je član.</string>
     <string name="sos_notif_unknown_sender">Član kruga</string>
 
+    <!-- Places (geofence) -->
+    <string name="places_section_title">Mesta</string>
+    <string name="places_empty_title">Još nema mesta</string>
+    <string name="places_empty_hint">Dodaj mesta kao Kuća, Škola ili Posao. Članovi dobijaju obaveštenje kada neko stigne ili ode.</string>
+    <string name="places_add_cta">Dodaj mesto</string>
+    <string name="places_limit_reached">Dostignut je limit besplatne verzije (%1$d mesta). Premium: neograničeno.</string>
+    <string name="places_new_title">Novo mesto</string>
+    <string name="places_edit_title">Izmeni mesto</string>
+    <string name="places_name_label">Ime</string>
+    <string name="places_name_hint">Kuća, Škola, Posao…</string>
+    <string name="places_radius_label">Radijus: %1$d m</string>
+    <string name="places_use_current_location">Koristi trenutnu lokaciju</string>
+    <string name="places_tap_map_hint">Tapni na mapu da postaviš lokaciju</string>
+    <string name="places_save">Sačuvaj</string>
+    <string name="places_delete">Obriši</string>
+    <string name="places_delete_confirm_title">Obrisati mesto?</string>
+    <string name="places_delete_confirm_msg">Članovi više neće dobijati obaveštenja za ovo mesto.</string>
+    <string name="places_notif_channel">Obaveštenja o mestima</string>
+    <string name="places_notif_channel_desc">Obaveštenja kada član stigne ili ode sa mesta</string>
+    <string name="places_notif_title">Krug</string>
+    <string name="places_notif_body_enter">%1$s je stigao/la kod %2$s</string>
+    <string name="places_notif_body_exit">%1$s je otišao/la sa %2$s</string>
+    <string name="places_notif_unknown_user">Član</string>
+
     <!-- Map UI -->
     <string name="map_members_sheet_title">Članovi</string>
     <string name="map_member_last_seen_now">upravo sada</string>
