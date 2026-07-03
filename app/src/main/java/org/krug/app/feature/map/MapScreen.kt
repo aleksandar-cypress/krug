@@ -241,6 +241,7 @@ fun MapScreen(
     val photoCache = remember { mutableStateMapOf<String, Bitmap>() }
     var detailUid by remember { mutableStateOf<String?>(null) }
     var detailPlaceId by remember { mutableStateOf<String?>(null) }
+    var placePendingDelete by remember { mutableStateOf<org.krug.app.core.places.PlaceModel?>(null) }
     // Pending refocus: kad user tapne Osveži, pamtimo (uid, since). Kad stigne
     // sveži location.updatedAt > since za taj uid, automatski flyTo na novu poziciju.
     var pendingRefocus by remember { mutableStateOf<Pair<String, Long>?>(null) }
@@ -822,8 +823,34 @@ fun MapScreen(
                     if (activeCid != null) onOpenPlacesForCircle(activeCid)
                 },
                 onDelete = {
+                    placePendingDelete = detailPlace
                     detailPlaceId = null
-                    viewModel.deletePlace(detailPlace.id)
+                },
+            )
+        }
+
+        placePendingDelete?.let { p ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { placePendingDelete = null },
+                title = { Text(stringResource(R.string.places_delete_confirm_title)) },
+                text = { Text(stringResource(R.string.places_delete_confirm_msg)) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = {
+                            viewModel.deletePlace(p.id)
+                            placePendingDelete = null
+                        },
+                    ) {
+                        Text(
+                            stringResource(R.string.places_delete),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { placePendingDelete = null }) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
                 },
             )
         }

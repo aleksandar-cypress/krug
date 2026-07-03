@@ -43,6 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
+import org.krug.app.core.util.confirmHaptic
 import org.krug.app.R
 import org.krug.app.core.places.PlaceModel
 
@@ -59,8 +61,13 @@ fun PlacesScreen(
     val presenceByPlace by viewModel.presenceByPlace.collectAsStateWithLifecycle()
     var pendingDelete by remember { mutableStateOf<PlaceModel?>(null) }
     val limitReached = state.places.size >= PlaceModel.FREE_TIER_MAX_PER_CIRCLE
+    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val view = androidx.compose.ui.platform.LocalView.current
 
     Scaffold(
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.places_section_title)) },
@@ -90,7 +97,14 @@ fun PlacesScreen(
                 .padding(padding)
                 .padding(horizontal = 20.dp),
         ) {
-            if (state.places.isEmpty()) {
+            if (!state.loaded) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator()
+                }
+            } else if (state.places.isEmpty()) {
                 EmptyState()
             } else {
                 // Kompaktne statistike — broj mesta i događaja danas (0h-24h).
@@ -170,10 +184,24 @@ fun PlacesScreen(
             error = state.error,
             onDismiss = { viewModel.closeSheet() },
             onSave = { name, lat, lng, radius, category ->
-                viewModel.createPlace(name, lat, lng, radius, category) {}
+                viewModel.createPlace(name, lat, lng, radius, category) {
+                    view.confirmHaptic()
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.places_saved_snackbar, name),
+                        )
+                    }
+                }
             },
             onUpdate = { placeId, name, radius, category ->
-                viewModel.updatePlace(placeId, name, radius, category) {}
+                viewModel.updatePlace(placeId, name, radius, category) {
+                    view.confirmHaptic()
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.places_updated_snackbar),
+                        )
+                    }
+                }
             },
         )
     }
@@ -185,14 +213,23 @@ fun PlacesScreen(
             text = { Text(stringResource(R.string.places_delete_confirm_msg)) },
             confirmButton = {
                 TextButton(onClick = {
+                    val deletedName = p.name
                     viewModel.deletePlace(p.id)
                     pendingDelete = null
+                    view.confirmHaptic()
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.places_deleted_snackbar, deletedName),
+                        )
+                    }
                 }) {
                     Text(stringResource(R.string.places_delete))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("Otkaži") }
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             },
         )
     }

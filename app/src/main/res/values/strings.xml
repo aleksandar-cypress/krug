@@ -161,6 +161,7 @@
     <string name="places_activity_verb_exit">left</string>
     <string name="history_title">Location history</string>
     <string name="history_empty">No location data for this day</string>
+    <string name="history_empty_hint">Krug records location while you move. Come back later to see today\'s trail.</string>
     <string name="history_time_label">Time: %1$s</string>
     <string name="history_points_count">%1$d points</string>
     <string name="history_cta">View history</string>
@@ -174,6 +175,9 @@
     <string name="car_title">Krug</string>
     <string name="car_no_members">No members with location right now</string>
     <string name="car_action_refresh">Refresh</string>
+    <string name="places_saved_snackbar">Place saved: %1$s</string>
+    <string name="places_updated_snackbar">Place updated</string>
+    <string name="places_deleted_snackbar">Deleted: %1$s</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Members</string>

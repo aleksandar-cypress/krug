@@ -30,6 +30,7 @@ data class PlacesUiState(
     val currentLat: Double? = null,
     val currentLng: Double? = null,
     val saving: Boolean = false,
+    val loaded: Boolean = false,
     val error: String? = null,
     val sheetOpen: Boolean = false,
     val editingPlace: PlaceModel? = null,
@@ -100,7 +101,9 @@ class PlacesViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             places.collect { list ->
-                _state.value = _state.value.copy(places = list)
+                // Prvi emit iz Firestore znači da smo bar jednom primili snapshot —
+                // razdvaja "still loading" od "loaded, empty" za empty state UX.
+                _state.value = _state.value.copy(places = list, loaded = true)
             }
         }
         viewModelScope.launch {

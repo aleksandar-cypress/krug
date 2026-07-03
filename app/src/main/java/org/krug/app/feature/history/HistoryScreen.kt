@@ -73,6 +73,9 @@ fun HistoryScreen(
     var pointManager by remember { mutableStateOf<com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager?>(null) }
     var scrubTime by remember { mutableStateOf(1f) } // 0..1 = start..end dana
     var playing by remember { mutableStateOf(false) }
+    // Fit-bounds samo jednom po (dan, points-first-load). Kad user počne da menja
+    // scrub, ne pomeramo kameru — dozvoljavamo mu manuelnu kontrolu (pinch zoom, pan).
+    var cameraFitDone by remember(range.fromMs) { mutableStateOf(false) }
 
     // Auto-play: advance scrubTime kroz vreme dok playing=true.
     // Playback traje ~30s za ceo dan (24h scaled), stops kad stigne do 1.0.
@@ -142,18 +145,23 @@ fun HistoryScreen(
                 .withLineColor("#4F46E5")
                 .withLineWidth(4.0),
         )
-        // Fit bounds na traku samo pri prvom render-u (ne pomeraj kameru pri scrub-u).
-        val bounds = visible.map { it.lat to it.lng }
-        val minLat = bounds.minOf { it.first }
-        val maxLat = bounds.maxOf { it.first }
-        val minLng = bounds.minOf { it.second }
-        val maxLng = bounds.maxOf { it.second }
-        mapView?.mapboxMap?.setCamera(
-            CameraOptions.Builder()
-                .center(Point.fromLngLat((minLng + maxLng) / 2, (minLat + maxLat) / 2))
-                .zoom(13.0)
-                .build(),
-        )
+        // Fit bounds SAMO prvi put kad points za taj dan stignu — kasnije user ima punu
+        // manuelnu kontrolu (pinch zoom, pan). Bez ovog: scrub bi svaki put resetovao
+        // camera i user ne bi mogao da zumira detalje.
+        if (!cameraFitDone) {
+            val bounds = points.map { it.lat to it.lng }
+            val minLat = bounds.minOf { it.first }
+            val maxLat = bounds.maxOf { it.first }
+            val minLng = bounds.minOf { it.second }
+            val maxLng = bounds.maxOf { it.second }
+            mapView?.mapboxMap?.setCamera(
+                CameraOptions.Builder()
+                    .center(Point.fromLngLat((minLng + maxLng) / 2, (minLat + maxLat) / 2))
+                    .zoom(13.0)
+                    .build(),
+            )
+            cameraFitDone = true
+        }
     }
 
     Scaffold(
@@ -190,12 +198,31 @@ fun HistoryScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
                 if (points.isEmpty()) {
-                    Text(
-                        stringResource(R.string.history_empty),
-                        modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(24.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                MaterialTheme.shapes.medium,
+                            )
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            stringResource(R.string.history_empty),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                        Spacer(Modifier.size(6.dp))
+                        Text(
+                            stringResource(R.string.history_empty_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
                 }
             }
 

@@ -115,7 +115,7 @@ fun AddEditPlaceSheet(
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = onDismiss, enabled = !saving) {
-                    Text("Otkaži")
+                    Text(stringResource(R.string.action_cancel))
                 }
                 Spacer(Modifier.width(8.dp))
                 Button(

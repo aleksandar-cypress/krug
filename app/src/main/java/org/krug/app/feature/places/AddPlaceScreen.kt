@@ -174,7 +174,8 @@ fun AddPlaceScreen(
                         modifier = Modifier.size(48.dp),
                     )
                 }
-                // "Moja lokacija" FAB
+                // "Moja lokacija" FAB — disabled sve dok nemamo trenutnu lokaciju iz FGS-a.
+                val hasCurrentLocation = state.currentLat != null && state.currentLng != null
                 FloatingActionButton(
                     onClick = {
                         val lat = state.currentLat ?: return@FloatingActionButton
@@ -189,9 +190,21 @@ fun AddPlaceScreen(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(16.dp),
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = if (hasCurrentLocation) {
+                        MaterialTheme.colorScheme.surface
+                    } else {
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+                    },
                 ) {
-                    Icon(Icons.Outlined.MyLocation, contentDescription = null)
+                    Icon(
+                        Icons.Outlined.MyLocation,
+                        contentDescription = null,
+                        tint = if (hasCurrentLocation) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        },
+                    )
                 }
             }
 
@@ -272,6 +285,14 @@ fun AddPlaceScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
+                    if (state.saving) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                        Spacer(Modifier.size(8.dp))
+                    }
                     Text(stringResource(R.string.places_save))
                 }
             }
