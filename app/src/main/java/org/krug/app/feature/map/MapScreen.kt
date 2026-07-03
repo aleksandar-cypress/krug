@@ -2264,6 +2264,7 @@ private fun formatEta(seconds: Double): String {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun MemberDetailSheet(
     member: MemberWithLocation,
@@ -2307,7 +2308,8 @@ private fun MemberDetailSheet(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .padding(bottom = 24.dp),
+            .padding(bottom = 24.dp)
+            .navigationBarsPadding(),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -2485,7 +2487,12 @@ private fun MemberDetailSheet(
         }
 
         Spacer(Modifier.height(20.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        // FlowRow umesto Row: kad je 4+ chip-a, wrap u drugi red (bolje od truncation-a).
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            maxItemsInEachRow = 3,
+        ) {
             val batt = member.location?.batteryPct
             // Sakrijemo bateriju u privatnom modu — vrednost je stara/zabludljiva.
             if (!isPrivate && batt != null && batt in 0..100) {
@@ -2616,6 +2623,9 @@ private fun MemberDetailSheet(
             ) {
                 Text(stringResource(R.string.history_cta))
             }
+            // Padding od donje ivice sheet-a — bez ovog, na Samsung One UI navigation
+            // gesture bar preklapa donje dugme.
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
