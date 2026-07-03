@@ -172,7 +172,7 @@ Dodavanje ETA chip-a je razbilo Row layout — 4 chip-a u istom redu, tekstovi s
 
 ### M) Commit istorija ove sesije
 
-Sve commit-ove od `82286e7` do `ec7c679`:
+Sve commit-ove od `82286e7` do `d84e9d6`:
 - `82286e7` Polish: snackbar feedback, loading state, empty state, kategorije ikonice, haptic
 - `bd84ef4` Polish 3: MapView leak fix, timeline arrows, places count, discard guard
 - `c9b170b` Polish 4: history speed, today shortcut, loading state, places sort
@@ -181,6 +181,36 @@ Sve commit-ove od `82286e7` do `ec7c679`:
 - `570fae9` Feature: per-place mute + notif „Vidi na mapi" action
 - `781a5df` V1.1 release prep: bump version + landing page update + MemberDetail layout fix
 - `ec7c679` Feature: auto-status pill u MemberDetailSheet-u
+- `d276361` STATUS.md dvadeset sedma sesija
+- `d84e9d6` Landing: proširena Premium lista + restrukturiran Free tier
+
+### N) Post-scriptum: Premium/Free tier landing strategija
+
+Nakon što je pricing sekcija razmatrana:
+- „Blue circle badge" premium stavka uklonjena (marketing fluff bez implementacije)
+- Free tier eksplicitne granice: **do 3 mesta po krugu** (već enforce-ovano u kodu preko `FREE_TIER_MAX_PER_CIRCLE`), **istorija 7 dana** (trenutno je 30 u kodu — treba TTL update za V1.2)
+- Premium 10 stavki (marketing pravac):
+  1. Neograničena mesta (paywall check needed)
+  2. Istorija 90 dana (Firestore TTL upgrade)
+  3. SOS push kad je app zatvorena (Cloud Functions + FCM — v1.2 major)
+  4. Zone pravila („Kad dete napusti Školu")
+  5. Post-drive check („Da li si OK?" posle vožnje) — safer alternativa crash detection-u
+  6. Weekly trip reports (km, brzine, mesta)
+  7. History export GPX/KML
+  8. Custom SOS poruka (medicinski podaci)
+  9. Multiple SOS destinacije (izvan kruga)
+  10. Android Auto integracija (kad Google odobri)
+
+Realno očekivana cena €1.99–2.99/mesec ili €19.99/god. Nijedan premium feature nije implementiran u trenutnom kodu — to je marketing signal pravca V1.2/V1.3 razvoja.
+
+**Za sledeću sesiju (28.)** — implementacija najvrednijih Premium feature-a:
+- Prioritet 1: paywall check za mesta (najlakše — samo enforce postojeći FREE_TIER_MAX_PER_CIRCLE preko billing state-a)
+- Prioritet 2: Cloud Functions + FCM za SOS push (najveći reliability upgrade — traži Firebase Blaze plan)
+- Prioritet 3: Post-drive check (safer alternative crash detection — 1-2 sesije)
+- Prioritet 4: History export GPX (jednostavno — writer + share intent)
+- Prioritet 5: Weekly trip reports (aggregate query + notif)
+
+Ostatak (Zone rules, Multi-SOS destinacije, Custom SOS msg) — V1.3.
 
 ## Gde smo stali (2026-07-03, dvadeset šesta sesija — V1.1 Places + Location history 30d + Android Auto MVP)
 
