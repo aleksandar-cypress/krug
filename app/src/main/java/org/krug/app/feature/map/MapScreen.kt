@@ -845,6 +845,7 @@ fun MapScreen(
                     placePendingDelete = detailPlace
                     detailPlaceId = null
                 },
+                onToggleMute = { muted -> viewModel.togglePlaceMute(detailPlace.id, muted) },
             )
         }
 

@@ -143,6 +143,7 @@
     <string name="places_notif_body_enter">%1$s arrived at %2$s</string>
     <string name="places_notif_body_exit">%1$s left %2$s</string>
     <string name="places_notif_unknown_user">A member</string>
+    <string name="places_notif_action_view">View on map</string>
     <string name="privacy_place_notifs_label">Place notifications</string>
     <string name="privacy_place_notifs_hint">Get notified when a circle member arrives at or leaves a place.</string>
     <string name="privacy_silent_hours_label">Silent hours</string>
@@ -161,6 +162,7 @@
     <string name="places_detail_last_event">Last activity</string>
     <string name="places_detail_edit">Edit</string>
     <string name="places_detail_delete">Delete</string>
+    <string name="places_detail_mute">Mute notifications for this place</string>
     <string name="places_activity_title">Recent activity</string>
     <string name="places_activity_verb_enter">arrived at</string>
     <string name="places_activity_verb_exit">left</string>

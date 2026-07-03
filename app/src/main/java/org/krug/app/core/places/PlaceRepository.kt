@@ -62,6 +62,11 @@ class PlaceRepository @Inject constructor(
         Timber.i("Place updated circleId=%s placeId=%s", circleId, placeId)
     }
 
+    suspend fun setMuted(circleId: String, placeId: String, muted: Boolean) {
+        places(circleId).document(placeId).update("muted", muted).await()
+        Timber.i("Place muted=%s circleId=%s placeId=%s", muted, circleId, placeId)
+    }
+
     suspend fun deletePlace(circleId: String, placeId: String) {
         places(circleId).document(placeId).delete().await()
         Timber.i("Place deleted circleId=%s placeId=%s", circleId, placeId)

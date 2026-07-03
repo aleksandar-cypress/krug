@@ -22,6 +22,12 @@ import org.krug.app.core.splash.SplashGate
 import org.krug.app.navigation.KrugNavHost
 import org.krug.app.ui.theme.KrugTheme
 
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface MainActivityEntryPoint {
+    fun localPrefs(): org.krug.app.core.prefs.LocalPrefs
+}
+
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,6 +44,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         handleSosFocusExtra(intent)
+        handlePlaceFocusExtra(intent)
         setContent {
             KrugApp()
         }
@@ -50,6 +57,27 @@ class MainActivity : ComponentActivity() {
         // getIntent() call vraćao novi intent, pa proslediti u bus.
         setIntent(intent)
         handleSosFocusExtra(intent)
+        handlePlaceFocusExtra(intent)
+    }
+
+    private fun handlePlaceFocusExtra(intent: Intent?) {
+        val placeId = intent?.getStringExtra(
+            org.krug.app.core.places.PlaceEventNotifier.EXTRA_FOCUS_PLACE_ID,
+        )?.takeIf { it.isNotBlank() } ?: return
+        val circleId = intent.getStringExtra(
+            org.krug.app.core.places.PlaceEventNotifier.EXTRA_FOCUS_CIRCLE_ID,
+        )?.takeIf { it.isNotBlank() }
+        if (circleId != null) {
+            // Postavi aktivni krug (LocalPrefs) tako da MapScreen prikaže pin.
+            // Injection u Activity — koristi EntryPointAccessors kao Auto session.
+            val prefs = dagger.hilt.android.EntryPointAccessors.fromApplication(
+                applicationContext,
+                MainActivityEntryPoint::class.java,
+            ).localPrefs()
+            prefs.setActiveCircleId(circleId)
+        }
+        intent.removeExtra(org.krug.app.core.places.PlaceEventNotifier.EXTRA_FOCUS_PLACE_ID)
+        intent.removeExtra(org.krug.app.core.places.PlaceEventNotifier.EXTRA_FOCUS_CIRCLE_ID)
     }
 
     private fun handleSosFocusExtra(intent: Intent?) {

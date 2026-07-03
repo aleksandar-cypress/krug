@@ -48,10 +48,12 @@ class PlaceEventNotifier @Inject constructor(
         mgr.createNotificationChannel(channel)
     }
 
-    fun notifyEvent(event: PlaceEventModel) {
+    fun notifyEvent(event: PlaceEventModel, circleId: String? = null) {
         ensureChannel()
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_FOCUS_PLACE_ID, event.placeId)
+            if (circleId != null) putExtra(EXTRA_FOCUS_CIRCLE_ID, circleId)
         }
         val pi = PendingIntent.getActivity(
             context, event.id.hashCode(), openIntent,
@@ -73,11 +75,18 @@ class PlaceEventNotifier @Inject constructor(
             .setContentIntent(pi)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .addAction(
+                R.drawable.ic_launcher_foreground,
+                context.getString(R.string.places_notif_action_view),
+                pi,
+            )
             .build()
         NotificationManagerCompat.from(context).notify(event.id.hashCode(), notif)
     }
 
     companion object {
         const val CHANNEL_ID = "places_events"
+        const val EXTRA_FOCUS_PLACE_ID = "focus_place_id"
+        const val EXTRA_FOCUS_CIRCLE_ID = "focus_circle_id"
     }
 }

@@ -605,6 +605,8 @@ class LocationTrackingService : Service() {
     /** Timestamp start-a listener-a. Event-e starije od ovoga ignorišemo (replay guard). */
     @Volatile private var placesListenerStartedAt: Long = 0L
     private val notifiedPlaceEventIds = java.util.Collections.synchronizedSet(HashSet<String>())
+    /** Snapshot muted placeId-jeva — populate iz places tracker block-a. */
+    private val mutedPlaceIds = java.util.Collections.synchronizedSet(HashSet<String>())
 
     /**
      * Registruje geofence-e za sve places-e svih krugova + observe-uje placeEvents
@@ -635,22 +637,33 @@ class LocationTrackingService : Service() {
                             )
                         }
                     }
+                    // Snapshot muted placeIds — koristi se u notif dispatch-u ispod.
+                    val muted = pairs.flatMap { it.second }.filter { it.muted }.map { it.id }
+                    synchronized(mutedPlaceIds) {
+                        mutedPlaceIds.clear()
+                        mutedPlaceIds.addAll(muted)
+                    }
                     geofenceManager.removeAll()
                     if (entries.isNotEmpty()) geofenceManager.registerAll(entries)
                 }
         }
         // 2) Prati placeEvents svih krugova i pokazuj lokalnu notif za tuđe event-e.
+        // Zadržavamo cid preko pair-a da bismo mogli da ga proslijedimo u notif intent.
         scope.launch {
             circleRepository.observeMyCircles(selfUid)
                 .flatMapLatest { circles ->
                     val circleIds = circles.map { it.id }
-                    if (circleIds.isEmpty()) flowOf(emptyList())
+                    if (circleIds.isEmpty()) flowOf(emptyList<Pair<String, org.krug.app.core.places.PlaceEventModel>>())
                     else combine(
-                        circleIds.map { cid -> placeRepository.observeRecentEvents(cid) },
+                        circleIds.map { cid ->
+                            placeRepository.observeRecentEvents(cid).map { events ->
+                                events.map { cid to it }
+                            }
+                        },
                     ) { arrays -> arrays.toList().flatten() }
                 }
-                .collectLatest { events ->
-                    events.forEach { evt ->
+                .collectLatest { pairs ->
+                    pairs.forEach { (cid, evt) ->
                         if (evt.userId == selfUid) return@forEach
                         if (evt.id in notifiedPlaceEventIds) return@forEach
                         val ts = evt.timestamp?.time ?: 0L
@@ -659,11 +672,10 @@ class LocationTrackingService : Service() {
                             return@forEach
                         }
                         notifiedPlaceEventIds.add(evt.id)
-                        // Per-user opt-out — user je isključio place notif u Settings.
                         if (!currentSettings.placeNotifsEnabled) return@forEach
-                        // Silent hours filter — ne notifie u vremenskom prozoru (npr 23-07).
                         if (isInSilentHours(currentSettings.silentHours)) return@forEach
-                        placeEventNotifier.notifyEvent(evt)
+                        if (evt.placeId in mutedPlaceIds) return@forEach
+                        placeEventNotifier.notifyEvent(evt, circleId = cid)
                     }
                 }
         }

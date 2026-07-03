@@ -17,6 +17,8 @@ data class PlaceModel(
     val radius: Int = DEFAULT_RADIUS_M,
     /** Kategorija (Home/School/Work/Gym/Shop/Other). Default OTHER za backward compat. */
     val category: String = PlaceCategory.OTHER.name,
+    /** Ako je true, članovi kruga ne dobijaju notif za enter/exit ovog mesta. */
+    val muted: Boolean = false,
     val createdBy: String = "",
     @ServerTimestamp val createdAt: Date? = null,
 ) {

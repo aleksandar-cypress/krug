@@ -51,6 +51,7 @@ fun PlaceDetailSheet(
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onToggleMute: (Boolean) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val (colorHex, glyph) = MapMarkers.categoryStyle(place.category)
@@ -105,6 +106,23 @@ fun PlaceDetailSheet(
                 label = stringResource(R.string.places_detail_last_event),
                 value = lastEvent?.let { formatEvent(it) } ?: "-",
             )
+
+            // Mute toggle — kad je true, članovi kruga ne dobijaju notif za ovo mesto.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.places_detail_mute),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                androidx.compose.material3.Switch(
+                    checked = place.muted,
+                    onCheckedChange = onToggleMute,
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),

@@ -116,6 +116,14 @@ class MapViewModel @Inject constructor(
         }
     }
 
+    fun togglePlaceMute(placeId: String, muted: Boolean) {
+        viewModelScope.launch {
+            val activeId = localPrefs.activeCircleIdFlow.first() ?: return@launch
+            runCatching { placeRepository.setMuted(activeId, placeId, muted) }
+                .onFailure { Timber.w(it, "togglePlaceMute failed") }
+        }
+    }
+
     fun lastSeenWhatsNewVersion(): Int = localPrefs.lastSeenWhatsNewVersion
     fun markWhatsNewSeen(version: Int) {
         localPrefs.lastSeenWhatsNewVersion = version
