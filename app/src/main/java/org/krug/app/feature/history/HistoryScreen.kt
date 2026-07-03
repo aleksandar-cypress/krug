@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -68,6 +72,19 @@ fun HistoryScreen(
     var polylineManager by remember { mutableStateOf<PolylineAnnotationManager?>(null) }
     var pointManager by remember { mutableStateOf<com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager?>(null) }
     var scrubTime by remember { mutableStateOf(1f) } // 0..1 = start..end dana
+    var playing by remember { mutableStateOf(false) }
+
+    // Auto-play: advance scrubTime kroz vreme dok playing=true.
+    // Playback traje ~30s za ceo dan (24h scaled), stops kad stigne do 1.0.
+    LaunchedEffect(playing, points.size) {
+        if (!playing || points.isEmpty()) return@LaunchedEffect
+        if (scrubTime >= 1f) scrubTime = 0f
+        while (playing && scrubTime < 1f) {
+            kotlinx.coroutines.delay(50)
+            scrubTime = (scrubTime + 0.0016f).coerceAtMost(1f) // 0.0016/50ms → ~30s total
+        }
+        if (scrubTime >= 1f) playing = false
+    }
 
     // Kad se promene point-i ili scrub, re-render polyline + start/end markere + Places pinove.
     LaunchedEffect(points, activePlaces, scrubTime, polylineManager, pointManager) {
@@ -95,6 +112,26 @@ fun HistoryScreen(
         if (points.isEmpty()) return@LaunchedEffect
         val cutoff = range.fromMs + ((range.toMs - range.fromMs) * scrubTime).toLong()
         val visible = points.filter { p -> (p.timestamp?.time ?: 0L) <= cutoff }
+        // Start marker — prva tačka dana (zelena)
+        points.firstOrNull()?.let { start ->
+            ptm.create(
+                PointAnnotationOptions()
+                    .withPoint(Point.fromLngLat(start.lng, start.lat))
+                    .withIconImage(
+                        org.krug.app.feature.map.MapMarkers.dotMarker(context, "#10B981"),
+                    ),
+            )
+        }
+        // Current position marker — poslednja visible tačka (indigo, veća od start-a)
+        visible.lastOrNull()?.let { cur ->
+            ptm.create(
+                PointAnnotationOptions()
+                    .withPoint(Point.fromLngLat(cur.lng, cur.lat))
+                    .withIconImage(
+                        org.krug.app.feature.map.MapMarkers.dotMarker(context, "#4F46E5", size = 18f),
+                    ),
+            )
+        }
         if (visible.size < 2) return@LaunchedEffect
         val line = LineString.fromLngLats(
             visible.map { Point.fromLngLat(it.lng, it.lat) },
@@ -197,20 +234,48 @@ fun HistoryScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = null,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier
+                                .size(24.dp)
+                                .graphicsLayer { scaleX = -1f },
                         )
                     }
                 }
-                // Time scrubber
-                Text(
-                    stringResource(R.string.history_time_label, formatTime(range.fromMs, scrubTime)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Slider(
-                    value = scrubTime,
-                    onValueChange = { scrubTime = it },
-                )
+                // Time scrubber sa play/pause dugmetom
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    IconButton(
+                        onClick = {
+                            if (scrubTime >= 1f) {
+                                scrubTime = 0f
+                                playing = true
+                            } else {
+                                playing = !playing
+                            }
+                        },
+                        enabled = points.isNotEmpty(),
+                    ) {
+                        Icon(
+                            imageVector = if (scrubTime >= 1f) Icons.Filled.Replay
+                            else if (playing) Icons.Filled.Pause
+                            else Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.history_time_label, formatTime(range.fromMs, scrubTime)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Slider(
+                            value = scrubTime,
+                            onValueChange = { scrubTime = it; playing = false },
+                        )
+                    }
+                }
                 val stats = remember(points) { computeStats(points) }
                 Row(modifier = Modifier.fillMaxWidth()) {
                     StatCell(

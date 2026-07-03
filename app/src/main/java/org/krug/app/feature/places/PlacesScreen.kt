@@ -56,6 +56,7 @@ fun PlacesScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val recentEvents by viewModel.recentEvents.collectAsStateWithLifecycle()
+    val presenceByPlace by viewModel.presenceByPlace.collectAsStateWithLifecycle()
     var pendingDelete by remember { mutableStateOf<PlaceModel?>(null) }
     val limitReached = state.places.size >= PlaceModel.FREE_TIER_MAX_PER_CIRCLE
 
@@ -130,6 +131,7 @@ fun PlacesScreen(
                     items(state.places, key = { it.id }) { place ->
                         PlaceRow(
                             place = place,
+                            presence = presenceByPlace[place.id].orEmpty(),
                             onClick = {
                                 org.krug.app.core.places.PlaceFocusBus.request(
                                     lat = place.lat, lng = place.lng,
@@ -274,6 +276,7 @@ private fun EmptyState() {
 @Composable
 private fun PlaceRow(
     place: PlaceModel,
+    presence: List<String>,
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -306,6 +309,18 @@ private fun PlaceRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (presence.isNotEmpty()) {
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.places_presence_line,
+                            presence.joinToString(", "),
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.ui.graphics.Color(0xFF10B981),
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
             IconButton(onClick = onEdit) {
                 Icon(Icons.Outlined.Edit, contentDescription = null)

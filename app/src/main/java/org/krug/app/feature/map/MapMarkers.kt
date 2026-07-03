@@ -76,6 +76,31 @@ object MapMarkers {
         return bmp
     }
 
+    /**
+     * Prosta krug marker sa belom ivicom — koristi se za start/current position u
+     * HistoryScreen tragu. `size` je diameter u dp.
+     */
+    fun dotMarker(context: Context, colorHex: String, size: Float = 14f): Bitmap {
+        val key = "dot-$colorHex-$size"
+        cache[key]?.let { return it }
+        val density = context.resources.displayMetrics.density
+        val sizePx = (size * density).toInt()
+        val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val cx = sizePx / 2f
+        val outerRadius = sizePx / 2f - 1f * density
+        val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+        }
+        canvas.drawCircle(cx, cx, outerRadius, ringPaint)
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = colorHex.toColorInt()
+        }
+        canvas.drawCircle(cx, cx, outerRadius - 2f * density, fillPaint)
+        cache[key] = bmp
+        return bmp
+    }
+
     /** Vraća (fill boja, glyph slovo) za date kategorije mesta. */
     fun categoryStyle(category: String): Pair<String, String> = when (category) {
         "HOME" -> "#DC2626" to "H"

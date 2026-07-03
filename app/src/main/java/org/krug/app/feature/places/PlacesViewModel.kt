@@ -13,11 +13,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import org.krug.app.core.circle.CircleRepository
+import org.krug.app.core.location.LocationModel
 import org.krug.app.core.location.LocationRepository
 import org.krug.app.core.places.PlaceModel
 import org.krug.app.core.places.PlaceRepository
+import org.krug.app.core.user.UserRepository
 import timber.log.Timber
 
 data class PlacesUiState(
@@ -36,6 +41,8 @@ class PlacesViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val placeRepository: PlaceRepository,
     private val locationRepository: LocationRepository,
+    private val circleRepository: CircleRepository,
+    private val userRepository: UserRepository,
     private val auth: FirebaseAuth,
 ) : ViewModel() {
 
@@ -52,6 +59,43 @@ class PlacesViewModel @Inject constructor(
     val recentEvents: StateFlow<List<org.krug.app.core.places.PlaceEventModel>> =
         placeRepository.observeRecentEvents(circleId, limit = 20)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Trenutno u mestu — mapa placeId → lista imena članova koji su unutar radius-a.
+     * Presence check: computeaj distancu member.location od center-a place-a, ako je
+     * <= radius i location je "fresh" (unutar 15min), član je "unutra".
+     */
+    val presenceByPlace: StateFlow<Map<String, List<String>>> = run {
+        circleRepository.observeMembersUids(circleId).flatMapLatest { uids ->
+            if (uids.isEmpty()) flowOf(emptyMap())
+            else combine(
+                uids.map { uid ->
+                    combine(
+                        locationRepository.observe(uid),
+                        userRepository.observeUser(uid),
+                    ) { loc, user -> Triple(uid, loc, user?.displayName.orEmpty()) }
+                },
+            ) { array -> array.toList() }.combine(places) { locs, plcs ->
+                val now = System.currentTimeMillis()
+                val result = mutableMapOf<String, MutableList<String>>()
+                plcs.forEach { p ->
+                    val insideNames = mutableListOf<String>()
+                    locs.forEach { (uid, loc, name) ->
+                        if (loc == null || (now - loc.updatedAt) > 15 * 60_000L) return@forEach
+                        val dist = FloatArray(1)
+                        android.location.Location.distanceBetween(
+                            loc.lat, loc.lng, p.lat, p.lng, dist,
+                        )
+                        if (dist[0] <= p.radius) {
+                            insideNames.add(name.ifBlank { uid.take(6) })
+                        }
+                    }
+                    if (insideNames.isNotEmpty()) result[p.id] = insideNames
+                }
+                result.toMap()
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+    }
 
     init {
         viewModelScope.launch {

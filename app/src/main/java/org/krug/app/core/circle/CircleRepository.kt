@@ -174,6 +174,21 @@ class CircleRepository @Inject constructor(
         }
 
     /** Mapa uid → isChild za sve članove ovog kruga. Live snapshot. */
+    /** Vraća memberIds za specifičan krug, live. Prazna lista ako krug ne postoji. */
+    fun observeMembersUids(circleId: String): Flow<List<String>> = callbackFlow {
+        val reg = circle(circleId).addSnapshotListener { snap, error ->
+            if (error != null) {
+                Timber.w(error, "observeMembersUids error for $circleId")
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+            @Suppress("UNCHECKED_CAST")
+            val ids = (snap?.get("memberIds") as? List<String>).orEmpty()
+            trySend(ids)
+        }
+        awaitClose { reg.remove() }
+    }
+
     fun observeMembersChildMap(circleId: String): Flow<Map<String, Boolean>> = callbackFlow {
         val reg = members(circleId).addSnapshotListener { snap, error ->
             if (error != null) {
