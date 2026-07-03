@@ -25,6 +25,9 @@ crashlytics-plugin = "3.0.2"
 # Mapbox
 mapbox = "11.8.1"
 
+# Android Auto — Car App Library
+car-app = "1.4.0"
+
 # Misc
 coroutines = "1.9.0"
 timber = "5.0.1"
@@ -82,6 +85,10 @@ firebase-appcheck-debug = { module = "com.google.firebase:firebase-appcheck-debu
 play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
 
 mapbox-android = { module = "com.mapbox.maps:android", version.ref = "mapbox" }
+
+# Android Auto — Car App Library (androidx.car.app)
+androidx-car-app = { module = "androidx.car.app:app", version.ref = "car-app" }
+androidx-car-app-projected = { module = "androidx.car.app:app-projected", version.ref = "car-app" }
 
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutines" }

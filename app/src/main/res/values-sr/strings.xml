@@ -173,6 +173,9 @@
     <string name="history_stat_max_speed">Max brzina</string>
     <string name="places_stats_line">%1$d mesta · %2$d događaja danas</string>
     <string name="places_presence_line">Trenutno ovde: %1$s</string>
+    <string name="car_title">Krug</string>
+    <string name="car_no_members">Nema članova sa lokacijom trenutno</string>
+    <string name="car_action_refresh">Osveži</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Članovi</string>

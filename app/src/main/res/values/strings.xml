@@ -171,6 +171,9 @@
     <string name="history_stat_max_speed">Max speed</string>
     <string name="places_stats_line">%1$d places · %2$d events today</string>
     <string name="places_presence_line">Currently here: %1$s</string>
+    <string name="car_title">Krug</string>
+    <string name="car_no_members">No members with location right now</string>
+    <string name="car_action_refresh">Refresh</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Members</string>

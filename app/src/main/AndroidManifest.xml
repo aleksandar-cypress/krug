@@ -36,6 +36,15 @@
     <!-- Boot receiver — resume sharing after reboot if user opted in -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Android Auto — Car App Library dozvole. -->
+    <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
+    <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
+
+    <!-- Android Auto feature declaration (opciono ali preporučeno za Play Store filter). -->
+    <uses-feature
+        android:name="android.hardware.type.automotive"
+        android:required="false" />
+
     <application
         android:name=".KrugApplication"
         android:allowBackup="false"
@@ -51,6 +60,16 @@
         <meta-data
             android:name="com.mapbox.token"
             android:value="${MAPBOX_PUBLIC_TOKEN}" />
+
+        <!-- Android Auto host metadata — pokazuje na automotive_app_desc.xml. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
+        <!-- Minimum Car App API level koji podržavamo. Level 4 = Auto 8.1+. -->
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
 
         <!-- Macrobenchmark zahtev: shell="true" omogućava :benchmark modulu (ADB shell)
              da instrumentira proces app-a u release/benchmark build-u bez debuggable=true.
@@ -71,6 +90,19 @@
         <receiver
             android:name=".core.places.GeofenceBroadcastReceiver"
             android:exported="false" />
+
+        <!-- Android Auto — CarAppService (Navigation template). Auto host bind-uje kad
+             telefon konektuje sa autom preko USB/wireless. exported=true jer Auto host
+             (odvojen proces) treba da bind-uje. -->
+        <service
+            android:name=".core.car.KrugCarAppService"
+            android:exported="true"
+            android:foregroundServiceType="location">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.NAVIGATION" />
+            </intent-filter>
+        </service>
 
         <!-- Boot + package replaced receiver — restart FGS automatski. -->
         <receiver

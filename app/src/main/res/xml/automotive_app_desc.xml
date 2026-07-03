@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Deklaracija za Android Auto host. Ukazuje da app poseduje "template" providera
+  (androidx.car.app.CarAppService). Bez ovog Auto host ne prepoznaje app kao
+  eligible za projected mode.
+
+  Uses:
+    template  — koristi Car App Library template-e (Navigation, Place, itd.).
+-->
+<automotiveApp>
+    <uses name="template" />
+</automotiveApp>

@@ -171,6 +171,10 @@ dependencies {
     // Location
     implementation(libs.play.services.location)
 
+    // Android Auto — Car App Library
+    implementation(libs.androidx.car.app)
+    implementation(libs.androidx.car.app.projected)
+
     // Permissions
     implementation(libs.accompanist.permissions)
 

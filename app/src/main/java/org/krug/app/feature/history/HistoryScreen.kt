@@ -375,7 +375,8 @@ private fun formatDuration(ms: Long): String {
 }
 
 private fun formatDay(ms: Long): String {
-    val sdf = SimpleDateFormat("EEEE, d. MMMM", Locale("sr"))
+    // Forsiraj latinicu — sr_RS default u Android-u je ćirilica, a app UI je celi na latinici.
+    val sdf = SimpleDateFormat("EEEE, d. MMMM", Locale.forLanguageTag("sr-Latn"))
     return sdf.format(java.util.Date(ms))
 }
 
