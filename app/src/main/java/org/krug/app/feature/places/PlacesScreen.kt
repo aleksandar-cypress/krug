@@ -62,7 +62,12 @@ fun PlacesScreen(
     val recentEvents by viewModel.recentEvents.collectAsStateWithLifecycle()
     val presenceByPlace by viewModel.presenceByPlace.collectAsStateWithLifecycle()
     var pendingDelete by remember { mutableStateOf<PlaceModel?>(null) }
+    var sortByName by remember { mutableStateOf(false) }
     val limitReached = state.places.size >= PlaceModel.FREE_TIER_MAX_PER_CIRCLE
+    val sortedPlaces = remember(state.places, sortByName) {
+        if (sortByName) state.places.sortedBy { it.name.lowercase() }
+        else state.places // Firestore vraća createdAt ASC — najstariji prvi
+    }
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -119,16 +124,33 @@ fun PlacesScreen(
                     }.timeInMillis
                     recentEvents.count { (it.timestamp?.time ?: 0L) >= startOfDay }
                 }
-                Text(
-                    text = stringResource(
-                        R.string.places_stats_line,
-                        state.places.size,
-                        todayEventCount,
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 4.dp),
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.places_stats_line,
+                            state.places.size,
+                            todayEventCount,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    androidx.compose.material3.TextButton(
+                        onClick = { sortByName = !sortByName },
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+                    ) {
+                        Text(
+                            stringResource(
+                                if (sortByName) R.string.places_sort_by_date
+                                else R.string.places_sort_by_name,
+                            ),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                }
                 if (limitReached) {
                     Text(
                         text = stringResource(
@@ -144,7 +166,7 @@ fun PlacesScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(state.places, key = { it.id }) { place ->
+                    items(sortedPlaces, key = { it.id }) { place ->
                         PlaceRow(
                             place = place,
                             presence = presenceByPlace[place.id].orEmpty(),

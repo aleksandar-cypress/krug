@@ -181,6 +181,8 @@
     <string name="places_discard_title">Discard changes?</string>
     <string name="places_discard_msg">Your unsaved place will be lost.</string>
     <string name="places_discard_confirm">Discard</string>
+    <string name="places_sort_by_name">Sort A-Z</string>
+    <string name="places_sort_by_date">Sort by date</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Members</string>

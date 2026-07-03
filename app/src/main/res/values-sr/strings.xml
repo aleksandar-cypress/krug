@@ -183,6 +183,8 @@
     <string name="places_discard_title">Odbaciti izmene?</string>
     <string name="places_discard_msg">Neuposlato mesto će biti izgubljeno.</string>
     <string name="places_discard_confirm">Odbaci</string>
+    <string name="places_sort_by_name">Sort A-Z</string>
+    <string name="places_sort_by_date">Sort po datumu</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Članovi</string>

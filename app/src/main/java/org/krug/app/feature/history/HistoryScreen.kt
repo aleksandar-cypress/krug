@@ -1,6 +1,7 @@
 package org.krug.app.feature.history
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,6 +65,7 @@ fun HistoryScreen(
     viewModel: HistoryViewModel = hiltViewModel(),
 ) {
     val points by viewModel.points.collectAsStateWithLifecycle()
+    val loaded by viewModel.loaded.collectAsStateWithLifecycle()
     val activePlaces by viewModel.activePlaces.collectAsStateWithLifecycle()
     val range by viewModel.selectedDay.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -73,18 +75,20 @@ fun HistoryScreen(
     var pointManager by remember { mutableStateOf<com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager?>(null) }
     var scrubTime by remember { mutableStateOf(1f) } // 0..1 = start..end dana
     var playing by remember { mutableStateOf(false) }
+    var playbackSpeed by remember { mutableStateOf(1f) } // 0.5x / 1x / 2x / 4x
     // Fit-bounds samo jednom po (dan, points-first-load). Kad user počne da menja
     // scrub, ne pomeramo kameru — dozvoljavamo mu manuelnu kontrolu (pinch zoom, pan).
     var cameraFitDone by remember(range.fromMs) { mutableStateOf(false) }
 
-    // Auto-play: advance scrubTime kroz vreme dok playing=true.
-    // Playback traje ~30s za ceo dan (24h scaled), stops kad stigne do 1.0.
-    LaunchedEffect(playing, points.size) {
+    // Auto-play: advance scrubTime kroz vreme dok playing=true. Baseline 30s total,
+    // playbackSpeed multiplikator (2x = 15s, 0.5x = 60s).
+    LaunchedEffect(playing, points.size, playbackSpeed) {
         if (!playing || points.isEmpty()) return@LaunchedEffect
         if (scrubTime >= 1f) scrubTime = 0f
+        val delta = 0.0016f * playbackSpeed
         while (playing && scrubTime < 1f) {
             kotlinx.coroutines.delay(50)
-            scrubTime = (scrubTime + 0.0016f).coerceAtMost(1f) // 0.0016/50ms → ~30s total
+            scrubTime = (scrubTime + delta).coerceAtMost(1f)
         }
         if (scrubTime >= 1f) playing = false
     }
@@ -197,7 +201,11 @@ fun HistoryScreen(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                if (points.isEmpty()) {
+                if (!loaded) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                } else if (points.isEmpty()) {
                     Column(
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -245,11 +253,21 @@ fun HistoryScreen(
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
+                    // Text je clickable — tap na naslov dana skoči na "Danas" ako smo unazad.
                     Text(
                         text = formatDay(range.fromMs),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .then(
+                                if (dayOffset != 0) {
+                                    Modifier.clickable {
+                                        dayOffset = 0
+                                        viewModel.setDayOffset(0)
+                                    }
+                                } else Modifier,
+                            ),
                     )
                     IconButton(
                         onClick = {
@@ -300,6 +318,27 @@ fun HistoryScreen(
                         Slider(
                             value = scrubTime,
                             onValueChange = { scrubTime = it; playing = false },
+                        )
+                    }
+                    // Playback speed chip — cycle 1x → 2x → 4x → 0.5x → 1x
+                    androidx.compose.material3.TextButton(
+                        onClick = {
+                            playbackSpeed = when (playbackSpeed) {
+                                1f -> 2f
+                                2f -> 4f
+                                4f -> 0.5f
+                                else -> 1f
+                            }
+                        },
+                    ) {
+                        Text(
+                            text = when (playbackSpeed) {
+                                0.5f -> "0.5x"
+                                2f -> "2x"
+                                4f -> "4x"
+                                else -> "1x"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
                         )
                     }
                 }

@@ -21,6 +21,7 @@ import org.krug.app.core.places.PlaceRepository
 import org.krug.app.core.prefs.LocalPrefs
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onEach
 
 data class HistoryDayRange(val fromMs: Long, val toMs: Long)
 
@@ -39,8 +40,13 @@ class HistoryViewModel @Inject constructor(
     private val _selectedDay = MutableStateFlow(startOfDay(System.currentTimeMillis()))
     val selectedDay: StateFlow<HistoryDayRange> = _selectedDay.asStateFlow()
 
+    private val _loaded = MutableStateFlow(false)
+    val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
+
     val points: StateFlow<List<LocationHistoryPoint>> = selectedDay.flatMapLatest { range ->
+        _loaded.value = false
         historyRepository.observeHistory(uid, range.fromMs, range.toMs)
+            .onEach { _loaded.value = true }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Places iz trenutno aktivnog kruga — render kao statični pinovi iznad trag-a. */
