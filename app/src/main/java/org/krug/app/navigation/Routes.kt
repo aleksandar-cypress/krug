@@ -17,6 +17,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class CircleDetail(val circleId: String)
 @Serializable data class MemberDetail(val circleId: String, val memberId: String)
 @Serializable data class Places(val circleId: String)
+@Serializable data class AddPlace(val circleId: String)
 
 // Settings sub-tree.
 @Serializable object Settings

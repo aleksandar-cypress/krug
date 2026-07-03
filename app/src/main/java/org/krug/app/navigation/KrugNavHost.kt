@@ -14,6 +14,7 @@ import org.krug.app.feature.circle.CreateCircleScreen
 import org.krug.app.feature.circle.EnterCodeScreen
 import org.krug.app.feature.circle.ShowInviteScreen
 import org.krug.app.feature.map.MapScreen
+import org.krug.app.feature.places.AddPlaceScreen
 import org.krug.app.feature.places.PlacesScreen
 import org.krug.app.feature.onboarding.OnboardingScreen
 import org.krug.app.feature.settings.AboutScreen
@@ -179,8 +180,16 @@ fun KrugNavHost() {
                 onOpenPlaces = { circleId -> nav.navigate(Places(circleId = circleId)) },
             )
         }
-        composable<Places> {
-            PlacesScreen(onBack = { nav.popBackStack() })
+        composable<Places> { entry ->
+            val args = entry.toRoute<Places>()
+            PlacesScreen(
+                onBack = { nav.popBackStack() },
+                onAddPlace = { nav.navigate(AddPlace(circleId = args.circleId)) },
+                onShowOnMap = { nav.popBackStack(Map, inclusive = false) },
+            )
+        }
+        composable<AddPlace> {
+            AddPlaceScreen(onBack = { nav.popBackStack() })
         }
     }
 }

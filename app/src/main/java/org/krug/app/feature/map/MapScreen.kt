@@ -128,7 +128,11 @@ import com.mapbox.maps.plugin.annotation.generated.OnPointAnnotationClickListene
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.PolygonAnnotation
+import com.mapbox.maps.plugin.annotation.generated.PolygonAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.PolygonAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.createPolygonAnnotationManager
 import com.mapbox.maps.plugin.compass.compass
 import com.mapbox.maps.plugin.scalebar.scalebar
 import android.view.Gravity
@@ -224,6 +228,7 @@ fun MapScreen(
     viewModel: MapViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val activePlaces by viewModel.activePlaces.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val view = LocalView.current
     val haptic: () -> Unit = remember(view) {
@@ -248,6 +253,24 @@ fun MapScreen(
         mapViewState.flyTo(loc.lng, loc.lat)
         detailUid = uid
         org.krug.app.core.sos.SosFocusBus.consume()
+    }
+
+    // Place focus deep-link — PlacesScreen postavi Focus, ovde flyTo + consume.
+    // Zoom se skalira sa radius-om: veći krug = širi pogled da se ceo krug vidi.
+    val pendingPlaceFocus by org.krug.app.core.places.PlaceFocusBus.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingPlaceFocus) {
+        val focus = pendingPlaceFocus ?: return@LaunchedEffect
+        // Čekaj da mapa bude spremna pre flyTo.
+        var attempts = 0
+        while ((mapViewState.mapView == null || !mapViewState.styleLoaded) && attempts < 100) {
+            kotlinx.coroutines.delay(50)
+            attempts++
+        }
+        // Formula: baseline 100m → zoom 16.5, svako 2x radius smanji zoom za 1.
+        // 50m → 17.5, 100m → 16.5, 200m → 15.5, 400m → 14.5, 500m → ~14.2.
+        val zoom = 16.5 - kotlin.math.log2(focus.radius / 100.0)
+        mapViewState.flyTo(focus.lng, focus.lat, zoom.coerceIn(12.0, 18.0))
+        org.krug.app.core.places.PlaceFocusBus.consume()
     }
 
     // Auto re-fit kamere na vraćanje iz background-a. Bez ovog: user vidi člana u
@@ -403,6 +426,47 @@ fun MapScreen(
     // sosRipples map) ostaje u memory kad user navigira sa Map ekrana. Mapbox MapView je
     // teška Android View (drži OpenGL resources, telemetry, style sheets). Bez explicit
     // teardown-a, repeated open/close akumulira deseti MB.
+    // Places re-render — na svaku promenu activePlaces prebriši oba manager-a
+    // (pin i polygon radius) i dodaj nove annotation-e. Čeka do 5s da factory završi.
+    LaunchedEffect(activePlaces, mapViewState) {
+        var attempts = 0
+        while ((mapViewState.placeManager == null || mapViewState.placeRadiusManager == null) &&
+            attempts < 100
+        ) {
+            kotlinx.coroutines.delay(50)
+            attempts++
+        }
+        val pm = mapViewState.placeManager ?: return@LaunchedEffect
+        val prm = mapViewState.placeRadiusManager ?: return@LaunchedEffect
+        pm.deleteAll()
+        prm.deleteAll()
+        if (activePlaces.isEmpty()) return@LaunchedEffect
+        val bmp = MapMarkers.placeMarker(context)
+        activePlaces.forEach { place ->
+            // 1) Radius polygon — 64-strani polygon aproksimacija kruga.
+            val ring = buildGeoCircle(place.lat, place.lng, place.radius.toDouble(), 64)
+            prm.create(
+                PolygonAnnotationOptions()
+                    .withPoints(listOf(ring))
+                    .withFillColor("#4F46E5")
+                    .withFillOpacity(0.15),
+            )
+            // 2) Pin sa imenom ispod.
+            pm.create(
+                PointAnnotationOptions()
+                    .withPoint(Point.fromLngLat(place.lng, place.lat))
+                    .withIconImage(bmp)
+                    .withIconOffset(listOf(0.0, -21.0))
+                    .withTextField(place.name)
+                    .withTextOffset(listOf(0.0, 0.6))
+                    .withTextSize(12.0)
+                    .withTextColor("#1F2937")
+                    .withTextHaloColor("#FFFFFF")
+                    .withTextHaloWidth(1.5),
+            )
+        }
+    }
+
     DisposableEffect(mapViewState) {
         onDispose {
             // 1) Skloni click listener (drži referencu na onPinClick lambda → MapScreen scope).
@@ -411,6 +475,8 @@ fun MapScreen(
             //    drže reference na Annotation objekte, GC ih ne čisti dok je manager živ.
             runCatching {
                 mapViewState.annotationManager?.deleteAll()
+                mapViewState.placeManager?.deleteAll()
+                mapViewState.placeRadiusManager?.deleteAll()
                 mapViewState.circleManager?.deleteAll()
             }
             mapViewState.annotationToUid.clear()
@@ -420,6 +486,8 @@ fun MapScreen(
             runCatching { mapViewState.mapView?.onDestroy() }
             mapViewState.mapView = null
             mapViewState.annotationManager = null
+            mapViewState.placeManager = null
+            mapViewState.placeRadiusManager = null
             mapViewState.circleManager = null
         }
     }
@@ -1394,6 +1462,10 @@ private fun MapboxContainer(
                 // SOS ripple manager mora biti kreiran PRE pin annotation manager-a — circle
                 // se render-uje ispod pinova jer je dodat prvi u layer stack-u Mapbox-a.
                 holder.circleManager = mv.annotations.createCircleAnnotationManager()
+                // Place radius polygon-i — PRE svih pin-ova (dno stack-a, ispod svega).
+                holder.placeRadiusManager = mv.annotations.createPolygonAnnotationManager()
+                // Place marker manager — iznad radius polygon-a, ispod member pin-ova.
+                holder.placeManager = mv.annotations.createPointAnnotationManager()
                 val manager = mv.annotations.createPointAnnotationManager()
                 holder.annotationManager = manager
                 manager.addClickListener(
@@ -1532,9 +1604,37 @@ private fun MapboxContainer(
     )
 }
 
+/**
+ * Aproksimira krug (u geo-koordinatama, radijus u metrima) sa N-stranim polygon-om.
+ * Skalira se pravilno sa zoom-om jer koristi lat/lng.
+ * Formula: destination point-a po početnoj tački, bearing-u i distanci (Haversine inverz).
+ */
+private fun buildGeoCircle(centerLat: Double, centerLng: Double, radiusMeters: Double, segments: Int): List<Point> {
+    val earthRadius = 6371000.0
+    val latRad = Math.toRadians(centerLat)
+    val lngRad = Math.toRadians(centerLng)
+    val angularDistance = radiusMeters / earthRadius
+    val points = mutableListOf<Point>()
+    for (i in 0..segments) {
+        val bearing = 2.0 * Math.PI * i / segments
+        val lat2 = Math.asin(
+            Math.sin(latRad) * Math.cos(angularDistance) +
+                Math.cos(latRad) * Math.sin(angularDistance) * Math.cos(bearing),
+        )
+        val lng2 = lngRad + Math.atan2(
+            Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(latRad),
+            Math.cos(angularDistance) - Math.sin(latRad) * Math.sin(lat2),
+        )
+        points.add(Point.fromLngLat(Math.toDegrees(lng2), Math.toDegrees(lat2)))
+    }
+    return points
+}
+
 private class MapViewHolder {
     var mapView: MapView? = null
     var annotationManager: PointAnnotationManager? = null
+    var placeManager: PointAnnotationManager? = null
+    var placeRadiusManager: PolygonAnnotationManager? = null
     var circleManager: CircleAnnotationManager? = null
     var didFlyToSelf: Boolean = false
     /** True nakon prvog `loadStyle` callback-a — gate za camera op-ove iz LaunchedEffect-a. */
@@ -1545,11 +1645,11 @@ private class MapViewHolder {
     var onPinClick: ((String) -> Unit)? = null
     var lastFingerprint: String = ""
 
-    fun flyTo(lng: Double, lat: Double) {
+    fun flyTo(lng: Double, lat: Double, zoom: Double = 16.5) {
         mapView?.mapboxMap?.flyTo(
             CameraOptions.Builder()
                 .center(Point.fromLngLat(lng, lat))
-                .zoom(16.5)
+                .zoom(zoom)
                 .build(),
             MapAnimationOptions.mapAnimationOptions { duration(1200L) },
         )

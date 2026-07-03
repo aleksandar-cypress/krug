@@ -17,6 +17,62 @@ import androidx.core.graphics.toColorInt
 object MapMarkers {
     private const val CACHE_MAX_ENTRIES = 32
 
+    /**
+     * Marker za Place — teardrop pin sa belim krugom u glavi.
+     * Distinktivan od member pin-ova (veliki krugovi sa slikom).
+     */
+    fun placeMarker(context: Context): Bitmap {
+        val key = "place-pin-v2"
+        cache[key]?.let { return it }
+        val density = context.resources.displayMetrics.density
+        val wDp = 32f
+        val hDp = 42f
+        val w = (wDp * density).toInt()
+        val h = (hDp * density).toInt()
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val cx = w / 2f
+        val headRadius = w / 2f - 3f * density
+        val headCy = headRadius + 3f * density
+
+        // Shadow ispod teardrop-a
+        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#40000000")
+            maskFilter = BlurMaskFilter(4f, BlurMaskFilter.Blur.NORMAL)
+        }
+        canvas.drawCircle(cx, h - 3f * density, headRadius * 0.4f, shadowPaint)
+
+        // Teardrop path (glava + rep na dole)
+        val teardrop = Path().apply {
+            addCircle(cx, headCy, headRadius, Path.Direction.CW)
+            moveTo(cx - headRadius * 0.55f, headCy + headRadius * 0.55f)
+            lineTo(cx, h - 2f * density)
+            lineTo(cx + headRadius * 0.55f, headCy + headRadius * 0.55f)
+            close()
+        }
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = "#4F46E5".toColorInt()
+        }
+        canvas.drawPath(teardrop, fillPaint)
+
+        // White ring oko glave
+        val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f * density
+        }
+        canvas.drawCircle(cx, headCy, headRadius, ringPaint)
+
+        // Bela tačka u sredini
+        val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+        }
+        canvas.drawCircle(cx, headCy, headRadius * 0.35f, dotPaint)
+
+        cache[key] = bmp
+        return bmp
+    }
+
     // LRU cache — ograničen broj entry-ja sa eviction-om najstarijeg.
     // Bez ovoga svaka promena baterije pravila je novu bitmapu i čuvala je zauvek.
     private val cache: MutableMap<String, Bitmap> =

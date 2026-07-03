@@ -26,6 +26,7 @@ data class PlacesUiState(
     val currentLng: Double? = null,
     val saving: Boolean = false,
     val error: String? = null,
+    val sheetOpen: Boolean = false,
     val editingPlace: PlaceModel? = null,
 )
 
@@ -66,8 +67,16 @@ class PlacesViewModel @Inject constructor(
         }
     }
 
-    fun startEdit(place: PlaceModel?) {
-        _state.value = _state.value.copy(editingPlace = place, error = null)
+    fun openAddSheet() {
+        _state.value = _state.value.copy(sheetOpen = true, editingPlace = null, error = null)
+    }
+
+    fun openEditSheet(place: PlaceModel) {
+        _state.value = _state.value.copy(sheetOpen = true, editingPlace = place, error = null)
+    }
+
+    fun closeSheet() {
+        _state.value = _state.value.copy(sheetOpen = false, editingPlace = null, error = null)
     }
 
     fun createPlace(name: String, lat: Double, lng: Double, radius: Int, onSuccess: () -> Unit) {
@@ -88,7 +97,9 @@ class PlacesViewModel @Inject constructor(
             runCatching {
                 placeRepository.createPlace(circleId, uid, trimmed, lat, lng, radius)
             }.onSuccess {
-                _state.value = _state.value.copy(saving = false, editingPlace = null)
+                _state.value = _state.value.copy(
+                    saving = false, sheetOpen = false, editingPlace = null,
+                )
                 onSuccess()
             }.onFailure { e ->
                 Timber.w(e, "createPlace failed")
@@ -108,7 +119,9 @@ class PlacesViewModel @Inject constructor(
             runCatching {
                 placeRepository.updatePlace(circleId, placeId, trimmed, radius)
             }.onSuccess {
-                _state.value = _state.value.copy(saving = false, editingPlace = null)
+                _state.value = _state.value.copy(
+                    saving = false, sheetOpen = false, editingPlace = null,
+                )
                 onSuccess()
             }.onFailure { e ->
                 Timber.w(e, "updatePlace failed")

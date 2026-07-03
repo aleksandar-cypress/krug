@@ -21,4 +21,9 @@ data class UserSettings(
      * Peer UI prikazuje countdown banner kad je aktivan.
      */
     val shareUntilMs: Long? = null,
+    /**
+     * Notifikacije o Places (geofence enter/exit). Default true; user može da isključi
+     * iz Settings da izbegne spam ako ima puno mesta ili velikog kruga sa aktivnim članovima.
+     */
+    val placeNotifsEnabled: Boolean = true,
 )

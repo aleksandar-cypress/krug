@@ -22,6 +22,8 @@ import org.krug.app.core.circle.CircleRepository
 import org.krug.app.core.directions.DirectionsRepository
 import org.krug.app.core.location.LocationModel
 import org.krug.app.core.location.LocationRepository
+import org.krug.app.core.places.PlaceModel
+import org.krug.app.core.places.PlaceRepository
 import org.krug.app.core.prefs.LocalPrefs
 import org.krug.app.core.sos.SosModel
 import org.krug.app.core.sos.SosRepository
@@ -83,7 +85,16 @@ class MapViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val networkMonitor: NetworkMonitor,
     private val powerSaveMonitor: PowerSaveMonitor,
+    private val placeRepository: PlaceRepository,
 ) : ViewModel() {
+
+    /** Places za trenutno aktivan krug — MapScreen ih rendera kao pinove. */
+    val activePlaces: StateFlow<List<PlaceModel>> = uiStateHolder@ run {
+        localPrefs.activeCircleIdFlow.flatMapLatest { activeId ->
+            if (activeId.isNullOrBlank()) flowOf(emptyList())
+            else placeRepository.observePlaces(activeId)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    }
 
     /**
      * Driving distance fetch — koristi se iz MemberDetailSheet preko LaunchedEffect-a.

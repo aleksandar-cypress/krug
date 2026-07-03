@@ -143,6 +143,8 @@
     <string name="places_notif_body_enter">%1$s arrived at %2$s</string>
     <string name="places_notif_body_exit">%1$s left %2$s</string>
     <string name="places_notif_unknown_user">A member</string>
+    <string name="privacy_place_notifs_label">Place notifications</string>
+    <string name="privacy_place_notifs_hint">Get notified when a circle member arrives at or leaves a place.</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Members</string>

@@ -606,6 +606,8 @@ class LocationTrackingService : Service() {
                             return@forEach
                         }
                         notifiedPlaceEventIds.add(evt.id)
+                        // Per-user opt-out — user je isključio place notif u Settings.
+                        if (!currentSettings.placeNotifsEnabled) return@forEach
                         placeEventNotifier.notifyEvent(evt)
                     }
                 }

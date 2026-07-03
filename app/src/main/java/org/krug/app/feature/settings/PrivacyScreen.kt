@@ -113,6 +113,13 @@ class PrivacyViewModel @Inject constructor(
             }
         }
     }
+
+    fun setPlaceNotifs(enabled: Boolean) {
+        val uid = authRepository.currentUser?.uid ?: return
+        viewModelScope.launch {
+            settingsRepository.updatePlaceNotifs(uid, enabled)
+        }
+    }
 }
 
 @Composable
@@ -166,6 +173,34 @@ fun PrivacyScreen(
                 ShareDurationPicker(
                     activeUntilMs = state.settings.shareUntilMs,
                     onSelect = viewModel::setShareDuration,
+                )
+            }
+
+            Spacer(Modifier.size(24.dp))
+            androidx.compose.material3.HorizontalDivider()
+            Spacer(Modifier.size(16.dp))
+
+            // Place notifikacije toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.privacy_place_notifs_label),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        text = stringResource(R.string.privacy_place_notifs_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.size(8.dp))
+                Switch(
+                    checked = state.settings.placeNotifsEnabled,
+                    onCheckedChange = viewModel::setPlaceNotifs,
                 )
             }
         }

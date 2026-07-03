@@ -50,6 +50,8 @@ import org.krug.app.core.places.PlaceModel
 @Composable
 fun PlacesScreen(
     onBack: () -> Unit,
+    onAddPlace: () -> Unit,
+    onShowOnMap: () -> Unit,
     viewModel: PlacesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -73,7 +75,7 @@ fun PlacesScreen(
         floatingActionButton = {
             if (!limitReached) {
                 ExtendedFloatingActionButton(
-                    onClick = { viewModel.startEdit(null) },
+                    onClick = onAddPlace,
                     icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
                     text = { Text(stringResource(R.string.places_add_cta)) },
                 )
@@ -107,7 +109,14 @@ fun PlacesScreen(
                     items(state.places, key = { it.id }) { place ->
                         PlaceRow(
                             place = place,
-                            onEdit = { viewModel.startEdit(place) },
+                            onClick = {
+                                org.krug.app.core.places.PlaceFocusBus.request(
+                                    lat = place.lat, lng = place.lng,
+                                    name = place.name, radius = place.radius,
+                                )
+                                onShowOnMap()
+                            },
+                            onEdit = { viewModel.openEditSheet(place) },
                             onDelete = { pendingDelete = place },
                         )
                     }
@@ -116,27 +125,19 @@ fun PlacesScreen(
         }
     }
 
-    if (state.editingPlace != null || (state.editingPlace == null && state.saving)) {
-        // no-op branch
-    }
-    // Sheet — otvoren dok korisnik ne završi save/dismiss.
-    if (state.editingPlace != null || state.saving || state.error != null) {
-        // vidljivo dok save traje ili user startuje edit
-    }
-    val editing = state.editingPlace
-    if (editing != null) {
+    if (state.sheetOpen) {
         AddEditPlaceSheet(
-            editing = editing.takeIf { it.id.isNotBlank() },
+            editing = state.editingPlace,
             currentLat = state.currentLat,
             currentLng = state.currentLng,
             saving = state.saving,
             error = state.error,
-            onDismiss = { viewModel.startEdit(null) },
+            onDismiss = { viewModel.closeSheet() },
             onSave = { name, lat, lng, radius ->
-                viewModel.createPlace(name, lat, lng, radius) { viewModel.startEdit(null) }
+                viewModel.createPlace(name, lat, lng, radius) {}
             },
             onUpdate = { placeId, name, radius ->
-                viewModel.updatePlace(placeId, name, radius) { viewModel.startEdit(null) }
+                viewModel.updatePlace(placeId, name, radius) {}
             },
         )
     }
@@ -164,9 +165,9 @@ fun PlacesScreen(
 @Composable
 private fun EmptyState() {
     Column(
-        modifier = Modifier.fillMaxSize().padding(top = 48.dp, start = 8.dp, end = 8.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Top,
+        verticalArrangement = Arrangement.Center,
     ) {
         Icon(
             Icons.Outlined.Place,
@@ -179,13 +180,14 @@ private fun EmptyState() {
             stringResource(R.string.places_empty_title),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
         Spacer(Modifier.size(8.dp))
         Text(
             stringResource(R.string.places_empty_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 24.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
 }
@@ -193,11 +195,13 @@ private fun EmptyState() {
 @Composable
 private fun PlaceRow(
     place: PlaceModel,
+    onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),

@@ -145,6 +145,8 @@
     <string name="places_notif_body_enter">%1$s je stigao/la kod %2$s</string>
     <string name="places_notif_body_exit">%1$s je otišao/la sa %2$s</string>
     <string name="places_notif_unknown_user">Član</string>
+    <string name="privacy_place_notifs_label">Obaveštenja o mestima</string>
+    <string name="privacy_place_notifs_hint">Dobij obaveštenje kada član kruga stigne ili ode sa mesta.</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Članovi</string>
