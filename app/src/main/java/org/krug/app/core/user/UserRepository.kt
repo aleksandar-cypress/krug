@@ -85,14 +85,27 @@ class UserRepository @Inject constructor(
         awaitClose { reg.remove() }
     }
 
-    /** GDPR — obriši settings subcollection + user doc. */
+    /** GDPR — obriši settings + locationHistory subcolection-e + user doc. */
     suspend fun deleteUser(uid: String) {
-        // Settings subcollection (samo `main` doc, ali general-purpose za buduće dokumente).
         runCatching {
             userDoc(uid).collection("settings").get().await().documents.forEach { d ->
                 runCatching { d.reference.delete().await() }
             }
         }
+        // locationHistory može biti veliki (do ~6000 dokumenata za 30d aktivnog user-a).
+        // Batch delete u chunk-ovima od 500 (Firestore batch limit) da izbegnemo OOM.
+        runCatching {
+            val col = userDoc(uid).collection("locationHistory")
+            var deleted = 0
+            while (true) {
+                val batch = col.limit(500).get().await().documents
+                if (batch.isEmpty()) break
+                batch.forEach { runCatching { it.reference.delete().await() } }
+                deleted += batch.size
+                if (batch.size < 500) break
+            }
+            if (deleted > 0) Timber.i("deleteUser: cleaned %d history points for %s", deleted, uid)
+        }.onFailure { Timber.w(it, "deleteUser locationHistory cleanup failed for $uid") }
         runCatching { userDoc(uid).delete().await() }
             .onFailure { Timber.w(it, "deleteUser doc failed for $uid") }
     }

@@ -60,33 +60,42 @@ fun HistoryScreen(
     viewModel: HistoryViewModel = hiltViewModel(),
 ) {
     val points by viewModel.points.collectAsStateWithLifecycle()
+    val activePlaces by viewModel.activePlaces.collectAsStateWithLifecycle()
     val range by viewModel.selectedDay.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var dayOffset by remember { mutableStateOf(0) }
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var polylineManager by remember { mutableStateOf<PolylineAnnotationManager?>(null) }
     var pointManager by remember { mutableStateOf<com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager?>(null) }
     var scrubTime by remember { mutableStateOf(1f) } // 0..1 = start..end dana
 
-    // Kad se promene point-i ili scrub, re-render polyline + start/end markere.
-    LaunchedEffect(points, scrubTime, polylineManager, pointManager) {
+    // Kad se promene point-i ili scrub, re-render polyline + start/end markere + Places pinove.
+    LaunchedEffect(points, activePlaces, scrubTime, polylineManager, pointManager) {
         val pm = polylineManager ?: return@LaunchedEffect
         val ptm = pointManager ?: return@LaunchedEffect
         pm.deleteAll()
         ptm.deleteAll()
+        // 1) Places pinovi — statični, ne zavise od scrub-a.
+        activePlaces.forEach { place ->
+            ptm.create(
+                PointAnnotationOptions()
+                    .withPoint(Point.fromLngLat(place.lng, place.lat))
+                    .withIconImage(
+                        org.krug.app.feature.map.MapMarkers.placeMarker(context, place.category),
+                    )
+                    .withIconOffset(listOf(0.0, -21.0))
+                    .withTextField(place.name)
+                    .withTextOffset(listOf(0.0, 0.6))
+                    .withTextSize(11.0)
+                    .withTextColor("#1F2937")
+                    .withTextHaloColor("#FFFFFF")
+                    .withTextHaloWidth(1.5),
+            )
+        }
         if (points.isEmpty()) return@LaunchedEffect
         val cutoff = range.fromMs + ((range.toMs - range.fromMs) * scrubTime).toLong()
         val visible = points.filter { p -> (p.timestamp?.time ?: 0L) <= cutoff }
-        if (visible.size < 2) {
-            if (visible.isNotEmpty()) {
-                val p = visible.first()
-                ptm.create(
-                    PointAnnotationOptions()
-                        .withPoint(Point.fromLngLat(p.lng, p.lat))
-                        .withIconColor("#10B981"),
-                )
-            }
-            return@LaunchedEffect
-        }
+        if (visible.size < 2) return@LaunchedEffect
         val line = LineString.fromLngLats(
             visible.map { Point.fromLngLat(it.lng, it.lat) },
         )
@@ -96,7 +105,7 @@ fun HistoryScreen(
                 .withLineColor("#4F46E5")
                 .withLineWidth(4.0),
         )
-        // Fit bounds na traku
+        // Fit bounds na traku samo pri prvom render-u (ne pomeraj kameru pri scrub-u).
         val bounds = visible.map { it.lat to it.lng }
         val minLat = bounds.minOf { it.first }
         val maxLat = bounds.maxOf { it.first }
@@ -202,11 +211,24 @@ fun HistoryScreen(
                     value = scrubTime,
                     onValueChange = { scrubTime = it },
                 )
-                Text(
-                    stringResource(R.string.history_points_count, points.size),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                val stats = remember(points) { computeStats(points) }
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    StatCell(
+                        label = stringResource(R.string.history_stat_distance),
+                        value = formatKm(stats.distanceMeters),
+                        modifier = Modifier.weight(1f),
+                    )
+                    StatCell(
+                        label = stringResource(R.string.history_stat_active),
+                        value = formatDuration(stats.activeMs),
+                        modifier = Modifier.weight(1f),
+                    )
+                    StatCell(
+                        label = stringResource(R.string.history_stat_max_speed),
+                        value = formatSpeed(stats.maxSpeedMps),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
@@ -217,6 +239,73 @@ fun HistoryScreen(
             polylineManager = null
             pointManager = null
         }
+    }
+}
+
+@Composable
+private fun StatCell(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private data class HistoryStats(
+    val distanceMeters: Double,
+    val activeMs: Long,
+    val maxSpeedMps: Float,
+    val avgSpeedMps: Float,
+)
+
+/**
+ * Distance: sabira haversine udaljenosti između uzastopnih point-a.
+ * Active time: sabira interval samo ako je gap između tačaka < 15min
+ * (>15min pretpostavljamo da je user bio ne-aktivan, npr. spava).
+ * Speed: max iz `speed` polja (m/s), avg = distance / activeTime.
+ */
+private fun computeStats(points: List<org.krug.app.core.location.LocationHistoryPoint>): HistoryStats {
+    if (points.size < 2) return HistoryStats(0.0, 0L, 0f, 0f)
+    var dist = 0.0
+    var active = 0L
+    var maxSpeed = 0f
+    for (i in 1 until points.size) {
+        val a = points[i - 1]
+        val b = points[i]
+        val res = FloatArray(1)
+        android.location.Location.distanceBetween(a.lat, a.lng, b.lat, b.lng, res)
+        dist += res[0]
+        val gap = (b.timestamp?.time ?: 0L) - (a.timestamp?.time ?: 0L)
+        if (gap in 1L..15 * 60_000L) active += gap
+        if (b.speed > maxSpeed) maxSpeed = b.speed
+    }
+    val avg = if (active > 0) (dist / (active / 1000.0)).toFloat() else 0f
+    return HistoryStats(dist, active, maxSpeed, avg)
+}
+
+private fun formatSpeed(mps: Float): String {
+    if (mps <= 0.1f) return "-"
+    val kmh = mps * 3.6f
+    return "%.0f km/h".format(kmh)
+}
+
+private fun formatKm(meters: Double): String {
+    return if (meters < 1000) "${meters.toInt()} m"
+    else "%.1f km".format(meters / 1000)
+}
+
+private fun formatDuration(ms: Long): String {
+    val mins = ms / 60_000L
+    return when {
+        mins < 60 -> "${mins}min"
+        else -> "${mins / 60}h ${mins % 60}min"
     }
 }
 

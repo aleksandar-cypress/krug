@@ -92,6 +92,26 @@ fun PlacesScreen(
             if (state.places.isEmpty()) {
                 EmptyState()
             } else {
+                // Kompaktne statistike — broj mesta i događaja danas (0h-24h).
+                val todayEventCount = remember(recentEvents) {
+                    val startOfDay = java.util.Calendar.getInstance().apply {
+                        set(java.util.Calendar.HOUR_OF_DAY, 0)
+                        set(java.util.Calendar.MINUTE, 0)
+                        set(java.util.Calendar.SECOND, 0)
+                        set(java.util.Calendar.MILLISECOND, 0)
+                    }.timeInMillis
+                    recentEvents.count { (it.timestamp?.time ?: 0L) >= startOfDay }
+                }
+                Text(
+                    text = stringResource(
+                        R.string.places_stats_line,
+                        state.places.size,
+                        todayEventCount,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
                 if (limitReached) {
                     Text(
                         text = stringResource(

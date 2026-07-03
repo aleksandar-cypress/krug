@@ -125,6 +125,7 @@ class PrivacyViewModel @Inject constructor(
 @Composable
 fun PrivacyScreen(
     onBack: () -> Unit,
+    onOpenMyHistory: () -> Unit = {},
     viewModel: PrivacyViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -202,6 +203,14 @@ fun PrivacyScreen(
                     checked = state.settings.placeNotifsEnabled,
                     onCheckedChange = viewModel::setPlaceNotifs,
                 )
+            }
+
+            Spacer(Modifier.size(16.dp))
+            androidx.compose.material3.OutlinedButton(
+                onClick = onOpenMyHistory,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.privacy_my_history_cta))
             }
         }
     }

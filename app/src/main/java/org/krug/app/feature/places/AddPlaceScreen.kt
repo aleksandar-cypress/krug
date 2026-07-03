@@ -66,6 +66,7 @@ fun AddPlaceScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var name by remember { mutableStateOf("") }
+    var nameEdited by remember { mutableStateOf(false) }
     var radius by remember { mutableStateOf(PlaceModel.DEFAULT_RADIUS_M.toFloat()) }
     var category by remember { mutableStateOf(PlaceCategory.OTHER) }
     val mapViewRef = remember { MapViewHolder2() }
@@ -205,13 +206,32 @@ fun AddPlaceScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Preload string resources za sve kategorije da bismo mogli da ih koristimo
+                // u onSelect lambda-i (composable pozivi nisu dozvoljeni unutar callback-a).
+                val nameHome = stringResource(R.string.places_cat_home)
+                val nameSchool = stringResource(R.string.places_cat_school)
+                val nameWork = stringResource(R.string.places_cat_work)
+                val nameGym = stringResource(R.string.places_cat_gym)
+                val nameShop = stringResource(R.string.places_cat_shop)
                 CategoryPicker(
                     selected = category,
-                    onSelect = { category = it },
+                    onSelect = { picked ->
+                        category = picked
+                        if (!nameEdited) {
+                            name = when (picked) {
+                                PlaceCategory.HOME -> nameHome
+                                PlaceCategory.SCHOOL -> nameSchool
+                                PlaceCategory.WORK -> nameWork
+                                PlaceCategory.GYM -> nameGym
+                                PlaceCategory.SHOP -> nameShop
+                                PlaceCategory.OTHER -> ""
+                            }
+                        }
+                    },
                 )
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it.take(40) },
+                    onValueChange = { name = it.take(40); nameEdited = true },
                     label = { Text(stringResource(R.string.places_name_label)) },
                     placeholder = { Text(stringResource(R.string.places_name_hint)) },
                     singleLine = true,
@@ -266,3 +286,4 @@ fun AddPlaceScreen(
 private class MapViewHolder2 {
     var map: MapView? = null
 }
+

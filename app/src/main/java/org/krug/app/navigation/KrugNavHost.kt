@@ -3,6 +3,8 @@ package org.krug.app.navigation
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import org.krug.app.R
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -130,7 +132,16 @@ fun KrugNavHost() {
             )
         }
         composable<Privacy> {
-            PrivacyScreen(onBack = { nav.popBackStack() })
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            val auth = remember { com.google.firebase.auth.FirebaseAuth.getInstance() }
+            PrivacyScreen(
+                onBack = { nav.popBackStack() },
+                onOpenMyHistory = {
+                    val uid = auth.currentUser?.uid ?: return@PrivacyScreen
+                    val name = auth.currentUser?.displayName ?: ctx.getString(R.string.privacy_my_history_cta)
+                    nav.navigate(History(uid = uid, displayName = name))
+                },
+            )
         }
         composable<BatteryMode> {
             BatteryModeScreen(onBack = { nav.popBackStack() })

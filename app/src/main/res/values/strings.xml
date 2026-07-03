@@ -164,6 +164,12 @@
     <string name="history_time_label">Time: %1$s</string>
     <string name="history_points_count">%1$d points</string>
     <string name="history_cta">View history</string>
+    <string name="privacy_my_history_cta">View my location history</string>
+    <string name="history_stat_distance">Distance</string>
+    <string name="history_stat_active">Active time</string>
+    <string name="history_stat_points">Points</string>
+    <string name="history_stat_max_speed">Max speed</string>
+    <string name="places_stats_line">%1$d places · %2$d events today</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Members</string>

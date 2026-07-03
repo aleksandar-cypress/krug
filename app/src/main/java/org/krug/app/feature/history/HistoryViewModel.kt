@@ -13,8 +13,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import org.krug.app.core.circle.CircleRepository
 import org.krug.app.core.location.LocationHistoryPoint
 import org.krug.app.core.location.LocationHistoryRepository
+import org.krug.app.core.places.PlaceModel
+import org.krug.app.core.places.PlaceRepository
+import org.krug.app.core.prefs.LocalPrefs
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 
 data class HistoryDayRange(val fromMs: Long, val toMs: Long)
 
@@ -23,6 +29,8 @@ data class HistoryDayRange(val fromMs: Long, val toMs: Long)
 class HistoryViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val historyRepository: LocationHistoryRepository,
+    private val placeRepository: PlaceRepository,
+    private val localPrefs: LocalPrefs,
 ) : ViewModel() {
 
     val uid: String = requireNotNull(savedStateHandle["uid"])
@@ -34,6 +42,14 @@ class HistoryViewModel @Inject constructor(
     val points: StateFlow<List<LocationHistoryPoint>> = selectedDay.flatMapLatest { range ->
         historyRepository.observeHistory(uid, range.fromMs, range.toMs)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Places iz trenutno aktivnog kruga — render kao statični pinovi iznad trag-a. */
+    val activePlaces: StateFlow<List<PlaceModel>> = localPrefs.activeCircleIdFlow
+        .flatMapLatest { activeId ->
+            if (activeId.isNullOrBlank()) flowOf(emptyList())
+            else placeRepository.observePlaces(activeId)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** dayOffset: 0 = danas, -1 = juče, -2 = pretpr., itd. Max 30 dana unazad. */
     fun setDayOffset(offset: Int) {
