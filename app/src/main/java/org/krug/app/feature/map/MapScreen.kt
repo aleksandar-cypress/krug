@@ -242,6 +242,25 @@ fun MapScreen(
     var detailUid by remember { mutableStateOf<String?>(null) }
     var detailPlaceId by remember { mutableStateOf<String?>(null) }
     var placePendingDelete by remember { mutableStateOf<org.krug.app.core.places.PlaceModel?>(null) }
+
+    // Whats-new modal: prikazuje se jednom po version-code bump-u.
+    var showWhatsNew by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val currentVersion = org.krug.app.BuildConfig.VERSION_CODE
+        val lastSeen = viewModel.lastSeenWhatsNewVersion()
+        if (lastSeen == 0) {
+            // Fresh install ili prvi put — ne prikazujemo modal, samo pamtimo trenutni version.
+            viewModel.markWhatsNewSeen(currentVersion)
+        } else if (lastSeen < currentVersion) {
+            showWhatsNew = true
+        }
+    }
+    if (showWhatsNew) {
+        WhatsNewDialog(onDismiss = {
+            showWhatsNew = false
+            viewModel.markWhatsNewSeen(org.krug.app.BuildConfig.VERSION_CODE)
+        })
+    }
     // Pending refocus: kad user tapne Osveži, pamtimo (uid, since). Kad stigne
     // sveži location.updatedAt > since za taj uid, automatski flyTo na novu poziciju.
     var pendingRefocus by remember { mutableStateOf<Pair<String, Long>?>(null) }

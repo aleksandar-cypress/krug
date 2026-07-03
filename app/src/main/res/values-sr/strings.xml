@@ -177,6 +177,18 @@
     <string name="car_title">Krug</string>
     <string name="car_no_members">Nema članova sa lokacijom trenutno</string>
     <string name="car_action_refresh">Osveži</string>
+    <string name="car_loading">Učitavam krug…</string>
+
+    <!-- Šta je novo u v1.1 -->
+    <string name="whats_new_title">Šta je novo</string>
+    <string name="whats_new_subtitle">Verzija 1.1 donosi velike dodatke:</string>
+    <string name="whats_new_places_title">Mesta</string>
+    <string name="whats_new_places_body">Dodaj Kuću, Školu, Posao. Obaveštenje kad neko stigne ili ode.</string>
+    <string name="whats_new_history_title">Istorija kretanja</string>
+    <string name="whats_new_history_body">Poslednjih 30 dana kao trag na mapi sa statistikama.</string>
+    <string name="whats_new_auto_title">Android Auto</string>
+    <string name="whats_new_auto_body">Vidi krug na tabli u kolima. SOS glasovna obaveštenja dok voziš.</string>
+    <string name="whats_new_close">Razumem</string>
     <string name="places_saved_snackbar">Mesto sačuvano: %1$s</string>
     <string name="places_updated_snackbar">Mesto izmenjeno</string>
     <string name="places_deleted_snackbar">Obrisano: %1$s</string>

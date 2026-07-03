@@ -24,6 +24,11 @@ class LocalPrefs @Inject constructor(
         get() = prefs.getBoolean(KEY_ONBOARDING_DONE, false)
         set(value) = prefs.edit(commit = false) { putBoolean(KEY_ONBOARDING_DONE, value) }
 
+    /** Poslednji versionCode za koji je user video "šta je novo" modal. */
+    var lastSeenWhatsNewVersion: Int
+        get() = prefs.getInt(KEY_LAST_SEEN_WHATS_NEW, 0)
+        set(value) = prefs.edit(commit = false) { putInt(KEY_LAST_SEEN_WHATS_NEW, value) }
+
     private val _activeCircleId = MutableStateFlow(prefs.getString(KEY_ACTIVE_CIRCLE, null))
 
     /** Reactive — UI observe-uje, fallback na prvi krug ako null/nevažeći. */
@@ -112,5 +117,6 @@ class LocalPrefs @Inject constructor(
         const val KEY_SOS_NOTIFIED = "sos_notified_ts"
         const val KEY_PENDING_DELETE_UID = "pending_delete_uid"
         const val KEY_ACTIVITY_REC_PROMPT_SHOWN = "activity_rec_prompt_shown"
+        const val KEY_LAST_SEEN_WHATS_NEW = "last_seen_whats_new_version"
     }
 }

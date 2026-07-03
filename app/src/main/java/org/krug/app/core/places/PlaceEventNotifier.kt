@@ -25,12 +25,24 @@ class PlaceEventNotifier @Inject constructor(
     fun ensureChannel() {
         val mgr = NotificationManagerCompat.from(context)
         if (mgr.getNotificationChannel(CHANNEL_ID) != null) return
+        // Notification sound: default ringtone (nije alarm kao SOS — Places je informativno).
+        // Bez explicit sound-a, LG i neki Xiaomi ROM-ovi ne emituju zvuk uopšte za IMPORTANCE_DEFAULT.
+        val soundUri = android.media.RingtoneManager.getDefaultUri(
+            android.media.RingtoneManager.TYPE_NOTIFICATION,
+        )
+        val attrs = android.media.AudioAttributes.Builder()
+            .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
         val channel = NotificationChannelCompat.Builder(
             CHANNEL_ID,
             NotificationManager.IMPORTANCE_DEFAULT,
         )
             .setName(context.getString(R.string.places_notif_channel))
             .setDescription(context.getString(R.string.places_notif_channel_desc))
+            .setSound(soundUri, attrs)
+            .setVibrationEnabled(true)
+            .setVibrationPattern(longArrayOf(0, 200, 100, 200))
             .setShowBadge(false)
             .build()
         mgr.createNotificationChannel(channel)

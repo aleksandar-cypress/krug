@@ -116,6 +116,11 @@ class MapViewModel @Inject constructor(
         }
     }
 
+    fun lastSeenWhatsNewVersion(): Int = localPrefs.lastSeenWhatsNewVersion
+    fun markWhatsNewSeen(version: Int) {
+        localPrefs.lastSeenWhatsNewVersion = version
+    }
+
     /**
      * Driving distance fetch — koristi se iz MemberDetailSheet preko LaunchedEffect-a.
      * Vraća putnu distance u metrima (Mapbox Directions API), ili null ako je network fail

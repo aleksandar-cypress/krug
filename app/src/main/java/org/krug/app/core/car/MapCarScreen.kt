@@ -76,6 +76,7 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
     /** Member list snapshot — re-invalidate-uje se pri promeni. */
     @Volatile private var members: List<CarMember> = emptyList()
     @Volatile private var places: List<PlaceModel> = emptyList()
+    @Volatile private var loaded: Boolean = false
 
     init {
         startObserving()
@@ -83,7 +84,9 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
 
     override fun onGetTemplate(): Template {
         val listBuilder = ItemList.Builder()
-        if (members.isEmpty() && places.isEmpty()) {
+        if (!loaded) {
+            listBuilder.setNoItemsMessage(carContext.getString(R.string.car_loading))
+        } else if (members.isEmpty() && places.isEmpty()) {
             listBuilder.setNoItemsMessage(carContext.getString(R.string.car_no_members))
         } else {
             // Prvo članovi (češće relevant), pa Places.
@@ -162,8 +165,15 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
                                     CarMember(
                                         uid = uid,
                                         name = user?.displayName?.takeIf { it.isNotBlank() } ?: "Član",
-                                        subtitle = loc?.let {
-                                            "GPS ${it.accuracy.toInt()}m"
+                                        subtitle = loc?.let { l ->
+                                            val ageMs = System.currentTimeMillis() - l.updatedAt
+                                            val ageMin = (ageMs / 60_000L).coerceAtLeast(0)
+                                            val ageStr = when {
+                                                ageMin < 1 -> "sada"
+                                                ageMin < 60 -> "pre ${ageMin} min"
+                                                else -> "pre ${ageMin / 60} h"
+                                            }
+                                            "$ageStr · GPS ${l.accuracy.toInt()}m"
                                         } ?: "-",
                                         lat = loc?.lat,
                                         lng = loc?.lng,
@@ -175,6 +185,7 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
                 }
                 .collectLatest { list ->
                     members = list
+                    loaded = true
                     invalidate()
                 }
         }

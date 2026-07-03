@@ -175,6 +175,18 @@
     <string name="car_title">Krug</string>
     <string name="car_no_members">No members with location right now</string>
     <string name="car_action_refresh">Refresh</string>
+    <string name="car_loading">Loading circle…</string>
+
+    <!-- What's new in v1.1 -->
+    <string name="whats_new_title">What\'s new</string>
+    <string name="whats_new_subtitle">Version 1.1 brings big additions:</string>
+    <string name="whats_new_places_title">Places</string>
+    <string name="whats_new_places_body">Add Home, School, Work. Get notified when your circle arrives or leaves.</string>
+    <string name="whats_new_history_title">Location history</string>
+    <string name="whats_new_history_body">See the last 30 days as a trail on the map with distance stats.</string>
+    <string name="whats_new_auto_title">Android Auto</string>
+    <string name="whats_new_auto_body">See your circle on the car dashboard. SOS voice alerts while driving.</string>
+    <string name="whats_new_close">Got it</string>
     <string name="places_saved_snackbar">Place saved: %1$s</string>
     <string name="places_updated_snackbar">Place updated</string>
     <string name="places_deleted_snackbar">Deleted: %1$s</string>
