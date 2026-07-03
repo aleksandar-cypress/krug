@@ -2,6 +2,186 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-07-03, dvadeset sedma sesija — V1.1 polish + geocoding/ETA/silent hours/mute/auto-status + release prep)
+
+Nastavak 26. sesije istoga dana. Nakon što su Places + History + Auto core-i bili implementirani, ova sesija je fokusirana na polish (5 krugova iteracija), dodatne feature-e (address search, ETA, silent hours, per-place mute, notif actions, auto-status pill), i business release preparaciju (bump versionCode → 2, versionName 1.1.0, release AAB build-ovan, landing page ažuriran). Ukupno 17 commit-ova (`82286e7` → `ec7c679`), ~4400 novih linija.
+
+### A) Polish krugovi 1-5
+
+**Krug 1** — snackbar feedback + delete confirm + empty state hint + spinner:
+- Snackbar posle save/update/delete akcija u PlacesScreen („Mesto sačuvano: Kuća" / „Obrisano: Kuća")
+- Delete confirm dialog za pin na main mapi (ranije direktno bez potvrde)
+- HistoryScreen empty state: čitljiv card sa naslovom + hint tekst („Krug beleži lokaciju dok se krećeš")
+- AddPlaceScreen Save dugme spinner dok saving=true
+- „Moja lokacija" FAB disabled + poluprovidno dok nema GPS fix-a
+- „Otkaži" hardcoded string zamenjen resource-om na 2 mesta
+
+**Krug 2** — HistoryScreen bug fix + category ikonice + haptic + PlacesScreen loading:
+- **HistoryScreen bug**: fit-bounds sada samo prvi put po danu (`cameraFitDone` remember key = range.fromMs). Ranije se resetovao kamera na svaki scrub-slajder pomak, user nije mogao ručno da zumira.
+- CategoryPicker FilterChip-ovi dobijaju leading ikonicu (Home/School/Work/FitnessCenter/ShoppingBag/MoreHoriz)
+- `confirmHaptic()` feedback pri save/update/delete akcijama
+- PlacesScreen loading state (spinner pre prvog Firestore snapshot-a)
+
+**Krug 3** — MapView memory leak + timeline arrows + places count + discard guard:
+- AddPlaceScreen + HistoryScreen `onDispose` sada zovu `mv.onDestroy()` + `deleteAll` na annotation manager-ima (~10MB per open/close cycle inače akumulira)
+- EventRow ikonica u boji: zelena ↓ = enter, narandžasta ↑ = exit
+- CircleDetail „Mesta" dugme prikazuje broj mesta „Mesta (3)"
+- AddPlaceScreen discard confirm — ako user krene back sa unetim imenom, AlertDialog „Odbaciti izmene?" (BackHandler + TopBar back oba idu kroz guard)
+
+**Krug 4** — history speed + today shortcut + loading state + places sort:
+- HistoryScreen playback speed cycle 1x → 2x → 4x → 0.5x (TextButton pored slajdera)
+- „Danas" shortcut: klik na naslov dana (kad dayOffset != 0) skoči na današnji dan (gesture-driven)
+- HistoryScreen loading state (CircularProgressIndicator umesto empty state dok prvi snapshot ne stigne). HistoryViewModel dobija `loaded: StateFlow<Boolean>`.
+- PlacesScreen sort toggle: „Sort A-Z" ↔ „Sort po datumu" (klijent-side sort na `state.places`)
+
+**Krug 5** — Auto empty state + notif sound + whats-new modal:
+- MapCarScreen `loaded` flag razlikuje „učitava" (spinner poruka) od „loaded, prazan krug"
+- Member subtitle poboljšan: „pre 2 min · GPS 30m" umesto samo accuracy
+- PlaceEventNotifier channel dobija explicit notification sound + vibration pattern (LG/Xiaomi ROM-ovi ne emituju zvuk za IMPORTANCE_DEFAULT bez explicit soundUri)
+- WhatsNewDialog composable — prikazuje se u MapScreen jednom po version-code bump-u. Fresh install (lastSeen=0) samo markira trenutni version bez modal-a; update (lastSeen < currentVersion) prikazuje modal. 3 feature card-a: Places (📍), History (⌛), Android Auto (🚗)
+- LocalPrefs.lastSeenWhatsNewVersion + KEY_LAST_SEEN_WHATS_NEW
+
+### B) Nova feature: Address geocoding (Mapbox Places API)
+
+**GeocodingRepository** (`core/directions/`):
+- `search(query, proximity)` → List<Suggestion(displayName, placeName, lat, lng)>
+- Language `sr,en` priority, limit 5 rezultata
+- Proximity parametar (current location) diže lokalne rezultate iznad global-a
+
+**AddPlaceScreen UI**:
+- Nova ikonica lupe u TopBar-u (right action)
+- Toggle otvara OutlinedTextField iznad mape sa live predlozima (300ms debounce)
+- LazyColumn sa max heightIn 240dp za rezultate
+- Tap na predlog: flyTo lokaciju (zoom 16.0), auto-suggest ime u name field-u (samo ako user nije ručno editovao), close search overlay
+
+PlacesViewModel dobija `searchAddress(query)` sa job cancellation + `clearSearchResults()`.
+
+### C) Nova feature: ETA za člana (Mapbox drivingRoute)
+
+**DirectionsRepository.drivingRoute** (proširenje):
+- Novi endpoint uz postojeći `drivingDistanceMeters`
+- Vraća `DrivingRoute(distanceMeters, durationSeconds)`
+- Odvojen cache od plain distance-a
+- Traffic-agnostic (free tier), OK približna procena
+
+**MemberDetailSheet UI**:
+- Nov StatChip „Za" (sr) / „ETA" (en) pored distance chip-a
+- `formatEta` helper: „12 min" / „1h 15m" / „<1 min"
+- Prikazuje se samo ako je duration > 0
+
+Loading callback sada `loadDrivingRoute` (nije `loadDrivingDistanceMeters`), state je razdvojen na `drivingDistanceMeters` + `drivingDurationSec`.
+
+### D) Nova feature: Silent hours
+
+**UserSettings.silentHours: String? = null** — format „HH:MM-HH:MM" (24h), null = feature isključen.
+
+**SettingsRepository.updateSilentHours** sa `FieldValue.delete()` za clear.
+
+**LocationTrackingService.isInSilentHours()**:
+- Parse i wrap-preko-ponoći check
+- `nowMin in fromMin..toMin` za simple range
+- `nowMin >= fromMin || nowMin <= toMin` za wrap (23-07)
+- Pre `placeEventNotifier.notifyEvent()` u `observeCirclePlaces` scope-u
+
+**Privacy UI** (Settings → Privatnost):
+- Switch za on/off (default OFF, kada se uključi postavi „23:00-07:00")
+- Kad je ON, prikazuju se preset FilterChip-ovi: 22:00-07:00, 23:00-07:00, 00:00-06:00
+
+### E) Nova feature: Per-place mute + notif actions
+
+**PlaceModel.muted: Boolean = false** — kad je true, članovi kruga ne dobijaju notif za enter/exit ovog mesta.
+
+**PlaceRepository.setMuted(circleId, placeId, muted)** propagacija.
+
+**PlaceDetailSheet UI**:
+- Switch „Utišaj obaveštenja za ovo mesto" ispod InfoRow-a
+- Toggle triggers `MapViewModel.togglePlaceMute()`
+
+**LocationTrackingService integracija**:
+- `mutedPlaceIds: MutableSet<String>` populated iz observePlaces block-a (`.filter { it.muted }.map { it.id }`)
+- Notif dispatch: `if (evt.placeId in mutedPlaceIds) return@forEach`
+
+**Notif "Vidi na mapi" action**:
+- `PlaceEventNotifier.notifyEvent(evt, circleId)` — nov parametar
+- Action button pored default tap area
+- Intent extras: `EXTRA_FOCUS_PLACE_ID` + `EXTRA_FOCUS_CIRCLE_ID`
+- MainActivity.handlePlaceFocusExtra postavlja aktivan krug preko LocalPrefs.setActiveCircleId() koristeći dagger.hilt.EntryPoint pattern (MainActivityEntryPoint)
+- Sada LocationTrackingService dispatch zadržava cid preko pair-a: `placeRepository.observeRecentEvents(cid).map { events -> events.map { cid to it } }`
+
+### F) Nova feature: Auto-status pill
+
+**MapViewModel.autoStatusByUid: StateFlow<Map<String, String>>** — combine-uje `uiState` + `activePlaces`:
+- Ako je fresh location (< 15 min) i unutar radius-a nekog Place-a → ime tog place-a („Kuća")
+- Inače ako je speed > 3 m/s (~10.8 km/h) → „U pokretu • 45 km/h"
+- Inače null (nema pill-a)
+
+**MemberDetailSheet UI**:
+- Novi String? parametar `autoStatus`
+- Renderuje se kao mali primary-container pill ispod device model teksta
+
+### G) Layout fix: MemberDetailSheet 4+ chip-a
+
+Dodavanje ETA chip-a je razbilo Row layout — 4 chip-a u istom redu, tekstovi se sečeju („10..." umesto „100%", „<1 ..." umesto „<1 min"). Fix:
+- `Row` zamenjen sa `FlowRow(maxItemsInEachRow=3)` — prekomerni idu u drugi red
+- `navigationBarsPadding()` + 24dp Spacer na dnu — Samsung One UI gesture bar više ne preklapa „Istorija kretanja" dugme
+- `@OptIn(ExperimentalLayoutApi::class)` na MemberDetailSheet
+
+### H) HistoryScreen ćirilica fix
+
+`Locale("sr")` je default-ovao na ćirilicu za `formatDay` (Android sr = sr_RS_Cyrl). Fix: `Locale.forLanguageTag("sr-Latn")` forsira latinicu — konzistentno sa ostatkom UI-a.
+
+### I) V1.1 release preparation
+
+**versionCode 1 → 2, versionName 0.1.0 → 1.1.0** u `app/build.gradle.kts`.
+
+**bundleRelease** prošao (2m 17s), AAB 37 MB u `app/build/outputs/bundle/release/app-release.aab`.
+
+**Landing page** (`docs/index.html`):
+- Nova sekcija „Novo u v1.1" iznad postojećeg „Osnove" grid-a
+- Tri feature card-a: Mesta, Istorija kretanja, Android Auto (sr + en)
+- Postojeći „Tri stvari. Dobro odrađene." grid preimenovan „Osnove" eyebrow (bio je „Funkcije")
+- Landing kopiran u `~/Desktop/krugapp-upload/index.html` za manual hosting upload
+
+**Debug APK** instaliran na S24 (R5CWC1F9FND) posle svakog polish kruga za live UX validaciju.
+
+### J) Diskutovano ali odloženo
+
+- **Cluster pin-ova** (5+ članova na istoj lokaciji) — značajno je više posla (custom bitmap sa brojkom + haversine grouping + expand click handling). U V1.2 backlog.
+- **Zone rules** („Kad dete napusti Školu, javi mi") — UI za rule builder + backend za matching. V1.2.
+- **„Kucni na X"** silent ping — postoji već `requestRefresh` u LocationRepository + „Osveži" dugme u MemberDetailSheet. Feature je efektivno pokriven.
+- **Cloud Functions + FCM push** — jedini pravi reliability upgrade (radi kad je app killed). Traži Blaze plan (kartica). V1.2.
+- **Crash Detection** — user pitao, preporuka je da preskočimo. False positive rizik + pravna odgovornost za missed crash je previše za solo dev bez treniranog ML modela. Alternativa razmatra se: „post-drive inactivity check" (ako je speed pao sa >60km/h → 0 i miran 30min, silent ping članovima „Da li si OK?").
+
+### K) Preostali kritični put pre production
+
+1. **Play Store upload novog AAB-a** — Play Console → Testing → Closed testing → New release → upload `app-release.aab` (v1.1.0). Roll out za istu testersku listu (14 članova).
+2. **Play Store screenshots update** — na S24 uslikati (Power + Vol down): Map sa članovima, Places screen, AddPlace mapa sa crosshair-om, PlaceDetailSheet, HistoryScreen sa trag-om + stats, MemberDetailSheet sa svim chip-ovima. Sačuvati u `docs/screenshots/`. Format native S24 (2340×1080) ili 1080×1920.
+3. **Landing page upload** — `~/Desktop/krugapp-upload/index.html` na hosting (isti workflow kao za privacy/terms u prošloj sesiji).
+4. **Firebase Console TTL policy** (jednokratno) — Firestore → TTL policies → Create → Collection group `locationHistory`, field `timestamp`, 30 days retention. Bez ovog dokumenti se ne brišu automatski.
+5. **Android Auto submit** (odloženo) — Play Console → Testing → Automotive → Add track. 2-4 nedelje Google review. Rizik odbijanja (Krug nije primarno navigation app), ali NE utiče na phone app.
+6. **Live Android Auto test** — pre submit-a, testiraj u kolima preko Developer mode (Android Auto app → Version 10x tap → Developer settings → Unknown sources).
+
+### L) Health stanja (kraj sesije)
+
+- Debug APK: instaliran na S24 (R5CWC1F9FND)
+- Release AAB: `app-release.aab` v1.1.0 spreman za Play Store upload
+- Firestore rules: DEPLOYED (nije menjano u ovoj sesiji, i dalje važe od 26. sesije)
+- Nema kompajl grešaka; sve prošlo BUILD SUCCESSFUL
+- Poslednji commit: `ec7c679` (auto-status pill)
+- Testere lista: 14 (nije menjano, iz 25. sesije)
+
+### M) Commit istorija ove sesije
+
+Sve commit-ove od `82286e7` do `ec7c679`:
+- `82286e7` Polish: snackbar feedback, loading state, empty state, kategorije ikonice, haptic
+- `bd84ef4` Polish 3: MapView leak fix, timeline arrows, places count, discard guard
+- `c9b170b` Polish 4: history speed, today shortcut, loading state, places sort
+- `4177838` Polish 5-6-9: Auto empty state, notif sound, what's new modal
+- `14881b0` Feature: address geocoding + ETA + silent hours (V1.2 prep)
+- `570fae9` Feature: per-place mute + notif „Vidi na mapi" action
+- `781a5df` V1.1 release prep: bump version + landing page update + MemberDetail layout fix
+- `ec7c679` Feature: auto-status pill u MemberDetailSheet-u
+
 ## Gde smo stali (2026-07-03, dvadeset šesta sesija — V1.1 Places + Location history 30d + Android Auto MVP)
 
 Ogromna sesija, ~2600 novih linija koda kroz 8 commit-ova (`aa6d7e1` → `7eaac15`). Cela sesija fokusirana na dodavanje major feature-a koji Krug razlikuju od konkurencije (Places geofence, Location history, Android Auto). Sve implementirano u kodu, deploy-ovano na Firestore, i APK instaliran na S24 za live testing. Google review nije triggerovan jer nisu upload-ovani novi AAB-ovi.
