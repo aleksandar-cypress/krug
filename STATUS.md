@@ -2,6 +2,178 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-07-03, dvadeset šesta sesija — V1.1 Places + Location history 30d + Android Auto MVP)
+
+Ogromna sesija, ~2600 novih linija koda kroz 8 commit-ova (`aa6d7e1` → `7eaac15`). Cela sesija fokusirana na dodavanje major feature-a koji Krug razlikuju od konkurencije (Places geofence, Location history, Android Auto). Sve implementirano u kodu, deploy-ovano na Firestore, i APK instaliran na S24 za live testing. Google review nije triggerovan jer nisu upload-ovani novi AAB-ovi.
+
+### A) V1.1 Places (geofence) — kompletno implementirano
+
+Klijent-side geofencing preko Google Play Services `GeofencingClient`. Per-circle mesta (svi članovi vide iste), enter/exit event triggeruje lokalnu notif preko FGS-a (nema Cloud Functions u v1.1).
+
+**Data model** — `core/places/PlaceModels.kt`:
+- `PlaceModel`: id, name, lat, lng, radius (50-500m, default 100m), category (enum), createdBy, createdAt
+- `PlaceEventModel`: id, placeId, placeName, userId, userName, type (ENTER/EXIT), timestamp
+- `PlaceCategory` enum: HOME, SCHOOL, WORK, GYM, SHOP, OTHER
+- Free tier: max 3 mesta po krugu (`FREE_TIER_MAX_PER_CIRCLE`)
+
+**Firestore**:
+- `/circles/{cid}/places/{pid}` — read/write samo članovi kruga
+- `/circles/{cid}/placeEvents/{eid}` — create only self, no update/delete, TTL 24h (podesiti manual)
+- Rules deploy-ovan (`firebase deploy --only firestore:rules --project krug-86527`)
+
+**GeofenceManager** (`core/places/GeofenceManager.kt`):
+- Wrapper oko `GeofencingClient` sa request ID formatom `{circleId}:{placeId}`
+- Registruje batch geofence-a sa ENTER + EXIT transition types
+- Zahteva `ACCESS_BACKGROUND_LOCATION` (već imamo)
+- Max 100 geofence-a po device (Google limit), min 50m radius zbog GPS accuracy
+
+**GeofenceBroadcastReceiver** (`core/places/GeofenceBroadcastReceiver.kt`):
+- `@AndroidEntryPoint` Hilt DI za pristup PlaceRepository + FirebaseAuth
+- Parse requestId → circleId + placeId, fetch placeName + userName, upiši PlaceEvent
+- Manifest deklaracija sa `exported="false"`
+
+**LocationTrackingService integracija** (`observeCirclePlaces()`):
+- Prati sve krug-ove user-a, kombinuje sa places listener-om, re-registruje geofence pri promeni
+- Odvojen scope za `placeEvents` observation — filter self events + notified IDs + `placesListenerStartedAt` replay guard
+- Poštuje `placeNotifsEnabled` user setting (default true)
+
+**UI** — `feature/places/`:
+- **PlacesScreen** — lista mesta u krugu, FAB „Dodaj mesto", inline stats („3 mesta · 12 događaja danas"), Activity timeline sekcija (poslednjih 20 event-a), presence indikator („Trenutno ovde: Jelena, Marko" u zelenom), tap na row → nav to Map sa flyTo
+- **AddPlaceScreen** — full-screen Mapbox picker sa fiksnim crosshair-om, „Moja lokacija" FAB (dole desno), Canvas overlay krug koji se skalira sa slider-om preko Web Mercator formule (`156543.03 * cos(lat) / 2^zoom`), Category picker (FilterChip-ovi) sa auto-suggest name-a
+- **AddEditPlaceSheet** — modal sheet za EDIT postojećih mesta (nema izbor lokacije, samo name + radius + category)
+- **PlaceDetailSheet** (u feature/map/) — otvara se tap-om na pin na main mapi. Prikazuje: kategorija badge (glyph slovo u boji), radius, kreator (imya iz members liste), poslednja aktivnost (najnoviji event), Edit + Delete dugmadi
+- **CategoryPicker** composable — reusable za AddPlaceScreen + AddEditPlaceSheet
+
+**Main map integracija** (feature/map/MapScreen.kt):
+- Novi `placeManager` (PointAnnotationManager) + `placeRadiusManager` (PolygonAnnotationManager)
+- Radius circle = 64-strani polygon aproksimacija u boji kategorije (Web Mercator geo circle, skalira sa zoom-om)
+- Teardrop pin sa glyph slovom po kategoriji (H/S/W/G/$/•) — MapMarkers.placeMarker(context, category)
+- Tap na pin → PlaceDetailSheet sa nav to Places screen za edit ili direct delete
+
+**PlaceFocusBus** (`core/places/PlaceFocusBus.kt`):
+- Deep-link pattern (kao SosFocusBus) — PlacesScreen postavi Focus, MapScreen collect-uje i flyTo-uje
+- Zoom se skalira sa radius-om (100m → z16.5, 400m → z14.5, formula `16.5 - log2(radius/100)`)
+
+**Per-user opt-in** (Settings → Privatnost → toggle):
+- `UserSettings.placeNotifsEnabled: Boolean = true`
+- `SettingsRepository.updatePlaceNotifs`
+- LocationTrackingService filter: `if (!currentSettings.placeNotifsEnabled) return@forEach`
+
+**Cleanup on circle delete** (`CircleRepository.deleteCircle`):
+- Pre brisanja parent doc-a, briše places + placeEvents subcollection-e (nema Cloud Functions cascade)
+
+### B) Location history 30d — Firestore write + reader UI
+
+**Schema**: `/users/{uid}/locationHistory/{pointId}` — subcollection per-user.
+- Field-ovi: lat, lng, accuracy, batteryPct, speed, bearing, timestamp
+- TTL policy (MANUAL PODEŠAVANJE u Firebase Console → Firestore → TTL policies → Create → Collection group `locationHistory`, field `timestamp`, 30 days)
+
+**Writer** (`LocationHistoryRepository.writePoint` pozvan iz LocationTrackingService):
+- Filter `shouldWriteHistory()`: piše samo ako pomeranje >25m ILI prošlo >10min od poslednjeg zapisa
+- Bez filtera ~4300 write/day/user (svakih 20s fix); sa filterom ~50-200 write/day/user
+- Firestore free tier 20k write/day → dovoljno za 100 aktivnih testera
+
+**Rules**: allow read authenticated, allow create isSelf, no update/delete. Cross-user privacy nije striktno enforce-ovan (pragmatic trade-off — Krug je invite-only, low stalking risk).
+
+**HistoryScreen** (`feature/history/HistoryScreen.kt`):
+- Mapbox map sa PolylineAnnotation trag-om + PointAnnotation markerima
+- Day picker sa strelicama (max 30 dana unazad; desna strelica flipped preko `graphicsLayer scaleX = -1f`)
+- Time scrubber slider (0..1 → start..end dana) sa Play/Pause dugmetom (auto-advance kroz ceo dan za ~30s)
+- Start marker (zeleni dot 14dp) + current position marker (indigo dot 18dp)
+- Places overlay iz aktivnog kruga (pin-ovi Kuće/Škole/etc)
+- Stats bar: Pređeno · Aktivno vreme (gap-filter <15min) · Max brzina (km/h)
+- Format day preko `Locale.forLanguageTag("sr-Latn")` (bez tog Locale("sr") default-uje na ćirilicu)
+
+**Deep-links**:
+- `MemberDetailSheet` → „Istorija kretanja" dugme → HistoryScreen(uid, name)
+- `PrivacyScreen` → „Moja istorija kretanja" → HistoryScreen sa self uid (transparency: user vidi šta se čuva)
+
+**GDPR cleanup** (`UserRepository.deleteUser`):
+- Batch delete locationHistory u chunk-ovima od 500 (Firestore batch limit)
+- ~6000 history points za aktivnog 30d user-a briše se u 12 batch-eva
+
+### C) Android Auto MVP — CarAppService + Members/Places + SOS TTS
+
+Prvi V1.2 feature u kodu. Auto submit je odvojen review u Play Console (Automotive track) — neće blokirati trenutan phone review.
+
+**Gradle**:
+- `libs.versions.toml`: `car-app = "1.4.0"` + `androidx-car-app` + `androidx-car-app-projected`
+- `app/build.gradle.kts`: implementation obe car.app dependency
+
+**Manifest**:
+- Permisije: `androidx.car.app.NAVIGATION_TEMPLATES` + `MAP_TEMPLATES`
+- Feature: `android.hardware.type.automotive` (required=false, ne filtrira phone install)
+- Metadata: `com.google.android.gms.car.application` → `@xml/automotive_app_desc`, `androidx.car.app.minCarApiLevel = 1`
+- Service: `.core.car.KrugCarAppService` sa intent-filter `androidx.car.app.CarAppService` + category `NAVIGATION`
+
+**automotive_app_desc.xml** — `<automotiveApp><uses name="template"/></automotiveApp>`
+
+**KrugCarAppService** — `createHostValidator()` koristi `ALLOW_ALL_HOSTS_VALIDATOR` (za dev/DHU), `onCreateSession()` → KrugCarSession.
+
+**KrugCarSession** — DefaultLifecycleObserver hostuje SosCarNarrator (start on CREATED, stop on DESTROYED). `onCreateScreen()` → MapCarScreen.
+
+**MapCarScreen** — PlaceListNavigationTemplate (split-view mapa + lista):
+- Hilt EntryPoint (nema @AndroidEntryPoint jer CarAppService nije Hilt-instrumentated) za CircleRepository, LocationRepository, UserRepository, PlaceRepository, LocalPrefs, FirebaseAuth
+- Real-time observe kroz `observeMyCircles` + `locationRepository.observe(uid)` po članu + `observePlaces(activeCircleId)`
+- Row sa Place metadata (CarLocation) — Auto host automatski rendera pin na mapi
+- Tap → `geo:lat,lng?q=lat,lng(label)` intent delegira na Google Maps za route
+- Članovi: plavi pin sa GPS accuracy subtitle. Places: 📍 emoji + zeleni pin + radius subtitle
+- Action strip sa Refresh dugmetom
+
+**SosCarNarrator** — TextToSpeech („Pažnja. X traži pomoć. SOS aktiviran."):
+- Sr-Latn locale sa fallback na `Locale.getDefault()`
+- Filter: `sos.triggeredAt > startedAtMs` (bez ovog restart Auto-a bi pročitao stare SOS-eve)
+- Dedup preko `notifiedUids` set
+- Cleanup preko `stop()` u onDestroy lifecycle
+
+### D) Bug fix-evi
+
+- **PlacesViewModel bug**: FAB je pozivao `startEdit(null)` što je postavljalo `editingPlace=null`, ali sheet se otvarao samo ako je editing != null. Razdvojen `sheetOpen: Boolean` od `editingPlace: PlaceModel?`.
+- **HistoryScreen ćirilica**: `Locale("sr")` → `Locale.forLanguageTag("sr-Latn")`.
+- **Empty state PlacesScreen**: horizontalAlignment CenterHorizontally + verticalArrangement Center (bilo bez centering-a).
+
+### E) Preostali kritični put pre production
+
+1. **Firebase Console TTL policy** (jednokratno): Firestore → TTL policies → Create → Collection group `locationHistory`, field `timestamp`, 30 days retention. Bez ovog dokumenti se ne brišu automatski.
+2. **Live testing** — geofence trigger zahteva fizičko kretanje (min 50m). Tester scenariji:
+   - Dodaj mesto sa 100m radius-om kod Kuće
+   - Izađi 200m dalje, sačekaj 2-3 min → očekuj EXIT event → drugom testeru stiže notif
+   - Vrati se u radius → ENTER event
+3. **Android Auto live test** — konektuj S24 na Android Auto (USB/wireless), proveri:
+   - Krug se pojavljuje u launcher-u
+   - Split-view sa članovima + Places
+   - Tap na row → Google Maps navigate
+   - SOS TTS (traži drugog testera da trigger-uje SOS dok voziš)
+   - **Developer mode obavezan**: Android Auto app → tap Version 10x → Developer settings → Unknown sources ON
+4. **Production release checklist**:
+   - Bump versionCode/versionName
+   - Nov AAB build
+   - Upload u Closed testing track
+   - Kad 12+ testera drži 14 dana → apply for Production access
+5. **V1.2 next**:
+   - Cloud Functions + FCM push za reliable notif (trenutno FGS-only, ne radi kad je app killed)
+   - Address geocoding u AddPlaceScreen
+   - Home widget (Android home screen)
+   - Auto submit u Play Console → Automotive track (uz risk of rejection, retry)
+
+### F) Health stanja (kraj sesije)
+
+- Debug APK: instaliran na S24 (R5CWC1F9FND) + Xiaomi + SM-A376B
+- Firestore rules: DEPLOYED (places + placeEvents + locationHistory)
+- Nema kompajl grešaka; sve commit-e prošlo BUILD SUCCESSFUL
+- Poslednji commit: `7eaac15` (Android Auto MVP)
+- Testere lista: 15 (iz 25. sesije), opt-in status nije proveren posle push-a
+
+### G) Commit istorija sesije
+
+- `aa6d7e1` Feature V1.1: Places (geofence) — data model, UI, klijent notif
+- `283a47c` Places polish: map picker sa radius overlay-om, pin polish, deep-link, per-user opt-in
+- `98c773e` V1.1: kategorije mesta, tap-to-detail, activity timeline, location history 30d
+- `8f7e1c7` Polish: history stats + Places overlay, category placeholder, GDPR cleanup
+- `1887bde` History playback + presence indikator na PlacesScreen
+- (bez commit-a) HistoryScreen Locale fix za ćirilicu
+- `7eaac15` Feature V1.2: Android Auto MVP — CarAppService + members/places + SOS TTS
+
 ## Gde smo stali (2026-07-03, dvadeset peta sesija — Closed testing PUBLISHED, testeri regrutovani iz Firebase)
 
 Kratka sesija, fokus na verifikaciju Google review statusa i regrutaciju dodatnih testera za 14-dnevni Closed testing period.
