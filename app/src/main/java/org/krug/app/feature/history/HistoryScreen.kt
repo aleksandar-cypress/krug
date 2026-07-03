@@ -327,6 +327,11 @@ fun HistoryScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            runCatching {
+                polylineManager?.deleteAll()
+                pointManager?.deleteAll()
+                mapView?.onDestroy()
+            }
             mapView = null
             polylineManager = null
             pointManager = null

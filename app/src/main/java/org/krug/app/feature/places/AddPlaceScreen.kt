@@ -75,6 +75,14 @@ fun AddPlaceScreen(
     var cameraLat by remember { mutableStateOf(44.81) }
     var cameraZoom by remember { mutableStateOf(12.0) }
     val density = LocalDensity.current
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+    val hasUnsavedChanges = name.isNotBlank()
+    val onBackWithGuard: () -> Unit = {
+        if (hasUnsavedChanges) showDiscardConfirm = true else onBack()
+    }
+    androidx.activity.compose.BackHandler(enabled = hasUnsavedChanges) {
+        showDiscardConfirm = true
+    }
 
     // Kad stigne current lokacija, centriraj kameru jednom (samo prvi put).
     LaunchedEffect(state.currentLat, state.currentLng) {
@@ -97,7 +105,7 @@ fun AddPlaceScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.places_new_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBackWithGuard) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                 },
@@ -299,8 +307,39 @@ fun AddPlaceScreen(
         }
     }
 
+    if (showDiscardConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDiscardConfirm = false },
+            title = { Text(stringResource(R.string.places_discard_title)) },
+            text = { Text(stringResource(R.string.places_discard_msg)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showDiscardConfirm = false
+                        onBack()
+                    },
+                ) {
+                    Text(
+                        stringResource(R.string.places_discard_confirm),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showDiscardConfirm = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
     DisposableEffect(Unit) {
-        onDispose { mapViewRef.map = null }
+        onDispose {
+            // MapView.onDestroy oslobađa OpenGL kontekst i telemetry kanale. Bez ovog,
+            // repeated open/close (add place → back → add place) akumulira ~10MB per cycle.
+            runCatching { mapViewRef.map?.onDestroy() }
+            mapViewRef.map = null
+        }
     }
 }
 

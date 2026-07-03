@@ -45,6 +45,7 @@ data class CircleDetailUiState(
     val iconKey: String = "family",
     val isOwner: Boolean = false,
     val members: List<CircleDetailMember> = emptyList(),
+    val placesCount: Int = 0,
     val pendingInviteCode: String? = null,
     val generatingInvite: Boolean = false,
     val leaving: Boolean = false,
@@ -59,6 +60,7 @@ class CircleDetailViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val circleRepository: CircleRepository,
     private val inviteRepository: InviteRepository,
+    private val placeRepository: org.krug.app.core.places.PlaceRepository,
     private val firestore: FirebaseFirestore,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
@@ -117,6 +119,13 @@ class CircleDetailViewModel @Inject constructor(
         }.launchIn(viewModelScope)
         // Snapshot init so empty UID doesn't break.
         if (selfUid == null) _state.value = _state.value.copy(loading = false)
+
+        // Observe places count za dugme "Mesta (N)".
+        placeRepository.observePlaces(circleId)
+            .onEach { places ->
+                _state.value = _state.value.copy(placesCount = places.size)
+            }
+            .launchIn(viewModelScope)
     }
 
     fun toggleChildStatus(memberUid: String, makeChild: Boolean) {

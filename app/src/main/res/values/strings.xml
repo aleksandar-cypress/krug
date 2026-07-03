@@ -178,6 +178,9 @@
     <string name="places_saved_snackbar">Place saved: %1$s</string>
     <string name="places_updated_snackbar">Place updated</string>
     <string name="places_deleted_snackbar">Deleted: %1$s</string>
+    <string name="places_discard_title">Discard changes?</string>
+    <string name="places_discard_msg">Your unsaved place will be lost.</string>
+    <string name="places_discard_confirm">Discard</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Members</string>

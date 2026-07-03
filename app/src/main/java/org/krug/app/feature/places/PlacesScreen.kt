@@ -13,6 +13,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
@@ -238,20 +240,27 @@ fun PlacesScreen(
 @Composable
 private fun EventRow(event: org.krug.app.core.places.PlaceEventModel) {
     val name = event.userName.ifBlank { "?" }
-    val verb = if (event.type == org.krug.app.core.places.PlaceEventModel.TYPE_ENTER) {
-        stringResource(R.string.places_activity_verb_enter)
-    } else {
-        stringResource(R.string.places_activity_verb_exit)
-    }
+    val isEnter = event.type == org.krug.app.core.places.PlaceEventModel.TYPE_ENTER
+    val verb = stringResource(
+        if (isEnter) R.string.places_activity_verb_enter
+        else R.string.places_activity_verb_exit,
+    )
     val timeAgo = event.timestamp?.let { humanTimeAgo(it) } ?: "-"
+    // Enter = zeleni "in" arrow, Exit = narandžasti "out" arrow. Semantički trenutan
+    // signal umesto samo teksta ("stigla" vs "otišla" na dvo-jezičnom se lako promasi).
+    // Zelena strelica dole = enter (dolazak); narandžasta gore = exit (odlazak).
+    val icon = if (isEnter) androidx.compose.material.icons.Icons.Filled.ArrowDownward
+    else androidx.compose.material.icons.Icons.Filled.ArrowUpward
+    val iconTint = if (isEnter) androidx.compose.ui.graphics.Color(0xFF10B981)
+    else androidx.compose.ui.graphics.Color(0xFFF59E0B)
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            Icons.Outlined.Place,
+            icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = iconTint,
             modifier = Modifier.size(20.dp),
         )
         Spacer(Modifier.size(10.dp))

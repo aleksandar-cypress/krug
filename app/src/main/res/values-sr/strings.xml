@@ -180,6 +180,9 @@
     <string name="places_saved_snackbar">Mesto sačuvano: %1$s</string>
     <string name="places_updated_snackbar">Mesto izmenjeno</string>
     <string name="places_deleted_snackbar">Obrisano: %1$s</string>
+    <string name="places_discard_title">Odbaciti izmene?</string>
+    <string name="places_discard_msg">Neuposlato mesto će biti izgubljeno.</string>
+    <string name="places_discard_confirm">Odbaci</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Članovi</string>

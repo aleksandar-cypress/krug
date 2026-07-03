@@ -189,7 +189,13 @@ fun CircleDetailScreen(
                     contentDescription = null,
                 )
                 Spacer(Modifier.size(8.dp))
-                Text(stringResource(R.string.places_section_title))
+                Text(
+                    if (state.placesCount > 0) {
+                        "${stringResource(R.string.places_section_title)} (${state.placesCount})"
+                    } else {
+                        stringResource(R.string.places_section_title)
+                    },
+                )
             }
 
             Spacer(Modifier.size(24.dp))
