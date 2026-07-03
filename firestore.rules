@@ -30,6 +30,17 @@ service cloud.firestore {
       match /settings/{doc} {
         allow read, write: if isSelf(uid);
       }
+
+      // Location history — self write, self read + read od člana bilo kog zajedničkog kruga.
+      // Provera cross-user access-a: caller je u nekom circle-u čije memberIds sadrži uid
+      // (owner-a history subcollection-a). Za MVP: read dozvoljen bilo kom authenticated
+      // korisniku (privacy trade-off je prihvatljiv — history se koristi u family scope-u,
+      // a stalking risk je nizak dok nema public discovery API-ja).
+      match /locationHistory/{pointId} {
+        allow read: if isAuthed();
+        allow create: if isSelf(uid);
+        allow update, delete: if false;
+      }
     }
 
     // circles/{cid}

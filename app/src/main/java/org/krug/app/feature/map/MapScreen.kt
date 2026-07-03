@@ -225,10 +225,13 @@ fun MapScreen(
     onOpenCircleDetail: (circleId: String) -> Unit = {},
     onCreateCircle: () -> Unit = {},
     onJoinByCode: () -> Unit = {},
+    onOpenPlacesForCircle: (circleId: String) -> Unit = {},
+    onOpenHistory: (uid: String, displayName: String) -> Unit = { _, _ -> },
     viewModel: MapViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val activePlaces by viewModel.activePlaces.collectAsStateWithLifecycle()
+    val eventsByPlace by viewModel.eventsByPlace.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val view = LocalView.current
     val haptic: () -> Unit = remember(view) {
@@ -237,6 +240,7 @@ fun MapScreen(
     val mapViewState = remember { MapViewHolder() }
     val photoCache = remember { mutableStateMapOf<String, Bitmap>() }
     var detailUid by remember { mutableStateOf<String?>(null) }
+    var detailPlaceId by remember { mutableStateOf<String?>(null) }
     // Pending refocus: kad user tapne Osveži, pamtimo (uid, since). Kad stigne
     // sveži location.updatedAt > since za taj uid, automatski flyTo na novu poziciju.
     var pendingRefocus by remember { mutableStateOf<Pair<String, Long>?>(null) }
@@ -440,22 +444,23 @@ fun MapScreen(
         val prm = mapViewState.placeRadiusManager ?: return@LaunchedEffect
         pm.deleteAll()
         prm.deleteAll()
+        mapViewState.annotationToPlaceId.clear()
         if (activePlaces.isEmpty()) return@LaunchedEffect
-        val bmp = MapMarkers.placeMarker(context)
         activePlaces.forEach { place ->
-            // 1) Radius polygon — 64-strani polygon aproksimacija kruga.
+            val (colorHex, _) = MapMarkers.categoryStyle(place.category)
+            // 1) Radius polygon — 64-strani polygon aproksimacija kruga u boji kategorije.
             val ring = buildGeoCircle(place.lat, place.lng, place.radius.toDouble(), 64)
             prm.create(
                 PolygonAnnotationOptions()
                     .withPoints(listOf(ring))
-                    .withFillColor("#4F46E5")
+                    .withFillColor(colorHex)
                     .withFillOpacity(0.15),
             )
-            // 2) Pin sa imenom ispod.
-            pm.create(
+            // 2) Pin (per-category bitmap) sa imenom ispod.
+            val annotation = pm.create(
                 PointAnnotationOptions()
                     .withPoint(Point.fromLngLat(place.lng, place.lat))
-                    .withIconImage(bmp)
+                    .withIconImage(MapMarkers.placeMarker(context, place.category))
                     .withIconOffset(listOf(0.0, -21.0))
                     .withTextField(place.name)
                     .withTextOffset(listOf(0.0, 0.6))
@@ -464,6 +469,7 @@ fun MapScreen(
                     .withTextHaloColor("#FFFFFF")
                     .withTextHaloWidth(1.5),
             )
+            mapViewState.annotationToPlaceId[annotation.id] = place.id
         }
     }
 
@@ -525,6 +531,15 @@ fun MapScreen(
             detailUid = uid
         }
         onDispose { mapViewState.onPinClick = null }
+    }
+
+    // Click handler za Place pin — otvara PlaceDetailSheet.
+    DisposableEffect(mapViewState) {
+        mapViewState.onPlaceClick = { placeId ->
+            haptic()
+            detailPlaceId = placeId
+        }
+        onDispose { mapViewState.onPlaceClick = null }
     }
 
     // Učitaj profilne fotke (Google sign-in) za sve članove kojima imamo URL.
@@ -780,11 +795,37 @@ fun MapScreen(
                             viewModel.refreshMember(detailMember.uid)
                         }
                     },
+                    onOpenHistory = {
+                        detailUid = null
+                        onOpenHistory(detailMember.uid, detailMember.displayName)
+                    },
                     loadDrivingDistanceMeters = { fromLat, fromLng, toLat, toLng ->
                         viewModel.loadDrivingDistance(fromLat, fromLng, toLat, toLng)
                     },
                 )
             }
+        }
+
+        val detailPlace = detailPlaceId?.let { id -> activePlaces.firstOrNull { it.id == id } }
+        if (detailPlace != null) {
+            val creator = state.members.firstOrNull { it.uid == detailPlace.createdBy }?.displayName
+                .orEmpty()
+            val lastEvent = eventsByPlace[detailPlace.id]
+            PlaceDetailSheet(
+                place = detailPlace,
+                creatorName = creator,
+                lastEvent = lastEvent,
+                onDismiss = { detailPlaceId = null },
+                onEdit = {
+                    val activeCid = state.activeCircleId
+                    detailPlaceId = null
+                    if (activeCid != null) onOpenPlacesForCircle(activeCid)
+                },
+                onDelete = {
+                    detailPlaceId = null
+                    viewModel.deletePlace(detailPlace.id)
+                },
+            )
         }
 
         if (circlePickerVisible && state.myCircles.isNotEmpty()) {
@@ -1466,6 +1507,17 @@ private fun MapboxContainer(
                 holder.placeRadiusManager = mv.annotations.createPolygonAnnotationManager()
                 // Place marker manager — iznad radius polygon-a, ispod member pin-ova.
                 holder.placeManager = mv.annotations.createPointAnnotationManager()
+                holder.placeManager?.addClickListener(
+                    OnPointAnnotationClickListener { annotation ->
+                        val placeId = holder.annotationToPlaceId[annotation.id]
+                        if (placeId != null) {
+                            holder.onPlaceClick?.invoke(placeId)
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                )
                 val manager = mv.annotations.createPointAnnotationManager()
                 holder.annotationManager = manager
                 manager.addClickListener(
@@ -1640,6 +1692,8 @@ private class MapViewHolder {
     /** True nakon prvog `loadStyle` callback-a — gate za camera op-ove iz LaunchedEffect-a. */
     var styleLoaded: Boolean = false
     val annotationToUid = mutableMapOf<String, String>()
+    val annotationToPlaceId = mutableMapOf<String, String>()
+    var onPlaceClick: ((String) -> Unit)? = null
     /** SOS ripple — per-UID circle annotation (radar pulse oko SOS markera). */
     val sosRipples = mutableMapOf<String, CircleAnnotation>()
     var onPinClick: ((String) -> Unit)? = null
@@ -2160,6 +2214,7 @@ private fun MemberDetailSheet(
     photo: Bitmap?,
     onOpenInMaps: () -> Unit,
     onRefresh: () -> Unit,
+    onOpenHistory: () -> Unit,
     loadDrivingDistanceMeters: suspend (Double, Double, Double, Double) -> Double?,
 ) {
     var refreshTriggered by remember { mutableStateOf(false) }
@@ -2481,6 +2536,13 @@ private fun MemberDetailSheet(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.action_open_in_google_maps))
+            }
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.OutlinedButton(
+                onClick = onOpenHistory,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.history_cta))
             }
         }
     }

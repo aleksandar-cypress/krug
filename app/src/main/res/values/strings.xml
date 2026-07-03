@@ -145,6 +145,25 @@
     <string name="places_notif_unknown_user">A member</string>
     <string name="privacy_place_notifs_label">Place notifications</string>
     <string name="privacy_place_notifs_hint">Get notified when a circle member arrives at or leaves a place.</string>
+    <string name="places_cat_home">Home</string>
+    <string name="places_cat_school">School</string>
+    <string name="places_cat_work">Work</string>
+    <string name="places_cat_gym">Gym</string>
+    <string name="places_cat_shop">Shop</string>
+    <string name="places_cat_other">Other</string>
+    <string name="places_detail_radius">Radius</string>
+    <string name="places_detail_creator">Created by</string>
+    <string name="places_detail_last_event">Last activity</string>
+    <string name="places_detail_edit">Edit</string>
+    <string name="places_detail_delete">Delete</string>
+    <string name="places_activity_title">Recent activity</string>
+    <string name="places_activity_verb_enter">arrived at</string>
+    <string name="places_activity_verb_exit">left</string>
+    <string name="history_title">Location history</string>
+    <string name="history_empty">No location data for this day</string>
+    <string name="history_time_label">Time: %1$s</string>
+    <string name="history_points_count">%1$d points</string>
+    <string name="history_cta">View history</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Members</string>

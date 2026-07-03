@@ -18,12 +18,14 @@ object MapMarkers {
     private const val CACHE_MAX_ENTRIES = 32
 
     /**
-     * Marker za Place — teardrop pin sa belim krugom u glavi.
-     * Distinktivan od member pin-ova (veliki krugovi sa slikom).
+     * Marker za Place — teardrop pin sa belim glyph-om u sredini po kategoriji.
+     * Boja i simbol variraju: HOME (indigo/kućica), SCHOOL (amber/knjiga), WORK (slate/kofer),
+     * GYM (emerald/💪), SHOP (rose/kesa), OTHER (violet/tačka).
      */
-    fun placeMarker(context: Context): Bitmap {
-        val key = "place-pin-v2"
+    fun placeMarker(context: Context, category: String): Bitmap {
+        val key = "place-pin-v3-$category"
         cache[key]?.let { return it }
+        val (colorHex, glyph) = categoryStyle(category)
         val density = context.resources.displayMetrics.density
         val wDp = 32f
         val hDp = 42f
@@ -35,14 +37,12 @@ object MapMarkers {
         val headRadius = w / 2f - 3f * density
         val headCy = headRadius + 3f * density
 
-        // Shadow ispod teardrop-a
         val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#40000000")
             maskFilter = BlurMaskFilter(4f, BlurMaskFilter.Blur.NORMAL)
         }
         canvas.drawCircle(cx, h - 3f * density, headRadius * 0.4f, shadowPaint)
 
-        // Teardrop path (glava + rep na dole)
         val teardrop = Path().apply {
             addCircle(cx, headCy, headRadius, Path.Direction.CW)
             moveTo(cx - headRadius * 0.55f, headCy + headRadius * 0.55f)
@@ -51,11 +51,10 @@ object MapMarkers {
             close()
         }
         val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = "#4F46E5".toColorInt()
+            color = colorHex.toColorInt()
         }
         canvas.drawPath(teardrop, fillPaint)
 
-        // White ring oko glave
         val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             style = Paint.Style.STROKE
@@ -63,14 +62,28 @@ object MapMarkers {
         }
         canvas.drawCircle(cx, headCy, headRadius, ringPaint)
 
-        // Bela tačka u sredini
-        val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        // Glyph (jedno slovo) u sredini
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
+            textSize = 14f * density
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.DEFAULT_BOLD
         }
-        canvas.drawCircle(cx, headCy, headRadius * 0.35f, dotPaint)
+        val textY = headCy - (textPaint.descent() + textPaint.ascent()) / 2f
+        canvas.drawText(glyph, cx, textY, textPaint)
 
         cache[key] = bmp
         return bmp
+    }
+
+    /** Vraća (fill boja, glyph slovo) za date kategorije mesta. */
+    fun categoryStyle(category: String): Pair<String, String> = when (category) {
+        "HOME" -> "#DC2626" to "H"
+        "SCHOOL" -> "#F59E0B" to "S"
+        "WORK" -> "#0F172A" to "W"
+        "GYM" -> "#10B981" to "G"
+        "SHOP" -> "#EC4899" to "$"
+        else -> "#4F46E5" to "•"
     }
 
     // LRU cache — ograničen broj entry-ja sa eviction-om najstarijeg.

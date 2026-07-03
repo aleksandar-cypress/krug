@@ -55,6 +55,7 @@ fun PlacesScreen(
     viewModel: PlacesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val recentEvents by viewModel.recentEvents.collectAsStateWithLifecycle()
     var pendingDelete by remember { mutableStateOf<PlaceModel?>(null) }
     val limitReached = state.places.size >= PlaceModel.FREE_TIER_MAX_PER_CIRCLE
 
@@ -120,6 +121,19 @@ fun PlacesScreen(
                             onDelete = { pendingDelete = place },
                         )
                     }
+                    if (recentEvents.isNotEmpty()) {
+                        item {
+                            Spacer(Modifier.size(20.dp))
+                            Text(
+                                stringResource(R.string.places_activity_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        items(recentEvents, key = { it.id }) { event ->
+                            EventRow(event)
+                        }
+                    }
                 }
             }
         }
@@ -133,11 +147,11 @@ fun PlacesScreen(
             saving = state.saving,
             error = state.error,
             onDismiss = { viewModel.closeSheet() },
-            onSave = { name, lat, lng, radius ->
-                viewModel.createPlace(name, lat, lng, radius) {}
+            onSave = { name, lat, lng, radius, category ->
+                viewModel.createPlace(name, lat, lng, radius, category) {}
             },
-            onUpdate = { placeId, name, radius ->
-                viewModel.updatePlace(placeId, name, radius) {}
+            onUpdate = { placeId, name, radius, category ->
+                viewModel.updatePlace(placeId, name, radius, category) {}
             },
         )
     }
@@ -159,6 +173,51 @@ fun PlacesScreen(
                 TextButton(onClick = { pendingDelete = null }) { Text("Otkaži") }
             },
         )
+    }
+}
+
+@Composable
+private fun EventRow(event: org.krug.app.core.places.PlaceEventModel) {
+    val name = event.userName.ifBlank { "?" }
+    val verb = if (event.type == org.krug.app.core.places.PlaceEventModel.TYPE_ENTER) {
+        stringResource(R.string.places_activity_verb_enter)
+    } else {
+        stringResource(R.string.places_activity_verb_exit)
+    }
+    val timeAgo = event.timestamp?.let { humanTimeAgo(it) } ?: "-"
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Outlined.Place,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.size(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "$name $verb ${event.placeName}",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                timeAgo,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun humanTimeAgo(date: java.util.Date): String {
+    val diff = System.currentTimeMillis() - date.time
+    val mins = diff / 60_000L
+    return when {
+        mins < 1 -> "sada"
+        mins < 60 -> "pre ${mins}min"
+        mins < 24 * 60 -> "pre ${mins / 60}h"
+        else -> "pre ${mins / 60 / 24}d"
     }
 }
 

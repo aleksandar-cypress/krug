@@ -55,6 +55,7 @@ import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.plugin.locationcomponent.location
 import org.krug.app.R
+import org.krug.app.core.places.PlaceCategory
 import org.krug.app.core.places.PlaceModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,6 +67,7 @@ fun AddPlaceScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var name by remember { mutableStateOf("") }
     var radius by remember { mutableStateOf(PlaceModel.DEFAULT_RADIUS_M.toFloat()) }
+    var category by remember { mutableStateOf(PlaceCategory.OTHER) }
     val mapViewRef = remember { MapViewHolder2() }
     var initialCenterApplied by remember { mutableStateOf(false) }
     // Camera state za overlay krug — lat i zoom određuju pixels-per-meter.
@@ -203,6 +205,10 @@ fun AddPlaceScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                CategoryPicker(
+                    selected = category,
+                    onSelect = { category = it },
+                )
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(40) },
@@ -240,6 +246,7 @@ fun AddPlaceScreen(
                             lat = center.latitude(),
                             lng = center.longitude(),
                             radius = radius.toInt(),
+                            category = category,
                             onSuccess = { onBack() },
                         )
                     },

@@ -15,6 +15,8 @@ data class PlaceModel(
     val lng: Double = 0.0,
     /** Radius u metrima. GeofencingClient min = 10m, praktični min = 50m zbog GPS accuracy. */
     val radius: Int = DEFAULT_RADIUS_M,
+    /** Kategorija (Home/School/Work/Gym/Shop/Other). Default OTHER za backward compat. */
+    val category: String = PlaceCategory.OTHER.name,
     val createdBy: String = "",
     @ServerTimestamp val createdAt: Date? = null,
 ) {
@@ -25,6 +27,19 @@ data class PlaceModel(
 
         /** Free tier: max 3 places per circle. Premium (v1.1+): unlimited. */
         const val FREE_TIER_MAX_PER_CIRCLE = 3
+    }
+}
+
+/**
+ * Kategorija mesta — utiče na marker ikonicu na mapi i default ime placeholder.
+ * Enum vrednosti se čuvaju kao string u Firestore-u (data class field `category`).
+ */
+enum class PlaceCategory {
+    HOME, SCHOOL, WORK, GYM, SHOP, OTHER;
+
+    companion object {
+        fun fromString(value: String?): PlaceCategory =
+            values().firstOrNull { it.name == value } ?: OTHER
     }
 }
 

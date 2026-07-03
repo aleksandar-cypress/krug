@@ -22,6 +22,7 @@ import org.krug.app.core.circle.CircleRepository
 import org.krug.app.core.directions.DirectionsRepository
 import org.krug.app.core.location.LocationModel
 import org.krug.app.core.location.LocationRepository
+import org.krug.app.core.places.PlaceEventModel
 import org.krug.app.core.places.PlaceModel
 import org.krug.app.core.places.PlaceRepository
 import org.krug.app.core.prefs.LocalPrefs
@@ -94,6 +95,25 @@ class MapViewModel @Inject constructor(
             if (activeId.isNullOrBlank()) flowOf(emptyList())
             else placeRepository.observePlaces(activeId)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    }
+
+    /** Poslednji event po placeId za aktivan krug — koristi se u PlaceDetailSheet. */
+    val eventsByPlace: StateFlow<Map<String, PlaceEventModel>> = run {
+        localPrefs.activeCircleIdFlow.flatMapLatest { activeId ->
+            if (activeId.isNullOrBlank()) flowOf(emptyList())
+            else placeRepository.observeRecentEvents(activeId, limit = 100)
+        }.map { events ->
+            // Zadrži samo najnoviji event po placeId (lista je već DESC po timestamp-u).
+            events.groupBy { it.placeId }.mapValues { (_, evts) -> evts.first() }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+    }
+
+    fun deletePlace(placeId: String) {
+        viewModelScope.launch {
+            val activeId = localPrefs.activeCircleIdFlow.first() ?: return@launch
+            runCatching { placeRepository.deletePlace(activeId, placeId) }
+                .onFailure { Timber.w(it, "deletePlace from MapViewModel failed") }
+        }
     }
 
     /**

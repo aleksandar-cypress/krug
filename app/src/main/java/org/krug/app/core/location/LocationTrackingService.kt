@@ -75,6 +75,7 @@ class LocationTrackingService : Service() {
     @Inject lateinit var placeRepository: org.krug.app.core.places.PlaceRepository
     @Inject lateinit var placeEventNotifier: org.krug.app.core.places.PlaceEventNotifier
     @Inject lateinit var geofenceManager: org.krug.app.core.places.GeofenceManager
+    @Inject lateinit var locationHistoryRepository: LocationHistoryRepository
 
     /**
      * Per-uid map: poslednji `triggeredAt` koji je već notifikovan korisnika.
@@ -176,8 +177,41 @@ class LocationTrackingService : Service() {
                     if (ex is CancellationException) Timber.d("publish location cancelled (scope dying)")
                     else Timber.w(ex, "publish location failed")
                 }
+                // History write — skuplji nego RTDB publish, pa dodatan filter:
+                // pomeranje >25m ILI >10min od poslednjeg zapisa. Bez ovog Firestore
+                // se popuni na 4000+ dokumenata/dan/user.
+                if (shouldWriteHistory(loc)) {
+                    runCatching {
+                        locationHistoryRepository.writePoint(
+                            uid = uid, lat = loc.latitude, lng = loc.longitude,
+                            accuracy = loc.accuracy, batteryPct = battery,
+                            speed = loc.speed, bearing = loc.bearing,
+                        )
+                        lastHistoryLat = loc.latitude
+                        lastHistoryLng = loc.longitude
+                        lastHistoryTsMs = System.currentTimeMillis()
+                    }.onFailure { ex ->
+                        if (ex !is CancellationException) Timber.d("writeHistoryPoint failed: %s", ex.message)
+                    }
+                }
             }
         }
+    }
+
+    @Volatile private var lastHistoryLat: Double? = null
+    @Volatile private var lastHistoryLng: Double? = null
+    @Volatile private var lastHistoryTsMs: Long = 0L
+
+    private fun shouldWriteHistory(loc: android.location.Location): Boolean {
+        val prevLat = lastHistoryLat
+        val prevLng = lastHistoryLng
+        val now = System.currentTimeMillis()
+        if (prevLat == null || prevLng == null) return true
+        val timeSince = now - lastHistoryTsMs
+        if (timeSince >= HISTORY_MAX_INTERVAL_MS) return true
+        val distance = FloatArray(1)
+        android.location.Location.distanceBetween(prevLat, prevLng, loc.latitude, loc.longitude, distance)
+        return distance[0] >= HISTORY_MIN_MOVEMENT_M
     }
 
     /**
@@ -868,6 +902,10 @@ class LocationTrackingService : Service() {
         const val REFRESH_BOOST_COOLDOWN_MS = REFRESH_BOOST_DURATION_MS
         /** Movement filter — manje od 15m kretanja preskače publish. */
         const val SIGNIFICANT_MOVEMENT_M = 15f
+        /** History write threshold — više od publish (15m) zbog cost-a. */
+        const val HISTORY_MIN_MOVEMENT_M = 25f
+        /** Max interval bez history write-a (piše se svakako da linija nije prekinuta). */
+        const val HISTORY_MAX_INTERVAL_MS = 10 * 60_000L
         /** Force publish za freshness signal čak i bez kretanja. */
         const val FORCE_PUBLISH_INTERVAL_MS = 90_000L
         /** Maksimum prihvatljive accuracy — fixevi gori od ovog su nepouzdani. */

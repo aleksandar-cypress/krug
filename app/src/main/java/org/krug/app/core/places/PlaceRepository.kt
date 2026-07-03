@@ -28,6 +28,7 @@ class PlaceRepository @Inject constructor(
         lat: Double,
         lng: Double,
         radius: Int,
+        category: PlaceCategory = PlaceCategory.OTHER,
     ): String {
         val doc = places(circleId).document()
         val data = mapOf(
@@ -35,11 +36,12 @@ class PlaceRepository @Inject constructor(
             "lat" to lat,
             "lng" to lng,
             "radius" to radius,
+            "category" to category.name,
             "createdBy" to userId,
             "createdAt" to FieldValue.serverTimestamp(),
         )
         doc.set(data).await()
-        Timber.i("Place created circleId=%s placeId=%s name=%s", circleId, doc.id, name)
+        Timber.i("Place created circleId=%s placeId=%s name=%s cat=%s", circleId, doc.id, name, category)
         return doc.id
     }
 
@@ -48,11 +50,13 @@ class PlaceRepository @Inject constructor(
         placeId: String,
         name: String,
         radius: Int,
+        category: PlaceCategory = PlaceCategory.OTHER,
     ) {
         places(circleId).document(placeId).update(
             mapOf(
                 "name" to name,
                 "radius" to radius,
+                "category" to category.name,
             ),
         ).await()
         Timber.i("Place updated circleId=%s placeId=%s", circleId, placeId)

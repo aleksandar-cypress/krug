@@ -13,6 +13,7 @@ import org.krug.app.feature.circle.CircleListScreen
 import org.krug.app.feature.circle.CreateCircleScreen
 import org.krug.app.feature.circle.EnterCodeScreen
 import org.krug.app.feature.circle.ShowInviteScreen
+import org.krug.app.feature.history.HistoryScreen
 import org.krug.app.feature.map.MapScreen
 import org.krug.app.feature.places.AddPlaceScreen
 import org.krug.app.feature.places.PlacesScreen
@@ -103,6 +104,8 @@ fun KrugNavHost() {
                 onOpenCircleDetail = { circleId -> nav.navigate(CircleDetail(circleId)) },
                 onCreateCircle = { nav.navigate(CreateCircle) },
                 onJoinByCode = { nav.navigate(EnterCode()) },
+                onOpenPlacesForCircle = { circleId -> nav.navigate(Places(circleId = circleId)) },
+                onOpenHistory = { uid, name -> nav.navigate(History(uid = uid, displayName = name)) },
             )
         }
         composable<Settings> {
@@ -190,6 +193,9 @@ fun KrugNavHost() {
         }
         composable<AddPlace> {
             AddPlaceScreen(onBack = { nav.popBackStack() })
+        }
+        composable<History> {
+            HistoryScreen(onBack = { nav.popBackStack() })
         }
     }
 }

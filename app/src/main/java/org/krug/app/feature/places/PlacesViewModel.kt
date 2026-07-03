@@ -49,6 +49,10 @@ class PlacesViewModel @Inject constructor(
     val places: StateFlow<List<PlaceModel>> = placeRepository.observePlaces(circleId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val recentEvents: StateFlow<List<org.krug.app.core.places.PlaceEventModel>> =
+        placeRepository.observeRecentEvents(circleId, limit = 20)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     init {
         viewModelScope.launch {
             places.collect { list ->
@@ -79,7 +83,14 @@ class PlacesViewModel @Inject constructor(
         _state.value = _state.value.copy(sheetOpen = false, editingPlace = null, error = null)
     }
 
-    fun createPlace(name: String, lat: Double, lng: Double, radius: Int, onSuccess: () -> Unit) {
+    fun createPlace(
+        name: String,
+        lat: Double,
+        lng: Double,
+        radius: Int,
+        category: org.krug.app.core.places.PlaceCategory,
+        onSuccess: () -> Unit,
+    ) {
         val uid = auth.currentUser?.uid ?: return
         val trimmed = name.trim()
         if (trimmed.isBlank()) {
@@ -95,7 +106,7 @@ class PlacesViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = _state.value.copy(saving = true, error = null)
             runCatching {
-                placeRepository.createPlace(circleId, uid, trimmed, lat, lng, radius)
+                placeRepository.createPlace(circleId, uid, trimmed, lat, lng, radius, category)
             }.onSuccess {
                 _state.value = _state.value.copy(
                     saving = false, sheetOpen = false, editingPlace = null,
@@ -108,7 +119,13 @@ class PlacesViewModel @Inject constructor(
         }
     }
 
-    fun updatePlace(placeId: String, name: String, radius: Int, onSuccess: () -> Unit) {
+    fun updatePlace(
+        placeId: String,
+        name: String,
+        radius: Int,
+        category: org.krug.app.core.places.PlaceCategory,
+        onSuccess: () -> Unit,
+    ) {
         val trimmed = name.trim()
         if (trimmed.isBlank()) {
             _state.value = _state.value.copy(error = "Ime ne može biti prazno")
@@ -117,7 +134,7 @@ class PlacesViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = _state.value.copy(saving = true, error = null)
             runCatching {
-                placeRepository.updatePlace(circleId, placeId, trimmed, radius)
+                placeRepository.updatePlace(circleId, placeId, trimmed, radius, category)
             }.onSuccess {
                 _state.value = _state.value.copy(
                     saving = false, sheetOpen = false, editingPlace = null,

@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.krug.app.R
+import org.krug.app.core.places.PlaceCategory
 import org.krug.app.core.places.PlaceModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,12 +39,13 @@ fun AddEditPlaceSheet(
     saving: Boolean,
     error: String?,
     onDismiss: () -> Unit,
-    onSave: (name: String, lat: Double, lng: Double, radius: Int) -> Unit,
-    onUpdate: (placeId: String, name: String, radius: Int) -> Unit,
+    onSave: (name: String, lat: Double, lng: Double, radius: Int, category: PlaceCategory) -> Unit,
+    onUpdate: (placeId: String, name: String, radius: Int, category: PlaceCategory) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var name by remember { mutableStateOf(editing?.name ?: "") }
     var radius by remember { mutableStateOf((editing?.radius ?: PlaceModel.DEFAULT_RADIUS_M).toFloat()) }
+    var category by remember { mutableStateOf(PlaceCategory.fromString(editing?.category)) }
     var pickedLat by remember { mutableStateOf(editing?.lat) }
     var pickedLng by remember { mutableStateOf(editing?.lng) }
 
@@ -61,6 +63,7 @@ fun AddEditPlaceSheet(
                 ),
                 style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
             )
+            CategoryPicker(selected = category, onSelect = { category = it })
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it.take(40) },
@@ -120,9 +123,9 @@ fun AddEditPlaceSheet(
                         (editing != null || (pickedLat != null && pickedLng != null)),
                     onClick = {
                         if (editing != null) {
-                            onUpdate(editing.id, name, radius.toInt())
+                            onUpdate(editing.id, name, radius.toInt(), category)
                         } else {
-                            onSave(name, pickedLat!!, pickedLng!!, radius.toInt())
+                            onSave(name, pickedLat!!, pickedLng!!, radius.toInt(), category)
                         }
                     },
                 ) {
