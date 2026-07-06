@@ -12,7 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import org.krug.app.ui.brand.KrugRadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -118,7 +118,7 @@ private fun ModeCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            RadioButton(selected = selected, onClick = onClick)
+            KrugRadioButton(selected = selected, onClick = onClick)
             Spacer(Modifier.size(4.dp))
             Column(modifier = Modifier.weight(1f).padding(top = 12.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)

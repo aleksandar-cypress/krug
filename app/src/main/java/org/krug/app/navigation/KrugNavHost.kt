@@ -3,7 +3,10 @@ package org.krug.app.navigation
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.compose.currentBackStackEntryAsState
 import org.krug.app.R
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -32,6 +35,25 @@ import org.krug.app.feature.splash.SplashScreen
 @Composable
 fun KrugNavHost() {
     val nav = rememberNavController()
+    // Invite deep-link auto-navigation. Kada user klikne krug://invite/{code} u
+    // WhatsApp-u/SMS-u/email-u, MainActivity emituje kod u InviteFocusBus. Ovde
+    // (na top-level NavHost-u) collect-ujemo — kad se pojavi kod i user je već
+    // izvan Splash/Auth ekrana, auto-navigiraj na EnterCode sa prefilled kodom.
+    val pendingInviteCode by org.krug.app.core.circle.InviteFocusBus.pendingCode
+        .collectAsStateWithLifecycle()
+    val currentRoute = nav.currentBackStackEntryAsState().value?.destination?.route
+    androidx.compose.runtime.LaunchedEffect(pendingInviteCode, currentRoute) {
+        val code = pendingInviteCode ?: return@LaunchedEffect
+        // Ne diraj ako je user još u Auth/Onboarding flow-u — nek zavrsi login pa
+        // ce se effect refire kad se ruta promeni na Map. Bez ovog: nav preskace
+        // preko Auth i user endup na EnterCode bez auth-a.
+        val onSecureRoute = currentRoute?.let { r ->
+            r.endsWith(".Map") || r.endsWith(".CircleList") || r.endsWith(".EnterCode")
+        } ?: false
+        if (!onSecureRoute) return@LaunchedEffect
+        org.krug.app.core.circle.InviteFocusBus.consume()
+        nav.navigate(EnterCode(prefilledCode = code))
+    }
     // Default screen transitions — horizontal slide za forward/back navigaciju.
     // Default Compose Nav je fade-only (200ms), što je tih ali ne signalizira hierarchy.
     // Slide-left za "uđi dublje", slide-right za "vrati se nazad" daje user-u intuitivni

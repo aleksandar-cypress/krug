@@ -166,6 +166,11 @@ class PlacesViewModel @Inject constructor(
         onSuccess: () -> Unit,
     ) {
         val uid = auth.currentUser?.uid ?: return
+        // Guard protiv brzog double-tap-a: prva launch pokrene coroutine ali `saving=true`
+        // se postavlja unutar njega (asinhrono). Drugi tap koji stigne pre te izmene bi
+        // opet launch-ovao paralelni pisač → duplicate Firestore doc za isti place. Return
+        // odmah ako je već save u toku.
+        if (_state.value.saving) return
         val trimmed = name.trim()
         if (trimmed.isBlank()) {
             _state.value = _state.value.copy(error = "Ime ne može biti prazno")
@@ -177,8 +182,8 @@ class PlacesViewModel @Inject constructor(
             )
             return
         }
+        _state.value = _state.value.copy(saving = true, error = null)
         viewModelScope.launch {
-            _state.value = _state.value.copy(saving = true, error = null)
             runCatching {
                 placeRepository.createPlace(circleId, uid, trimmed, lat, lng, radius, category)
             }.onSuccess {
@@ -200,13 +205,15 @@ class PlacesViewModel @Inject constructor(
         category: org.krug.app.core.places.PlaceCategory,
         onSuccess: () -> Unit,
     ) {
+        // Isti double-tap guard kao createPlace — sprečava paralelne update-e.
+        if (_state.value.saving) return
         val trimmed = name.trim()
         if (trimmed.isBlank()) {
             _state.value = _state.value.copy(error = "Ime ne može biti prazno")
             return
         }
+        _state.value = _state.value.copy(saving = true, error = null)
         viewModelScope.launch {
-            _state.value = _state.value.copy(saving = true, error = null)
             runCatching {
                 placeRepository.updatePlace(circleId, placeId, trimmed, radius, category)
             }.onSuccess {

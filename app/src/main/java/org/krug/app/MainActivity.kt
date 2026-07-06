@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         handleSosFocusExtra(intent)
         handlePlaceFocusExtra(intent)
+        handleInviteDeepLink(intent)
         setContent {
             KrugApp()
         }
@@ -58,6 +59,24 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         handleSosFocusExtra(intent)
         handlePlaceFocusExtra(intent)
+        handleInviteDeepLink(intent)
+    }
+
+    /**
+     * Parsira `krug://invite/{code}` deep link i emituje kod u InviteFocusBus.
+     * KrugNavHost/EnterCodeScreen collect-uje i prikazuje sa prefilled-code-om.
+     *
+     * Bez ovog: manifest ima intent-filter za scheme=krug, ali kod je ignoran →
+     * user vidi splash → Auth → Map, ali code se gubi. Morao bi ručno da otvori
+     * "Pridruži se krugu" → unese kod.
+     */
+    private fun handleInviteDeepLink(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme != "krug" || uri.host != "invite") return
+        val code = uri.lastPathSegment?.takeIf { it.isNotBlank() } ?: return
+        org.krug.app.core.circle.InviteFocusBus.request(code)
+        // Odbaci data iz intent-a da rotacija/configChange ne re-trigger-uje.
+        intent.data = null
     }
 
     private fun handlePlaceFocusExtra(intent: Intent?) {
@@ -107,6 +126,38 @@ class MainActivity : ComponentActivity() {
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
                     WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
             )
+        }
+    }
+
+    /**
+     * Skida "show over lock screen" flag. Bez ovog, jednom kad je aktiviran za SOS
+     * wake, Activity ostaje prikazana preko lock screen-a čak i kad user samo
+     * običnо otvori app kasnije (npr. Places notif tap). Privacy leak: bilo ko sa
+     * pristupom telefonu vidi mapu bez unlock-a. Reset se poziva onResume kad
+     * pending SOS focus vise ne postoji — tj. user je već video/consumovao SOS.
+     */
+    @Suppress("DEPRECATION")
+    private fun disableShowWhenLocked() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(false)
+            setTurnScreenOn(false)
+        } else {
+            window.clearFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
+            )
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Reset lock-screen bypass ako smo ga jednom aktivirali za SOS wake. Reset radi
+        // SAMO kad je SosFocusBus već consumovan (pending == null) — jer ako je pending
+        // još u toku, MapScreen ga još nije video, pa flag mora ostati aktivan dok user
+        // ne vidi SOS mapu. Bez ovog reset-a: aktivacija za SOS ostavlja flag zauvek
+        // (privacy leak — svaka sledeca notif otvara app preko lock screen-a).
+        if (SosFocusBus.pendingUid.value == null) {
+            disableShowWhenLocked()
         }
     }
 }
