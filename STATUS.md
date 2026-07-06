@@ -2,7 +2,111 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-07-03, dvadeset sedma sesija — V1.1 polish + geocoding/ETA/silent hours/mute/auto-status + release prep)
+## Gde smo stali (2026-07-06, dvadeset osma sesija — feedback pass posle testiranja na S24 + A55)
+
+Fokus sesije: user je jutros poslao 6 screenshot-a sa konkretnim UI/UX problemima nakon testiranja V1.1. Cela sesija je iteracija na tim problemima + otkrivanje dodatnih bug-ova pri live testiranju na Galaxy S24 (Aleksandar) + Galaxy A55 (Jelena). 7 commit-ova (`7fea705` → `04a19bc`), ~800 novih linija, 220 obrisanih (DirectionsRepository dead code).
+
+### A) MemberDetailSheet redesign (jutarnji spisak: task 2, 3, 4, 5, 9, 10)
+
+**Fixed 2×2 chip grid** umesto varirajućeg FlowRow-a:
+- Za druge članove: Battery, Distance, Speed, Last seen (uvek sve 4, u 2×2 layout-u).
+- Za self: Battery + Speed u redu 1, Last seen full-width u redu 2 (jer distance to self nema smisla).
+- Za private mode: samo Last seen full-width.
+- Speed **uvek prikazan** (uklonjen `> 1 m/s` gate — 0 km/h za mirujuće).
+
+**Uklonjen ETA chip:**
+- User je pitao "šta znači ETA, koja je razlika od Speed", pa smo utvrdili da je konfuzno + u screenshot-u je `<1 min` sa "<" znakom bio nejasan.
+- ETA fetch (Mapbox drivingRoute) je bio isključivo za ovaj chip — cela `DirectionsRepository.kt` (220 linija) obrisana kao dead code.
+- Distance sada koristi haversine umesto Mapbox route (aerial > driving fallback), a user je rekao "koristiću Google Maps ako mi treba prava navigacija".
+
+**Buttons redesign — 3 iteracije:**
+- V1: Row(Open in Maps outlined w=1, View history filled tonal w=1.2) — text "Open in Google Maps" se sekao (20 char pored View history-a).
+- V2: Icon-only outlined Directions ikonica + FilledTonalButton View history — user rekao "užas, stavi brand boje".
+- V3 (final): FilledIconButton **LogoTeal 64×48dp** (Directions icon) + Button **LogoBlue** (View history sa clock ikonom + tekstom). Sva dugmad (Refresh + row) imaju identičnu visinu 48dp i shape RoundedCornerShape(24dp).
+
+**Sheet cutoff fix:**
+- ModalBottomSheet je bio partially expanded, pa se View history sekao. Fix: `rememberModalBottomSheetState(skipPartiallyExpanded = true)` + `verticalScroll(rememberScrollState())` na Column.
+
+**View history dostupan iz self detail sheet-a** (task 8):
+- Ranije samo u Settings/Privacy row "Moja istorija kretanja". Sada je uklonjeno iz Settings-a (obrisan `onOpenMyHistory` callback + `privacy_my_history_cta` string), a per-member button (uključujući self) je jedini entry point.
+
+### B) HistoryScreen popravke (task 6, 7 + bonus)
+
+- **Locale-aware datum**: `formatDay` više ne forsira `sr-Latn` uvek, već prati `LocalConfiguration.current.locales[0]`. Sr device → `"petak, 3. jul"`, en device → `"Friday, July 3"`.
+- **"Time:" prefix uklonjen** iznad scrub slajdera — vreme je jasno iz konteksta (uz play dugme). Uklonjen `history_time_label` string.
+- **Dinamičan scrub range** (bonus fix): scrub 0..1 se mapira na EFEKTIVNI range dana (prvi point → poslednji point), ne 24h. Ako je user aktivan 08:30-20:15, ceo slajder pokriva tu aktivnost. Za današnji dan, gornja granica se coerce-uje ka NOW ako je poslednji point stariji (pokazuje "sada" umesto "pre 10 min"). `formatTimeAt(fromMs, toMs, ratio)` zamena za stari `formatTime`.
+
+### C) Location reliability paket (task 11)
+
+Za user-ov core CORE bug "Slobodan često ispada offline", implementiran je multi-front approach:
+
+**LocalPrefs.lastBatteryPromptMs** — kad je poslednji put dijalog pokazan.
+
+**Warning banner na Settings-u (top card, orange):**
+- Vidljiv **samo** kad postoji issue (bg location, battery-opt, notifications, activity-recognition).
+- Auto refresh na ON_RESUME (kad se user vrati iz sistemskih podešavanja).
+- Per-row "Fix" dugme.
+- Rečnik strings: `reliability_issue_battery`, `reliability_issue_bglocation`, itd.
+
+**Startup AlertDialog** (max 1×/nedelja):
+- Fire-uje samo kad battery-opt nije exempt, cooldown 7d preko `viewModel.batteryPromptCooldownExpired()`.
+- Prikaz posle whats-new dijaloga (redosled).
+
+**Dedicated ReliabilityScreen** (user-facing "zašto sam offline"):
+- Ceo checklist sa green/red status ikonom + Fix dugmadima.
+- Live status kartica: FGS running (isRunning.get()), last publish age.
+- Dostupan iz Settings > Performance sekcija (nova ruta `Reliability`).
+- Odvojen od `DiagnosticsScreen` koji ostaje debug-only (monospace log format za bug reportove).
+
+**Offline UI grace period (bonus)**:
+- `MemberWithLocation.isOffline()` sada zahteva `!online` **I** `updatedAt > 5min`.
+- Bez ovog, RTDB onDisconnect (~30s posle stvarnog dropout-a) postavlja `online=false` i UI treperi između "online" i "offline" pri svakom WiFi flicker-u. Sa 5min grace-om, samo trajniji outage pokazuje offline.
+
+**"Retry queue" — NIJE potrebno**:
+- Prvobitna analiza (Explore agent) je rekla "nema retry logike za Firebase writes". Nakon verifikacije: `KrugApplication.setPersistenceEnabled(true)` + `PersistentCacheSettings` (od pre) — Firebase SDK sam queue-uje offline write-ove na disk i replay-uje na reconnect, uključujući preživljavanje app restart-a. Task odjavljen kao "already covered".
+
+### D) Places bugs otkriveni tokom testiranja (bonus fixevi, nisu bili na jutrošnjem spisku)
+
+**Bug 1: Place pin ne prikazan kad se klikne iz Places liste**
+- Aleksandar (S24) vidi Jelenin novi place `zubar` u PlacesScreen listi, klikne na njega, mapa fly-to okvirno ali nema pin.
+- Dijagnostika kroz logcat: `activePlaces.size=0` u MapScreen iako je place u Firestore-u.
+- Root cause: `MapViewModel.activePlaces` observira `localPrefs.activeCircleIdFlow` **direktno bez fallback-a**, ali `combineForUser` (koji generiše members) **ima fallback** (`circles.firstOrNull { it.id == storedActive } ?: circles.firstOrNull()`). Za fresh usere koji nikad nisu `setActiveCircleId` pozvali, activeId je null → members se vide (fallback), places prazno.
+- Fix: extract `effectiveActiveCircleId` shared flow sa istom fallback logikom; koristi ga i za `activePlaces` i za `eventsByPlace`.
+
+**Bug 2: Self flyTo overriduje PlaceFocus flyTo (race)**
+- Na povratku iz PlacesScreen-a u Map (via `nav.popBackStack(Map, inclusive = false)`), MapScreen se ponovo composes, `mapViewState` je fresh (`didFlyToSelf = false`). Oba LaunchedEffect-a (self flyTo, place focus) fire u istom recomposition-u, oba čekaju mapView + styleLoaded.
+- Race: PlaceFocus animiran `flyTo` starta, ali self instant `setCamera` završi 1ms kasnije i pregazi (jer setCamera je sync jump). User vidi self location, ne place.
+- Fix: self LaunchedEffect skip-uje ako `PlaceFocusBus.pending.value != null` (i pre wait-a i posle). PlaceFocus ima prioritet, kamera se ne pomera na self.
+
+**Bug 3: Notif click na Place event ne centrira mapu**
+- User je javio "kao da je mapa ostala gde sam izašao" nakon tap-a na "Jelena stigla kod zubara" notif.
+- `MainActivity.handlePlaceFocusExtra` je čitao `placeId` iz intent-a, postavljao active circle, ali **placeId je bio ignoran** — nikad se nije koristio za flyTo.
+- Fix: dodat `PlaceFocusBus.pendingId` flow. MainActivity poziva `requestById(placeId)`. MapScreen collect-uje `pendingId`, čeka da `activePlaces` sadrži place sa tim ID-om, pa resolve-uje u standard `Focus(lat, lng, name, radius)` i emituje kroz postojeći `pending` flow — existing flyTo logika preuzima od tu.
+
+**Feature: Proximity cluster pins (member koji putuju istim autom)**
+- User je jutros javio "Magdalena i Jana su razdvojene na mapi iako putuju istim autom". Root cause: async publish (30-90s razmak) daje 2 pina na različitim mestima jer se auto pomera između njihovih fix-eva.
+- Fix: `clusterByProximity()` helper — greedy grouping unutar 100m threshold-a. Za cluster od 2+, prikazuje se prvi član kao primary pin, sa **"+N" LogoBlue badge-om** u gornjem desnom uglu bubble-a (crtano u `MapMarkers.pinMarker(clusterExtras = N)`). Cache key uključuje cluster count. Label = "Ime1, Ime2" za 2 ili "Ime1 i N" za 3+. Self je izuzet iz cluster-a (uvek solo, brand blue pin ostaje "you're here").
+
+### E) Android Auto fix (task 12)
+
+- **Uklonjen `android:foregroundServiceType="location"`** sa `KrugCarAppService` u manifest-u. CarAppService **NIJE** user foreground service — Auto host sam upravlja lifecycle-om. Prisustvo ovog atributa je čest uzrok zbog kojeg Auto host odbije da list-uje app u meniju.
+- Fizički test na autu nije obavljen ove sesije (user nije priključio na kabl).
+
+### F) Aleksandar/Jelena test setup na S24 + A55
+
+Sesija je obuhvatila live install debug APK-a na dva uređaja (S24 Ultra `R5CWC1F9FND`, A55 `RZCX50XJGPD`) i live testiranje kroz stvarne interakcije. Iterativni loop je bio: user javi problem → istraga → fix → rebuild + adb install → user testira. Ovaj pattern je otkrio pored jutrošnjih 12 stavki i još 3 bug-a koje nismo znali za (place pin missing, flyTo race, notif click).
+
+### G) Preostalo za sledeću sesiju
+
+1. **Fizički Auto test** — priključi S24 na auto, verifikuj da se Krug list-uje.
+2. **Cluster click UX** — trenutno klik na cluster pin otvara samo prvog člana. Bolji UX: chooser dialog ili group sheet.
+3. **Play Store closed testing** — 9/12 opted-in tester-a, treba 3 još (kroz WhatsApp poruku porodici).
+4. **Notif ikone** — SOS + Places koriste `ic_launcher_foreground` (obojena launcher ikonica). Trebalo bi bela silueta na transparent za `smallIcon` (Material Design guideline).
+5. **Ostali test-ovi** — Refresh location ping-back, auto-status pill sa Speed uvek prikazanim, SOS end-to-end.
+
+---
+
+## Ranija sesija (2026-07-03, dvadeset sedma sesija — V1.1 polish + geocoding/ETA/silent hours/mute/auto-status + release prep)
 
 Nastavak 26. sesije istoga dana. Nakon što su Places + History + Auto core-i bili implementirani, ova sesija je fokusirana na polish (5 krugova iteracija), dodatne feature-e (address search, ETA, silent hours, per-place mute, notif actions, auto-status pill), i business release preparaciju (bump versionCode → 2, versionName 1.1.0, release AAB build-ovan, landing page ažuriran). Ukupno 17 commit-ova (`82286e7` → `ec7c679`), ~4400 novih linija.
 
