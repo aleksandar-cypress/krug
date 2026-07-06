@@ -78,6 +78,7 @@ fun CircleDetailScreen(
     var showLeaveConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showEditSheet by remember { mutableStateOf(false) }
+    var pendingRemove by remember { mutableStateOf<CircleDetailMember?>(null) }
     val editSheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
 
@@ -216,6 +217,9 @@ fun CircleDetailScreen(
                         onToggleChild = { makeChild ->
                             viewModel.toggleChildStatus(m.uid, makeChild)
                         },
+                        onRemoveMember = if (state.isOwner && !m.isSelf && !m.isOwner) {
+                            { pendingRemove = m }
+                        } else null,
                     )
                 }
             }
@@ -336,6 +340,41 @@ fun CircleDetailScreen(
         )
     }
 
+    val removeTarget = pendingRemove
+    if (removeTarget != null) {
+        AlertDialog(
+            onDismissRequest = { pendingRemove = null },
+            title = { Text(stringResource(R.string.member_remove_confirm_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.member_remove_confirm_body,
+                        removeTarget.displayName.ifBlank {
+                            stringResource(R.string.circle_detail_role_member)
+                        },
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    view.rejectHaptic()
+                    viewModel.removeMember(removeTarget.uid)
+                    pendingRemove = null
+                }) {
+                    Text(
+                        text = stringResource(R.string.member_remove_confirm_action),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemove = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
     if (showEditSheet) {
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { showEditSheet = false },
@@ -428,6 +467,7 @@ private fun MemberRow(
     m: CircleDetailMember,
     canManage: Boolean = false,
     onToggleChild: (Boolean) -> Unit = {},
+    onRemoveMember: (() -> Unit)? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Row(
@@ -516,6 +556,30 @@ private fun MemberRow(
                             onToggleChild(!m.isChild)
                         },
                     )
+                    // "Remove from circle" — samo za non-self non-owner članove. Owner
+                    // ne može da izbaci samog sebe (mora Delete circle) niti drugog
+                    // owner-a (ne postoji multi-owner scenario, ali defensive).
+                    if (onRemoveMember != null && !m.isSelf && !m.isOwner) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(R.string.member_menu_remove),
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    androidx.compose.material.icons.Icons.Outlined.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            onClick = {
+                                menuOpen = false
+                                onRemoveMember()
+                            },
+                        )
+                    }
                 }
             }
         }

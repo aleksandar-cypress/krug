@@ -154,6 +154,23 @@ class CircleRepository @Inject constructor(
     }
 
     /**
+     * Owner izbacuje člana iz kruga. Firebase rules dozvoljavaju samo vlasniku ove
+     * operacije (`ownerId == request.auth.uid` na circle doc update + members doc delete).
+     * Owner ne može da izbaci samog sebe — rules bi to i sprečile (owner mora prvo da
+     * obriše krug ili prebaci ownership).
+     *
+     * Sekvenca: prvo update memberIds (arrayRemove), pa delete members subdoc. Ako
+     * prvi succeed ali drugi failuje, member je van kruga ali doc ostaje "ghost" —
+     * next time member ne može učitati svoj doc jer nije više u memberIds pa rules
+     * zabranjuju read. Acceptable state.
+     */
+    suspend fun removeMember(circleId: String, memberUid: String) {
+        circle(circleId).update("memberIds", FieldValue.arrayRemove(memberUid)).await()
+        runCatching { members(circleId).document(memberUid).delete().await() }
+        Timber.i("Member removed from circle id=%s uid=%s", circleId, memberUid)
+    }
+
+    /**
      * Označi člana kao dete (ili ukloni oznaku). Owner-only operation — rules
      * dozvoljavaju ovom uid-u da update-uje samo `isChild` field na members docu.
      */

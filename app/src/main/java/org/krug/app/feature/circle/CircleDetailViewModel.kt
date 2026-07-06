@@ -136,6 +136,15 @@ class CircleDetailViewModel @Inject constructor(
         }
     }
 
+    /** Owner-only: izbaci člana iz kruga. */
+    fun removeMember(memberUid: String) {
+        if (!_state.value.isOwner) return
+        viewModelScope.launch {
+            runCatching { circleRepository.removeMember(circleId, memberUid) }
+                .onFailure { Timber.w(it, "removeMember failed for $circleId/$memberUid") }
+        }
+    }
+
     /** Owner-only edit. Vraća true ako je uspešno; false ako je duplikat ili greška. */
     suspend fun updateDetails(name: String, colorHex: String, iconKey: String): Boolean {
         val s = _state.value
