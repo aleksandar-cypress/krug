@@ -8,6 +8,7 @@ import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.CarColor
 import androidx.car.app.model.CarLocation
+import androidx.car.app.model.Header
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.Metadata
 import androidx.car.app.model.Place
@@ -136,11 +137,17 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
                     .build(),
             )
             .build()
-        return PlaceListNavigationTemplate.Builder()
+        // Car App Library 1.3+ pattern: Header objekat umesto individualnih
+        // setTitle/setHeaderAction poziva (koji su deprecated). Konsoliduje title +
+        // start action u jedan zvanicni header koji Auto host konzistentno renderuje.
+        val header = Header.Builder()
             .setTitle(carContext.getString(R.string.car_title))
+            .setStartHeaderAction(Action.APP_ICON)
+            .build()
+        return PlaceListNavigationTemplate.Builder()
+            .setHeader(header)
             .setItemList(listBuilder.build())
             .setActionStrip(actionStrip)
-            .setHeaderAction(Action.APP_ICON)
             .build()
     }
 
