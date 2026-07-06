@@ -50,29 +50,54 @@ class PlacesViewModel @Inject constructor(
     private val auth: FirebaseAuth,
 ) : ViewModel() {
 
-    private val _searchResults = MutableStateFlow<List<GeocodingRepository.Suggestion>>(emptyList())
-    val searchResults: StateFlow<List<GeocodingRepository.Suggestion>> = _searchResults.asStateFlow()
+    /**
+     * Search state — distinguisati "u toku", "greska", "prazno", "ima rezultata". Bez ovog:
+     * greska mreze bi izgledala kao "no results" i user bi mislio da adresa ne postoji.
+     */
+    sealed class SearchState {
+        object Idle : SearchState()
+        object Loading : SearchState()
+        object Error : SearchState()
+        object Empty : SearchState()
+        data class Success(val suggestions: List<GeocodingRepository.Suggestion>) : SearchState()
+    }
+
+    private val _searchState = MutableStateFlow<SearchState>(SearchState.Idle)
+    val searchState: StateFlow<SearchState> = _searchState.asStateFlow()
 
     private var searchJob: kotlinx.coroutines.Job? = null
+    private var lastQuery: String = ""
 
     fun searchAddress(query: String) {
         searchJob?.cancel()
+        lastQuery = query
         if (query.trim().length < 3) {
-            _searchResults.value = emptyList()
+            _searchState.value = SearchState.Idle
             return
         }
         searchJob = viewModelScope.launch {
             // Debounce 300ms — user tipka, ne bombardujmo Mapbox API-jem.
             kotlinx.coroutines.delay(300)
+            _searchState.value = SearchState.Loading
             val proxLat = _state.value.currentLat
             val proxLng = _state.value.currentLng
-            _searchResults.value = geocodingRepository.search(query, proxLat, proxLng)
+            _searchState.value = when (val r = geocodingRepository.search(query, proxLat, proxLng)) {
+                is GeocodingRepository.SearchResult.Success -> SearchState.Success(r.suggestions)
+                GeocodingRepository.SearchResult.Empty -> SearchState.Empty
+                GeocodingRepository.SearchResult.Error -> SearchState.Error
+            }
         }
+    }
+
+    /** Ponovi zadnju search — koristi se "Try again" akcijom u UI-ju kad state = Error. */
+    fun retrySearch() {
+        if (lastQuery.isNotBlank()) searchAddress(lastQuery)
     }
 
     fun clearSearchResults() {
         searchJob?.cancel()
-        _searchResults.value = emptyList()
+        _searchState.value = SearchState.Idle
+        lastQuery = ""
     }
 
     private val circleId: String = requireNotNull(savedStateHandle["circleId"]) {

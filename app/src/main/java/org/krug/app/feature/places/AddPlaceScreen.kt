@@ -69,7 +69,7 @@ fun AddPlaceScreen(
     viewModel: PlacesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
+    val searchState by viewModel.searchState.collectAsStateWithLifecycle()
     var name by remember { mutableStateOf("") }
     var nameEdited by remember { mutableStateOf(false) }
     var radius by remember { mutableStateOf(PlaceModel.DEFAULT_RADIUS_M.toFloat()) }
@@ -159,41 +159,87 @@ fun AddPlaceScreen(
                             )
                         },
                     )
-                    if (searchResults.isNotEmpty()) {
-                        Spacer(Modifier.size(4.dp))
-                        androidx.compose.foundation.lazy.LazyColumn(
-                            modifier = Modifier.heightIn(max = 240.dp),
-                        ) {
-                            items(
-                                items = searchResults,
-                                key = { s -> "${s.lat},${s.lng}" },
-                            ) { s ->
-                                androidx.compose.material3.ListItem(
-                                    modifier = Modifier.clickable {
-                                        mapViewRef.map?.mapboxMap?.setCamera(
-                                            CameraOptions.Builder()
-                                                .center(Point.fromLngLat(s.lng, s.lat))
-                                                .zoom(16.0)
-                                                .build(),
-                                        )
-                                        if (!nameEdited || name.isBlank()) {
-                                            name = s.displayName
-                                        }
-                                        searchQuery = ""
-                                        viewModel.clearSearchResults()
-                                        searchVisible = false
-                                    },
-                                    headlineContent = { Text(s.displayName) },
-                                    supportingContent = {
-                                        Text(
-                                            s.placeName,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            maxLines = 2,
-                                        )
-                                    },
+                    when (val ss = searchState) {
+                        is PlacesViewModel.SearchState.Success -> {
+                            Spacer(Modifier.size(4.dp))
+                            androidx.compose.foundation.lazy.LazyColumn(
+                                modifier = Modifier.heightIn(max = 240.dp),
+                            ) {
+                                items(
+                                    items = ss.suggestions,
+                                    key = { s -> "${s.lat},${s.lng}" },
+                                ) { s ->
+                                    androidx.compose.material3.ListItem(
+                                        modifier = Modifier.clickable {
+                                            mapViewRef.map?.mapboxMap?.setCamera(
+                                                CameraOptions.Builder()
+                                                    .center(Point.fromLngLat(s.lng, s.lat))
+                                                    .zoom(16.0)
+                                                    .build(),
+                                            )
+                                            if (!nameEdited || name.isBlank()) {
+                                                name = s.displayName
+                                            }
+                                            searchQuery = ""
+                                            viewModel.clearSearchResults()
+                                            searchVisible = false
+                                        },
+                                        headlineContent = { Text(s.displayName) },
+                                        supportingContent = {
+                                            Text(
+                                                s.placeName,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                maxLines = 2,
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        PlacesViewModel.SearchState.Loading -> {
+                            Spacer(Modifier.size(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
                                 )
                             }
                         }
+                        PlacesViewModel.SearchState.Error -> {
+                            Spacer(Modifier.size(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    stringResource(R.string.places_search_error),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                androidx.compose.material3.TextButton(
+                                    onClick = { viewModel.retrySearch() },
+                                ) {
+                                    Text(stringResource(R.string.places_search_retry))
+                                }
+                            }
+                        }
+                        PlacesViewModel.SearchState.Empty -> {
+                            if (searchQuery.trim().length >= 3) {
+                                Spacer(Modifier.size(8.dp))
+                                Text(
+                                    stringResource(R.string.places_search_no_results),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 4.dp),
+                                )
+                            }
+                        }
+                        PlacesViewModel.SearchState.Idle -> Unit
                     }
                 }
             }

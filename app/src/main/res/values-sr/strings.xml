@@ -246,6 +246,9 @@
     <string name="places_sort_by_date">Sort po datumu</string>
     <string name="places_search_cta">Traži adresu</string>
     <string name="places_search_hint">Adresa, grad, POI…</string>
+    <string name="places_search_error">Pretraga nije uspela. Proveri konekciju.</string>
+    <string name="places_search_retry">Pokušaj ponovo</string>
+    <string name="places_search_no_results">Nema rezultata za ovu pretragu</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Članovi</string>

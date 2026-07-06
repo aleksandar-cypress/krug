@@ -242,6 +242,9 @@
     <string name="places_sort_by_date">Sort by date</string>
     <string name="places_search_cta">Search address</string>
     <string name="places_search_hint">Address, city, POI…</string>
+    <string name="places_search_error">Search failed. Check your connection.</string>
+    <string name="places_search_retry">Try again</string>
+    <string name="places_search_no_results">No results for this query</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Members</string>
