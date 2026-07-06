@@ -3002,6 +3002,10 @@ private fun PermissionWarningBanner(onOpenSettings: () -> Unit) {
 }
 
 private fun computeMissingPermissions(context: android.content.Context): List<String> {
+    // Banner lista SAMO runtime permissions (location/bg location/notifications) koje user
+    // mora eksplicitno da grant-uje. Battery-opt i activity-recognition su tretirani odvojeno
+    // (onboarding, startup dialog, Settings > Location reliability) jer meshanje "permission"
+    // i "OS setting" u istom banner-u konfuzira user-a — misli da je to nova permisija.
     val missing = mutableListOf<String>()
     if (!org.krug.app.core.permissions.PermissionUtils.hasForegroundLocation(context)) {
         missing += context.getString(R.string.permission_missing_location)
@@ -3015,15 +3019,6 @@ private fun computeMissingPermissions(context: android.content.Context): List<St
         !org.krug.app.core.permissions.PermissionUtils.hasNotifications(context)
     ) {
         missing += context.getString(R.string.permission_missing_notifications)
-    }
-    // Battery-opt exemption i activity-recognition nisu runtime permissions u strogom
-    // smislu (jedan je OS setting, drugi je opciona permisija), ali su i dalje reliability
-    // gate-ovi. Uključujemo ih u banner listu da user vidi ceo problem odjednom.
-    if (!org.krug.app.core.permissions.PermissionUtils.isIgnoringBatteryOptimizations(context)) {
-        missing += context.getString(R.string.permission_missing_battery)
-    }
-    if (!org.krug.app.core.permissions.PermissionUtils.hasActivityRecognition(context)) {
-        missing += context.getString(R.string.permission_missing_activity)
     }
     return missing
 }
