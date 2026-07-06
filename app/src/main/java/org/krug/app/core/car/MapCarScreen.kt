@@ -8,14 +8,13 @@ import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.CarColor
 import androidx.car.app.model.CarLocation
-import androidx.car.app.model.Header
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.Metadata
 import androidx.car.app.model.Place
 import androidx.car.app.model.PlaceMarker
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
-import androidx.car.app.navigation.model.PlaceListNavigationTemplate
+import androidx.car.app.model.PlaceListMapTemplate
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -137,15 +136,13 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
                     .build(),
             )
             .build()
-        // Car App Library 1.3+ pattern: Header objekat umesto individualnih
-        // setTitle/setHeaderAction poziva (koji su deprecated). Konsoliduje title +
-        // start action u jedan zvanicni header koji Auto host konzistentno renderuje.
-        val header = Header.Builder()
+        // PlaceListMapTemplate (POI kategorija) umesto PlaceListNavigationTemplate
+        // (NAVIGATION kategorija). Razlog: NAVIGATION kategorija zahteva Play Store approval
+        // od Google-a; sideloaded/debug APK-ovi se filtriraju cak i sa Unknown Sources ON.
+        // POI kategorija radi sa Unknown Sources bez Google approval-a.
+        return PlaceListMapTemplate.Builder()
             .setTitle(carContext.getString(R.string.car_title))
-            .setStartHeaderAction(Action.APP_ICON)
-            .build()
-        return PlaceListNavigationTemplate.Builder()
-            .setHeader(header)
+            .setHeaderAction(Action.APP_ICON)
             .setItemList(listBuilder.build())
             .setActionStrip(actionStrip)
             .build()

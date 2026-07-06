@@ -36,8 +36,11 @@
     <!-- Boot receiver — resume sharing after reboot if user opted in -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- Android Auto — Car App Library dozvole. -->
-    <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
+    <!-- Android Auto — Car App Library dozvole. Koristi se POI kategorija (a ne NAVIGATION)
+         jer NAVIGATION zahteva Play Store approval od Google-a; sideloaded debug APK-ovi bi
+         se filtrirali cak i sa Unknown Sources ON. POI (Points of Interest) radi bez Google
+         approval-a i odgovara semantici Krug-a (prikazi lokacije clanova + Places pin-ove).
+         MAP_TEMPLATES je dovoljno; NAVIGATION_TEMPLATES uklonjeno (nema smisla za POI). -->
     <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
 
     <!-- Android Auto feature declaration (opciono ali preporučeno za Play Store filter). -->
@@ -103,7 +106,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
-                <category android:name="androidx.car.app.category.NAVIGATION" />
+                <category android:name="androidx.car.app.category.POI" />
             </intent-filter>
         </service>
 
