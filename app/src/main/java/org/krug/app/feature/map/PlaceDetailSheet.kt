@@ -118,7 +118,7 @@ fun PlaceDetailSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
-                androidx.compose.material3.Switch(
+                org.krug.app.ui.brand.KrugSwitch(
                     checked = place.muted,
                     onCheckedChange = onToggleMute,
                 )

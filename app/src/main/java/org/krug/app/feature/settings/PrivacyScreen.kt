@@ -15,7 +15,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
+import org.krug.app.ui.brand.KrugSwitch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -159,7 +159,7 @@ fun PrivacyScreen(
                     )
                 }
                 Spacer(Modifier.size(8.dp))
-                Switch(
+                KrugSwitch(
                     checked = state.settings.shareLocationGlobal,
                     onCheckedChange = viewModel::setShareGlobal,
                     enabled = !state.isChildAnywhere,
@@ -206,7 +206,7 @@ fun PrivacyScreen(
                     )
                 }
                 Spacer(Modifier.size(8.dp))
-                Switch(
+                KrugSwitch(
                     checked = state.settings.placeNotifsEnabled,
                     onCheckedChange = viewModel::setPlaceNotifs,
                 )
@@ -231,7 +231,7 @@ fun PrivacyScreen(
                     )
                 }
                 Spacer(Modifier.size(8.dp))
-                Switch(
+                KrugSwitch(
                     checked = state.settings.silentHours != null,
                     onCheckedChange = { enabled ->
                         viewModel.setSilentHours(if (enabled) "23:00-07:00" else null)
