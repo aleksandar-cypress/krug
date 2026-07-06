@@ -171,16 +171,72 @@ Nakon STATUS.md update-a `26034f6`, sesija se produžila sa još 8 commit-ova
   OFF=surfaceContainerHighest+onSurfaceVariant, border transparent u oba
   stanja. Primenjeno na 4 mesta (PrivacyScreen 3× + PlaceDetailSheet 1×).
 
-### H) Preostalo za sledeću sesiju
+### H) Post-scriptum 2 (nastavak sesije, još 6 commit-a)
+
+Nakon post-scriptum #1 (koji se završio sa `cbd509a` KrugSwitch), sesija se
+produžila sa još 6 commit-a (`104adce` → `c2f9b11`):
+
+**SelfShareBrokenBanner (`104adce`)** — proaktivan alert za Slobodan-tip
+problem. User pointer: user (Slobodan) ne zna kad ga drugi ne vide jer sam
+koristi app misleći da sve radi. Location Reliability screen (danas dodat) je
+pasivan — mora sam da uđe u Settings. Fix: crveni banner na MapScreen-u koji
+fire-uje kad `!LocationTrackingService.isRunning.get() || lastPublishAtMs > 10min`.
+Naslov: "Ostali te trenutno ne vide" + tap otvara Location Reliability. Rescan
+na ON_RESUME + periodic 60s tick da se banner otkrije/sakrije bez korisničke
+akcije.
+
+**Audit fixes (`19e637a`)** — thorough audit SOS/Places/Circle flow-ova
+otkrio 3 real bug-a:
+- SOS lock-screen bypass reset (MainActivity): `enableShowWhenLocked()` je
+  aktivirao flag ali nikad ne resetuje. Rezultat: sve buduće notifikacije
+  otvaraju app preko lock screen-a — privacy leak. Fix: `onResume()` hook koji
+  reset-uje flag kad `SosFocusBus.pendingUid.value == null`.
+- Places double-tap Save race (PlacesViewModel): `createPlace/updatePlace` bez
+  guard-a — brz dupli-tap launch-uje 2 paralelna Firestore write-a. Fix:
+  `if (_state.value.saving) return` na početku funkcije + set `saving=true`
+  sinkrono pre `viewModelScope.launch`.
+- Invite deep-link handler `krug://invite/{code}` (novo): manifest je imao
+  intent-filter ali MainActivity ignorira data URI — user klikne link u
+  WhatsApp/SMS, app se otvori ali kod se gubi. Fix: nov `InviteFocusBus`
+  (isti pattern kao SosFocusBus/PlaceFocusBus). MainActivity parsira
+  `uri.lastPathSegment`, emituje. KrugNavHost collect-uje `pendingCode` +
+  `currentBackStackEntryAsState` i auto-navigira na `EnterCode(prefilledCode)`
+  kad user stigne do sigurne rute (Map/CircleList/EnterCode). Ako nije auth-ovan,
+  kod čeka u bus-u kroz Auth flow.
+- KrugRadioButton wrapper (novo): isti pattern kao KrugSwitch. Custom colors
+  sa LogoBlue primary za selected + neutral outline za unselected. Primenjen
+  na BatteryModeScreen (3 RadioButton-a).
+
+**Places empty state polish (`877653a`, delimično)** — kad je Places lista
+prazna, ranije bland outlined icon + text. Nov design: 96dp LogoBlue-tinted
+cirkular + Place ikona + titleLarge naslov + Body hint + prominent Filled
+Button CTA "Add place". Redukuje "šta sad?" trenutak za nove usere.
+
+**Places pull-to-refresh (`877653a`, delimično)** — ceo content wrap-ovan u
+PullToRefreshBox. Nov `refreshing: Boolean` u UiState + `refresh()` funkcija
+sa 700ms spinner. Firestore real-time listener ne treba refresh, ali user
+mental model traži gesture.
+
+**Long-press quick actions revert (`877653a` + `c2f9b11`)** — inicijalno dodat
+kao dropdown menu na MemberRow (Refresh/Maps/History), ali user je rekao da
+nije bilo dogovoreno + imao je bug (white background stuck posle dismiss zbog
+neispisanog Press interaction-a u interactionSource). Vraceno na plain
+`pressScaleClickable`.
+
+### I) Preostalo za sledeću sesiju
 
 1. **Fizički Auto test** — priključi S24 na auto, verifikuj da se Krug list-uje
-   u Auto meniju (posle svih 5+ fixeva: POI kategorija, car-app 1.7.0,
+   u Auto meniju (posle 5+ fixeva: POI kategorija, car-app 1.7.0,
    minCarApiLevel=4, service label/icon, Play Store installer flag).
 2. **Play Store closed testing** — 9/12 opted-in tester-a, treba 3 još.
-3. **Uklonuti test-ovi** — SOS end-to-end, Refresh location ping-back,
+3. **Untested feature-e** — SOS end-to-end, Refresh location ping-back,
    Silent hours enforcement, auto-status Speed uvek prikazan.
-4. **Ostatak UI polish** — RadioButton/Checkbox brand styling (Slider je već
-   Material3 sa primary color).
+4. **Onboarding/Auth audit** — nije uradjen ove sesije (SOS/Places/Circle jesu).
+5. **Unit testovi** — `computeHasMovement`, `clusterByProximity`, `isOffline`
+   grace period, `formatTimeAt` — sve pure funkcije, trenutno bez pokrivenosti.
+6. **Bigger feature (deferred iz audit-a)** — member removal (Circle),
+   ownership transfer, `usecase="poi"` u automotive_app_desc.xml (nepotvrđeno
+   da li menja Auto ponašanje).
 
 ---
 

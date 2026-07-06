@@ -1800,7 +1800,7 @@ private fun MapboxContainer(
             // "+N" badge-om — vizuelno jasno da su zajedno. Self ostaje solo (uvek
             // vidljiv sa svojim brand kolor pin-om, ne meša se sa cluster ikoničnošću).
             val (selfSolo, others) = members.partition { it.isSelf }
-            val clusters = clusterByProximity(others, thresholdMeters = 100.0)
+            val clusters = clusterMembersByProximity(others, thresholdMeters = 100.0)
             val allGroups: List<List<MemberWithLocation>> = selfSolo.map { listOf(it) } + clusters
             allGroups.forEach { group ->
                 val primary = group.first()
@@ -1865,41 +1865,19 @@ private fun MapboxContainer(
 }
 
 /**
- * Grupiše članove koji su geografski blizu (unutar `thresholdMeters`) u zajedničke
- * klastere. Koristi se za "putuju u istom autu" scenario: async publish (30-90s razmak)
- * daje 2 pina na različitim mestima iako su fizički zajedno. Cluster ih spaja u 1 pin
- * sa "+N" badge-om.
- *
- * Algoritam: greedy — za svakog člana, traži postojeći klaster gde je barem jedan član
- * unutar threshold-a; ako nađe, pridruži; ako ne, novi klaster. Nije optimalno (single-link
- * clustering može da spoji lanac razdvojenih tačaka), ali za <20 članova + realistične
- * distance nije problem.
- *
- * Članovi bez lokacije se preskaču (ne pojavljuju u output-u).
+ * Grupiše članove koji su geografski blizu (unutar `thresholdMeters`) — wrapper preko
+ * generic `clusterByProximity` u core/util/. Koristi se za "putuju u istom autu"
+ * scenario: async publish (30-90s razmak) daje 2 pina na različitim mestima iako su
+ * fizički zajedno. Cluster ih spaja u 1 pin sa "+N" badge-om.
  */
-private fun clusterByProximity(
+private fun clusterMembersByProximity(
     members: List<MemberWithLocation>,
     thresholdMeters: Double,
-): List<List<MemberWithLocation>> {
-    val groups = mutableListOf<MutableList<MemberWithLocation>>()
-    for (m in members) {
-        val loc = m.location ?: continue
-        var placed = false
-        for (group in groups) {
-            val near = group.any { existing ->
-                val el = existing.location ?: return@any false
-                haversineMeters(loc.lat, loc.lng, el.lat, el.lng) < thresholdMeters
-            }
-            if (near) {
-                group.add(m)
-                placed = true
-                break
-            }
-        }
-        if (!placed) groups.add(mutableListOf(m))
-    }
-    return groups
-}
+): List<List<MemberWithLocation>> = org.krug.app.core.util.clusterByProximity(
+    items = members,
+    latLng = { m -> m.location?.let { it.lat to it.lng } },
+    thresholdMeters = thresholdMeters,
+)
 
 /**
  * Aproksimira krug (u geo-koordinatama, radijus u metrima) sa N-stranim polygon-om.

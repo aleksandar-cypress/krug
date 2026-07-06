@@ -46,6 +46,10 @@ class MainActivity : ComponentActivity() {
         handleSosFocusExtra(intent)
         handlePlaceFocusExtra(intent)
         handleInviteDeepLink(intent)
+        // Restore persistirani invite kod (u slučaju process death između emit-a i
+        // consume-a). Ako je već emit-ovan gore preko handleInviteDeepLink, no-op
+        // (StateFlow je već setovan na istu vrednost).
+        restorePendingInviteCode()
         setContent {
             KrugApp()
         }
@@ -74,9 +78,36 @@ class MainActivity : ComponentActivity() {
         val uri = intent?.data ?: return
         if (uri.scheme != "krug" || uri.host != "invite") return
         val code = uri.lastPathSegment?.takeIf { it.isNotBlank() } ?: return
+        // Persistuj u LocalPrefs pored bus-a — StateFlow ne preživljava process death,
+        // pa bi u edge case-u (user klikne link, proces se ubije pre auth-a) kod bio
+        // izgubljen. Sa persistence-om, na sledeci start ćemo restore-ovati u bus.
+        persistPendingInviteCode(code)
         org.krug.app.core.circle.InviteFocusBus.request(code)
         // Odbaci data iz intent-a da rotacija/configChange ne re-trigger-uje.
         intent.data = null
+    }
+
+    private fun persistPendingInviteCode(code: String?) {
+        val prefs = dagger.hilt.android.EntryPointAccessors.fromApplication(
+            applicationContext,
+            MainActivityEntryPoint::class.java,
+        ).localPrefs()
+        prefs.pendingInviteCode = code
+    }
+
+    /**
+     * Restore pending invite code iz LocalPrefs na app start. Poziva se iz onCreate posle
+     * runtime handler-a — ako je proces bio ubijen pre nego što je NavHost consume-ovao
+     * bus, kod je ostao u prefs-u i ovim ga vraćamo u InviteFocusBus da normalni flow
+     * može da ga pokupi.
+     */
+    private fun restorePendingInviteCode() {
+        val prefs = dagger.hilt.android.EntryPointAccessors.fromApplication(
+            applicationContext,
+            MainActivityEntryPoint::class.java,
+        ).localPrefs()
+        val code = prefs.pendingInviteCode?.takeIf { it.isNotBlank() } ?: return
+        org.krug.app.core.circle.InviteFocusBus.request(code)
     }
 
     private fun handlePlaceFocusExtra(intent: Intent?) {

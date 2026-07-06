@@ -107,6 +107,19 @@ class LocalPrefs @Inject constructor(
         set(value) = prefs.edit(commit = false) { putLong(KEY_LAST_BATTERY_PROMPT_MS, value) }
 
     /**
+     * Pending invite kod iz deep link-a. StateFlow u `InviteFocusBus` ne preživljava process
+     * death. Ako user klikne `krug://invite/{code}` dok nije auth-ovan (ili se app crashe
+     * pre nav-a na EnterCode), kod bi bio izgubljen. Ovim persist-ujemo do successful
+     * consume-a — InviteFocusBus.request() poziva ovaj setter, consume() briše.
+     */
+    var pendingInviteCode: String?
+        get() = prefs.getString(KEY_PENDING_INVITE_CODE, null)
+        set(value) = prefs.edit(commit = false) {
+            if (value == null) remove(KEY_PENDING_INVITE_CODE)
+            else putString(KEY_PENDING_INVITE_CODE, value)
+        }
+
+    /**
      * GDPR — pozvati nakon delete-account ili reinstall recovery-ja. Briše sve per-account
      * state da novi sign-in ne nasledi stari `activeCircleId` (ne postoji više), `sos_notified`
      * dedup ili `onboardingCompleted` flag (novi nalog treba čist onboarding). `pendingDeleteUid`
@@ -130,5 +143,6 @@ class LocalPrefs @Inject constructor(
         const val KEY_ACTIVITY_REC_PROMPT_SHOWN = "activity_rec_prompt_shown"
         const val KEY_LAST_SEEN_WHATS_NEW = "last_seen_whats_new_version"
         const val KEY_LAST_BATTERY_PROMPT_MS = "last_battery_prompt_ms"
+        const val KEY_PENDING_INVITE_CODE = "pending_invite_code"
     }
 }

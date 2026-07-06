@@ -35,6 +35,7 @@ import org.krug.app.feature.splash.SplashScreen
 @Composable
 fun KrugNavHost() {
     val nav = rememberNavController()
+    val context = androidx.compose.ui.platform.LocalContext.current
     // Invite deep-link auto-navigation. Kada user klikne krug://invite/{code} u
     // WhatsApp-u/SMS-u/email-u, MainActivity emituje kod u InviteFocusBus. Ovde
     // (na top-level NavHost-u) collect-ujemo — kad se pojavi kod i user je već
@@ -52,6 +53,13 @@ fun KrugNavHost() {
         } ?: false
         if (!onSecureRoute) return@LaunchedEffect
         org.krug.app.core.circle.InviteFocusBus.consume()
+        // Očisti persistirani kod u LocalPrefs — sada je u NavHost stack-u kroz
+        // EnterCode(prefilledCode=code), ne treba više persist.
+        val prefs = dagger.hilt.android.EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            org.krug.app.MainActivityEntryPoint::class.java,
+        ).localPrefs()
+        prefs.pendingInviteCode = null
         nav.navigate(EnterCode(prefilledCode = code))
     }
     // Default screen transitions — horizontal slide za forward/back navigaciju.
