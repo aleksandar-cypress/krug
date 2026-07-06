@@ -238,6 +238,7 @@ private fun MemberWithLocation.isOffline(now: Long = System.currentTimeMillis())
 fun MapScreen(
     onOpenCircles: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenReliability: () -> Unit = {},
     onOpenCircleDetail: (circleId: String) -> Unit = {},
     onCreateCircle: () -> Unit = {},
     onJoinByCode: () -> Unit = {},
@@ -776,6 +777,12 @@ fun MapScreen(
                     }
                 },
             )
+            // Self-share broken banner — pojavljuje se KADA je moja lokacija zaustavljena
+            // ali ja to ne znam jer sam ja onaj koga ne vide (nema drugi da kaže). Bez
+            // ovog, user prosto koristi app misleci da svi drugi vide njegovu poziciju
+            // dok Aleksandar poziva na telefon "gde si nestao". Detektuje: FGS ne radi
+            // ILI poslednji publish > 10 min stariji.
+            SelfShareBrokenBanner(onOpenReliability = onOpenReliability)
             OfflineBanner(
                 isOnline = state.isOnline,
                 lastUpdatedAt = state.selfLocation?.updatedAt,
@@ -3150,6 +3157,94 @@ private fun PermissionWarningBanner(onOpenSettings: () -> Unit) {
                                 R.string.permission_banner_body,
                                 missingPermissions.joinToString(" · "),
                             ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * "Ostali te ne vide" banner — visible kad SELF-share nije reliable. Za razliku od
+ * PermissionWarningBanner (koji covers runtime permissions) i OfflineBanner (koji covers
+ * network) — ovaj banner hvata scenario gde je sve permissions OK, network OK, ali FGS
+ * ne radi (killed by OEM) ili poslednji publish stariji od 10min. Bez ovog, user koristi
+ * app misleci da svi vide njegovu lokaciju dok ga zapravo niko ne vidi.
+ *
+ * Threshold 10 min: dovoljno da izbegnemo false positive na kratke publish gap-ove
+ * (bg-heavy interval je do 15min u STILL mode-u), ali dovoljno kratko da user brzo
+ * dobija upozorenje ako nešto stvarno pukne.
+ */
+@Composable
+private fun SelfShareBrokenBanner(onOpenReliability: () -> Unit) {
+    // Rescan on ON_RESUME + periodic tick — banner treba da se auto-otkrije kad FGS
+    // vremenom prestane da publish-uje (bez čekanja da user ide van + nazad na screen).
+    var tick by remember { mutableStateOf(0) }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) tick++
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(60_000L)
+            tick++
+        }
+    }
+
+    val (isBroken, minutesStale) = remember(tick) {
+        val running = org.krug.app.core.location.LocationTrackingService.isRunning.get()
+        val lastPublish = org.krug.app.core.location.LocationTrackingService.lastPublishAtMs
+        val now = System.currentTimeMillis()
+        val ageMinutes = if (lastPublish > 0L) ((now - lastPublish) / 60_000L).toInt() else -1
+        val broken = !running || (ageMinutes >= 10)
+        broken to ageMinutes
+    }
+
+    AnimatedVisibility(
+        visible = isBroken,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut(),
+    ) {
+        Column {
+            Spacer(Modifier.size(12.dp))
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable(onClick = onOpenReliability),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.size(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.self_share_broken_title),
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Text(
+                            text = if (minutesStale >= 0) {
+                                stringResource(R.string.self_share_broken_body, minutesStale)
+                            } else {
+                                stringResource(R.string.self_share_broken_body_never)
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer,
                         )

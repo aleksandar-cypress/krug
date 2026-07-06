@@ -406,6 +406,12 @@
     <!-- Auto-status pill (kod imena člana u Members listi + MemberDetailSheet header) -->
     <string name="auto_status_moving">U pokretu · %1$d km/h</string>
 
+    <!-- Self-share broken banner (pojavljuje se kad user-ova lokacija ne stize na server
+         pa ga drugi ne vide, iako on ne zna) -->
+    <string name="self_share_broken_title">Ostali te trenutno ne vide</string>
+    <string name="self_share_broken_body">Tvoja lokacija se ne deli već %1$d min. Tapni da popraviš.</string>
+    <string name="self_share_broken_body_never">Deljenje lokacije ne radi. Tapni da popraviš.</string>
+
     <!-- Offline banner -->
     <string name="offline_banner_title">Nema internet veze</string>
     <string name="offline_banner_body_with_age">Poslednje ažuriranje %1$s. Članovi kruga vide staru lokaciju.</string>

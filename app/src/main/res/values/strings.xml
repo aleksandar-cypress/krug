@@ -402,6 +402,12 @@
     <!-- Auto-status pill (kod imena člana u Members listi + MemberDetailSheet header) -->
     <string name="auto_status_moving">Moving · %1$d km/h</string>
 
+    <!-- Self-share broken banner (prikazuje se kad user-ova lokacija ne stize na server
+         pa ga drugi ne vide, iako on ne zna) -->
+    <string name="self_share_broken_title">Others can\'t see you right now</string>
+    <string name="self_share_broken_body">Your location has not been shared for %1$d min. Tap to fix.</string>
+    <string name="self_share_broken_body_never">Location sharing is not running. Tap to fix.</string>
+
     <!-- Offline banner -->
     <string name="offline_banner_title">No internet connection</string>
     <string name="offline_banner_body_with_age">Last update %1$s. Circle members see your old location.</string>

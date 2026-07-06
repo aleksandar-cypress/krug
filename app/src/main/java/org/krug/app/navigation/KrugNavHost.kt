@@ -104,6 +104,7 @@ fun KrugNavHost() {
             MapScreen(
                 onOpenCircles = { nav.navigate(CircleList) },
                 onOpenSettings = { nav.navigate(Settings) },
+                onOpenReliability = { nav.navigate(Reliability) },
                 onOpenCircleDetail = { circleId -> nav.navigate(CircleDetail(circleId)) },
                 onCreateCircle = { nav.navigate(CreateCircle) },
                 onJoinByCode = { nav.navigate(EnterCode()) },

@@ -96,13 +96,91 @@ Za user-ov core CORE bug "Slobodan često ispada offline", implementiran je mult
 
 Sesija je obuhvatila live install debug APK-a na dva uređaja (S24 Ultra `R5CWC1F9FND`, A55 `RZCX50XJGPD`) i live testiranje kroz stvarne interakcije. Iterativni loop je bio: user javi problem → istraga → fix → rebuild + adb install → user testira. Ovaj pattern je otkrio pored jutrošnjih 12 stavki i još 3 bug-a koje nismo znali za (place pin missing, flyTo race, notif click).
 
-### G) Preostalo za sledeću sesiju
+### G) Post-scriptum (nastavak sesije, još 8 commit-ova)
 
-1. **Fizički Auto test** — priključi S24 na auto, verifikuj da se Krug list-uje.
-2. **Cluster click UX** — trenutno klik na cluster pin otvara samo prvog člana. Bolji UX: chooser dialog ili group sheet.
-3. **Play Store closed testing** — 9/12 opted-in tester-a, treba 3 još (kroz WhatsApp poruku porodici).
-4. **Notif ikone** — SOS + Places koriste `ic_launcher_foreground` (obojena launcher ikonica). Trebalo bi bela silueta na transparent za `smallIcon` (Material Design guideline).
-5. **Ostali test-ovi** — Refresh location ping-back, auto-status pill sa Speed uvek prikazanim, SOS end-to-end.
+Nakon STATUS.md update-a `26034f6`, sesija se produžila sa još 8 commit-ova
+(`22dcf16` → `cbd509a`):
+
+**Task audit + fallback fixes (`22dcf16`)**:
+- `MapViewModel.deletePlace` i `togglePlaceMute` koristili raw
+  `localPrefs.activeCircleIdFlow.first()` bez fallback-a → za fresh usere silently
+  no-op. Fix: `effectiveActiveCircleId` (isti pattern kao `activePlaces`).
+- `HistoryViewModel.activePlaces` isti bug → dodati `CircleRepository` +
+  `FirebaseAuth` injection, extract shared `effectiveActiveCircleId`.
+- **Cluster click UX**: `annotationToUid` postao `List<String>` umesto `String`.
+  Solo → detail sheet (postojeće). Cluster → `MembersSheet` filtriran na
+  cluster uid-ove, user bira kog.
+- **Auto-status i18n**: "U pokretu • 45 km/h" bio hardcoded srpski u ViewModel-u.
+  Fix: `auto_status_moving` string resource + `@ApplicationContext` injection.
+
+**Notif ikone (`a01e6ea`)**:
+- `PlaceEventNotifier.setSmallIcon` bio `ic_launcher_foreground` (obojena
+  launcher ikonica) → siva mrlja u status bar-u. Fix: `ic_notification` (bela
+  silueta), konzistentno sa SosNotifier + LocationTrackingService FGS.
+
+**Geofence spam notifikacija (`da99490`)**:
+- User javio: Jelena dobila 4 spam notif-a "Aleksandar stigao kod kuće" iako
+  se Aleksandar nije pomerio. Root cause: `GeofencingRequest.setInitialTrigger(
+  INITIAL_TRIGGER_ENTER)` firing ENTER svaki put kad se places lista promeni
+  (svaki re-register = novi ENTER za device koji je unutra).
+- Fix: `setInitialTrigger(0)` — enter/exit fire SAMO na fizičkom prelasku
+  boundary-ja. Plus in-memory dedup u `GeofenceBroadcastReceiver` (60s cooldown
+  po (placeId, type)) kao defense layer za Google Play race scenarije.
+- Bonus: `MemberRow` dobija `autoStatus` param, prikazuje "U pokretu · 45 km/h"
+  u statusnoj liniji umesto device model-a. `MembersSheet` prosleđuje
+  `autoStatusByUid` iz MapViewModel-a.
+
+**History "no movement" state (`9f6f2e8`)**:
+- User javio: Jelena otvara View history za Aleksandra, play radi ali mapa se
+  ne menja jer Aleksandar nije mrdao. Root cause: FGS publikuje lokaciju
+  svakih 10min čak i kad user statično stoji → 40-50 point-a ali svi u <50m.
+- Fix: `computeHasMovement(points, minSpanMeters=50)` bounding box check.
+  Ako !hasMovement: overlay "No movement recorded" + Play IconButton disabled.
+
+**MapCarScreen Header API (`d8e85fb`)**:
+- Uklonjeni deprecation warning-i (`PlaceListNavigationTemplate.setTitle` +
+  `setHeaderAction`) prelaskom na `Header.setTitle` + `Header.setStartHeaderAction`
+  pattern (Car App Library 1.3+).
+
+**Android Auto POI kategorija (`9dc1f77`)**:
+- Krug se i dalje nije pojavljivao u Auto listi. Root cause: `NAVIGATION`
+  kategorija zahteva **Play Store approval** od Google-a; sideloaded APK-ovi
+  se filtriraju čak sa Unknown Sources ON. Zato Viber (MESSAGING) može, Krug
+  ne mogao.
+- Fix: kategorija `NAVIGATION` → `POI` (Points of Interest, ne zahteva
+  approval). Template `PlaceListNavigationTemplate` → `PlaceListMapTemplate`
+  (POI kompatibilan). NAVIGATION_TEMPLATES permission uklonjena.
+
+**Android Auto dodatni layer fix-eva (`5938cca`)**:
+- POI sam nije bio dovoljan po Explore agent audit-u; primenjeni top 3
+  najverovatnija dodatna fixa:
+  - `car-app` biblioteka 1.4.0 → 1.7.0 (najnovija stabilna, modern Auto host
+    može ignorisati apps kompajlirane sa starim SDK-om).
+  - `minCarApiLevel`: 1 → 4 (Level 1 = Auto 5.0 iz 2015., moderni host tretira
+    kao napušteno; Level 4 = Auto 8.1+ = 2023).
+  - `KrugCarAppService`: dodati `android:label` + `android:icon`.
+- **Instalacija napomena**: sideloaded debug APK-ovi treba da se instaliraju sa
+  `adb shell pm install -i "com.android.vending" -r <apk>` — bez ovog Auto na
+  nekim host verzijama ignorira apps ne-Play-Store installer-a.
+
+**KrugSwitch wrapper (`cbd509a`)**:
+- User javio: "toggle button kada je OFF nije lepo prikazan". Material3 default
+  ima siv track sa vidljivom border ivicom + medium grey thumb — "boxy cheap"
+  izgled.
+- Fix: novi `KrugSwitch` u `ui/brand/` sa custom colors — ON=LogoBlue+white,
+  OFF=surfaceContainerHighest+onSurfaceVariant, border transparent u oba
+  stanja. Primenjeno na 4 mesta (PrivacyScreen 3× + PlaceDetailSheet 1×).
+
+### H) Preostalo za sledeću sesiju
+
+1. **Fizički Auto test** — priključi S24 na auto, verifikuj da se Krug list-uje
+   u Auto meniju (posle svih 5+ fixeva: POI kategorija, car-app 1.7.0,
+   minCarApiLevel=4, service label/icon, Play Store installer flag).
+2. **Play Store closed testing** — 9/12 opted-in tester-a, treba 3 još.
+3. **Uklonuti test-ovi** — SOS end-to-end, Refresh location ping-back,
+   Silent hours enforcement, auto-status Speed uvek prikazan.
+4. **Ostatak UI polish** — RadioButton/Checkbox brand styling (Slider je već
+   Material3 sa primary color).
 
 ---
 
