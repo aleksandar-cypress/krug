@@ -397,6 +397,9 @@
     <string name="permission_missing_battery">Battery optimization</string>
     <string name="permission_missing_activity">Activity detection</string>
 
+    <!-- Auto-status pill (kod imena člana u Members listi + MemberDetailSheet header) -->
+    <string name="auto_status_moving">Moving · %1$d km/h</string>
+
     <!-- Offline banner -->
     <string name="offline_banner_title">No internet connection</string>
     <string name="offline_banner_body_with_age">Last update %1$s. Circle members see your old location.</string>

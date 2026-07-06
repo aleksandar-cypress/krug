@@ -631,14 +631,24 @@ fun MapScreen(
         }
     }
 
-    // Click handler za pin — fly-to + otvori MemberDetail sheet.
+    // State: kad user tapne cluster pin (2+ članova), otvorimo chooser sheet sa listom
+    // članova iz tog klastera. Solo pin ide direktno na detail (postojeći UX).
+    var clusterChooserUids by remember { mutableStateOf<List<String>?>(null) }
+
+    // Click handler za pin — solo: fly-to + otvori MemberDetail. Cluster: otvori chooser.
     DisposableEffect(mapViewState, state.members) {
-        mapViewState.onPinClick = { uid ->
+        mapViewState.onPinClick = { uids ->
             haptic()
-            state.members.firstOrNull { it.uid == uid }?.location?.let { loc ->
-                mapViewState.flyTo(loc.lng, loc.lat)
+            if (uids.size == 1) {
+                val uid = uids.first()
+                state.members.firstOrNull { it.uid == uid }?.location?.let { loc ->
+                    mapViewState.flyTo(loc.lng, loc.lat)
+                }
+                detailUid = uid
+            } else {
+                // Cluster — user bira kog od 2+ članova hoće da vidi.
+                clusterChooserUids = uids
             }
-            detailUid = uid
         }
         onDispose { mapViewState.onPinClick = null }
     }
@@ -857,6 +867,31 @@ fun MapScreen(
                     onMemberClick = { uid ->
                         haptic()
                         sheetVisible = false
+                        state.members.firstOrNull { it.uid == uid }?.location?.let { loc ->
+                            mapViewState.flyTo(loc.lng, loc.lat)
+                        }
+                        detailUid = uid
+                    },
+                )
+            }
+        }
+
+        // Cluster chooser sheet: kad user tapne pin na kome je 2+ članova (isti auto),
+        // filtriramo MembersSheet na tu podgrupu. Bez ovog, cluster klik bi otvarao samo
+        // primary člana i drugi bi bili "sakriveni" iza istog pin-a.
+        val chooserUids = clusterChooserUids
+        if (chooserUids != null) {
+            val chooserMembers = state.members.filter { it.uid in chooserUids }
+            ModalBottomSheet(
+                onDismissRequest = { clusterChooserUids = null },
+                containerColor = MaterialTheme.colorScheme.surface,
+            ) {
+                MembersSheet(
+                    members = chooserMembers,
+                    photoCache = photoCache,
+                    onMemberClick = { uid ->
+                        haptic()
+                        clusterChooserUids = null
                         state.members.firstOrNull { it.uid == uid }?.location?.let { loc ->
                             mapViewState.flyTo(loc.lng, loc.lat)
                         }
@@ -1662,9 +1697,9 @@ private fun MapboxContainer(
                 holder.annotationManager = manager
                 manager.addClickListener(
                     OnPointAnnotationClickListener { annotation ->
-                        val uid = holder.annotationToUid[annotation.id]
-                        if (uid != null) {
-                            holder.onPinClick?.invoke(uid)
+                        val uids = holder.annotationToUid[annotation.id]
+                        if (uids != null && uids.isNotEmpty()) {
+                            holder.onPinClick?.invoke(uids)
                             true
                         } else {
                             false
@@ -1809,9 +1844,9 @@ private fun MapboxContainer(
                         .withTextHaloWidth(2.0)
                         .withTextOpacity(iconOpacity),
                 )
-                // Klik: solo → normal detail sheet. Cluster → primary member.
-                // (User može da tapne Members listu za druge iz clustera.)
-                holder.annotationToUid[annotation.id] = primary.uid
+                // Klik: solo → normal detail sheet. Cluster → chooser sheet sa
+                // listom svih članova. onPinClick prima celu listu uid-ova.
+                holder.annotationToUid[annotation.id] = group.map { it.uid }
             }
             // FlyTo na self je preseljen u MapScreen LaunchedEffect (vidi
             // `LaunchedEffect(state.selfLocation, ...)`) — radi i kad user nema krugove
@@ -1892,12 +1927,15 @@ private class MapViewHolder {
     var didFlyToSelf: Boolean = false
     /** True nakon prvog `loadStyle` callback-a — gate za camera op-ove iz LaunchedEffect-a. */
     var styleLoaded: Boolean = false
-    val annotationToUid = mutableMapOf<String, String>()
+    // Annotation → list of member uids u tom pin-u. Solo pin = [uid]. Cluster (2+) =
+    // all uids. Bez ovog, cluster klik bi opet otvarao samo primary člana bez ikakvog
+    // pristupa drugim članovima cluster-a.
+    val annotationToUid = mutableMapOf<String, List<String>>()
     val annotationToPlaceId = mutableMapOf<String, String>()
     var onPlaceClick: ((String) -> Unit)? = null
     /** SOS ripple — per-UID circle annotation (radar pulse oko SOS markera). */
     val sosRipples = mutableMapOf<String, CircleAnnotation>()
-    var onPinClick: ((String) -> Unit)? = null
+    var onPinClick: ((List<String>) -> Unit)? = null
     var lastFingerprint: String = ""
 
     fun flyTo(lng: Double, lat: Double, zoom: Double = 16.5) {

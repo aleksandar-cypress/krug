@@ -1,9 +1,12 @@
 package org.krug.app.feature.map
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import org.krug.app.R
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -85,6 +88,7 @@ class MapViewModel @Inject constructor(
     private val networkMonitor: NetworkMonitor,
     private val powerSaveMonitor: PowerSaveMonitor,
     private val placeRepository: PlaceRepository,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     /**
@@ -124,7 +128,10 @@ class MapViewModel @Inject constructor(
 
     fun deletePlace(placeId: String) {
         viewModelScope.launch {
-            val activeId = localPrefs.activeCircleIdFlow.first() ?: return@launch
+            // Koristi effectiveActiveCircleId (sa fallback-om) umesto raw prefs — za
+            // fresh usere koji nikad nisu setActiveCircle pozvali, raw je null pa je
+            // delete silently no-op. Fallback resolves prvi krug user-a.
+            val activeId = effectiveActiveCircleId.first() ?: return@launch
             runCatching { placeRepository.deletePlace(activeId, placeId) }
                 .onFailure { Timber.w(it, "deletePlace from MapViewModel failed") }
         }
@@ -132,7 +139,7 @@ class MapViewModel @Inject constructor(
 
     fun togglePlaceMute(placeId: String, muted: Boolean) {
         viewModelScope.launch {
-            val activeId = localPrefs.activeCircleIdFlow.first() ?: return@launch
+            val activeId = effectiveActiveCircleId.first() ?: return@launch
             runCatching { placeRepository.setMuted(activeId, placeId, muted) }
                 .onFailure { Timber.w(it, "togglePlaceMute failed") }
         }
@@ -270,7 +277,7 @@ class MapViewModel @Inject constructor(
                 if (place != null) return@mapNotNull m.uid to place.name
                 if (loc.speed > 3f) {
                     val kmh = (loc.speed * 3.6f).toInt()
-                    return@mapNotNull m.uid to "U pokretu • $kmh km/h"
+                    return@mapNotNull m.uid to appContext.getString(R.string.auto_status_moving, kmh)
                 }
                 null
             }.toMap()

@@ -19,6 +19,8 @@ import org.krug.app.core.location.LocationHistoryRepository
 import org.krug.app.core.places.PlaceModel
 import org.krug.app.core.places.PlaceRepository
 import org.krug.app.core.prefs.LocalPrefs
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onEach
@@ -31,7 +33,9 @@ class HistoryViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val historyRepository: LocationHistoryRepository,
     private val placeRepository: PlaceRepository,
+    private val circleRepository: CircleRepository,
     private val localPrefs: LocalPrefs,
+    private val auth: FirebaseAuth,
 ) : ViewModel() {
 
     val uid: String = requireNotNull(savedStateHandle["uid"])
@@ -49,8 +53,22 @@ class HistoryViewModel @Inject constructor(
             .onEach { _loaded.value = true }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Places iz trenutno aktivnog kruga — render kao statični pinovi iznad trag-a. */
-    val activePlaces: StateFlow<List<PlaceModel>> = localPrefs.activeCircleIdFlow
+    /**
+     * Places iz trenutno aktivnog kruga — render kao statični pinovi iznad trag-a.
+     * Konzistentno sa MapViewModel.effectiveActiveCircleId — ako raw activeCircleId nije
+     * postavljen (fresh user), pada na prvi krug. Bez ovog, history-jev overlay je bio
+     * empty za usere koji nisu explicit setActiveCircle pozvali, iako sami vide members
+     * i sopstveni trag na mapi.
+     */
+    private val selfUid: String? = auth.currentUser?.uid
+    private val effectiveActiveCircleId: Flow<String?> = if (selfUid == null) {
+        flowOf(null)
+    } else {
+        circleRepository.observeMyCircles(selfUid).combine(localPrefs.activeCircleIdFlow) { circles, stored ->
+            (circles.firstOrNull { it.id == stored } ?: circles.firstOrNull())?.id
+        }
+    }
+    val activePlaces: StateFlow<List<PlaceModel>> = effectiveActiveCircleId
         .flatMapLatest { activeId ->
             if (activeId.isNullOrBlank()) flowOf(emptyList())
             else placeRepository.observePlaces(activeId)

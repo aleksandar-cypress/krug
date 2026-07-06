@@ -401,6 +401,9 @@
     <string name="permission_missing_battery">Optimizacija baterije</string>
     <string name="permission_missing_activity">Detekcija aktivnosti</string>
 
+    <!-- Auto-status pill (kod imena člana u Members listi + MemberDetailSheet header) -->
+    <string name="auto_status_moving">U pokretu · %1$d km/h</string>
+
     <!-- Offline banner -->
     <string name="offline_banner_title">Nema internet veze</string>
     <string name="offline_banner_body_with_age">Poslednje ažuriranje %1$s. Članovi kruga vide staru lokaciju.</string>
