@@ -38,12 +38,13 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
     companion object {
         /**
          * In-memory dedup: (placeId + type) → last event time. Defence layer preko fixera
-         * u GeofenceManager (INITIAL_TRIGGER = 0) — čak i ako Google Play Services zbog
-         * bug-a ili race-a fire-uje duplicate ENTER/EXIT unutar kratkog vremena, ne pišemo
-         * duplicate write u Firestore. Cooldown 60s pokriva realne re-trigger scenarije
-         * (npr. GPS jitter oko boundary-ja).
+         * u GeofenceManager (INITIAL_TRIGGER = 0) i accuracy/age filtera. Cooldown 5min
+         * (bilo 60s) da pokrijemo Google Play Services reconciliation storm-ove — kad
+         * GPS accuracy varira, Play može da fire-uje istu tranziciju nekoliko puta unutar
+         * par minuta. 5min je bezbedan za realne use case-e (user ne ulazi/izlazi iz istog
+         * mesta 5+ puta u 5 min).
          */
-        private const val DEDUP_WINDOW_MS = 60_000L
+        private const val DEDUP_WINDOW_MS = 5L * 60_000L
         private val lastEventTimes = mutableMapOf<String, Long>()
     }
 
@@ -73,6 +74,24 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
         if (triggered.isEmpty()) {
             Timber.w("GeofenceReceiver: no triggering geofences")
             return
+        }
+        // Filter na kvalitet triggering location-a. Google Play Services zna da "reconciliraju"
+        // geofence stanje sa unbelievable events (npr. user je fizicki bio na X, GPS je jitter-ovao
+        // ka Y, sad Play kaze "exit Y" iako user nikad nije bio na Y). Signal:
+        // - Accuracy > 150m: GPS je bio nepouzdan, ne verujemo transition-u.
+        // - Age > 5 min: transition je back-dated, ili user je bio offline. Skip.
+        val triggeringLocation = event.triggeringLocation
+        if (triggeringLocation != null) {
+            val accuracy = triggeringLocation.accuracy
+            val ageMs = System.currentTimeMillis() - triggeringLocation.time
+            if (accuracy > 150f) {
+                Timber.w("GeofenceReceiver: skip low-accuracy transition (accuracy=%.1fm type=%d)", accuracy, transition)
+                return
+            }
+            if (ageMs > 5 * 60_000L) {
+                Timber.w("GeofenceReceiver: skip stale transition (age=%dms type=%d)", ageMs, transition)
+                return
+            }
         }
         val uid = auth.currentUser?.uid
         if (uid == null) {
