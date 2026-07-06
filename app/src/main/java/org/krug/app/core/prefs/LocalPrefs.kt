@@ -96,6 +96,17 @@ class LocalPrefs @Inject constructor(
         set(value) = prefs.edit(commit = false) { putBoolean(KEY_ACTIVITY_REC_PROMPT_SHOWN, value) }
 
     /**
+     * Poslednja ms vrednost kad je user video battery-optimization re-prompt dialog.
+     * Onboarding pita ovo jednom; ako user skip-uje, OEM battery restrikcije će početi
+     * da mu gase FGS i lokacija će ispadati offline. Prikazujemo dijalog ponovo max
+     * jednom nedeljno (7d cooldown) da user ima šansu da fix-uje bez UI noise-a.
+     * 0 = nikada nije viđen (fresh install ili pre uvođenja feature-a).
+     */
+    var lastBatteryPromptMs: Long
+        get() = prefs.getLong(KEY_LAST_BATTERY_PROMPT_MS, 0L)
+        set(value) = prefs.edit(commit = false) { putLong(KEY_LAST_BATTERY_PROMPT_MS, value) }
+
+    /**
      * GDPR — pozvati nakon delete-account ili reinstall recovery-ja. Briše sve per-account
      * state da novi sign-in ne nasledi stari `activeCircleId` (ne postoji više), `sos_notified`
      * dedup ili `onboardingCompleted` flag (novi nalog treba čist onboarding). `pendingDeleteUid`
@@ -118,5 +129,6 @@ class LocalPrefs @Inject constructor(
         const val KEY_PENDING_DELETE_UID = "pending_delete_uid"
         const val KEY_ACTIVITY_REC_PROMPT_SHOWN = "activity_rec_prompt_shown"
         const val KEY_LAST_SEEN_WHATS_NEW = "last_seen_whats_new_version"
+        const val KEY_LAST_BATTERY_PROMPT_MS = "last_battery_prompt_ms"
     }
 }

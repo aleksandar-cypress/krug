@@ -254,8 +254,9 @@ fun HistoryScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                     // Text je clickable — tap na naslov dana skoči na "Danas" ako smo unazad.
+                    val dayLocale = context.resources.configuration.locales[0]
                     Text(
-                        text = formatDay(range.fromMs),
+                        text = formatDay(range.fromMs, dayLocale),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier
@@ -310,10 +311,12 @@ fun HistoryScreen(
                         )
                     }
                     Column(modifier = Modifier.weight(1f)) {
+                        // Prikaz trenutnog vremena scrub pozicije bez "Time:" prefix-a — visual
+                        // je jasan iz konteksta (iznad slajdera, uz play dugme).
                         Text(
-                            stringResource(R.string.history_time_label, formatTime(range.fromMs, scrubTime)),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            formatTime(range.fromMs, scrubTime),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
                         )
                         Slider(
                             value = scrubTime,
@@ -445,9 +448,12 @@ private fun formatDuration(ms: Long): String {
     }
 }
 
-private fun formatDay(ms: Long): String {
-    // Forsiraj latinicu — sr_RS default u Android-u je ćirilica, a app UI je celi na latinici.
-    val sdf = SimpleDateFormat("EEEE, d. MMMM", Locale.forLanguageTag("sr-Latn"))
+private fun formatDay(ms: Long, deviceLocale: Locale): String {
+    // Za sr default (ćirilica) forsiramo latinicu jer je ceo UI na latinici.
+    // Za sve druge locale-ove koristimo device locale kako se ne bi mešali jezici.
+    val locale = if (deviceLocale.language == "sr") Locale.forLanguageTag("sr-Latn") else deviceLocale
+    val pattern = if (locale.language == "sr") "EEEE, d. MMMM" else "EEEE, MMMM d"
+    val sdf = SimpleDateFormat(pattern, locale)
     return sdf.format(java.util.Date(ms))
 }
 

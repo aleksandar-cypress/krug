@@ -17,6 +17,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -261,6 +263,49 @@ fun MapScreen(
             showWhatsNew = false
             viewModel.markWhatsNewSeen(org.krug.app.BuildConfig.VERSION_CODE)
         })
+    }
+
+    // Battery-opt re-prompt: kad user skip-uje u onboarding-u ili OS reset-uje flag,
+    // FGS ne opstaje na Xiaomi/Samsung agresivnim battery restrikcijama i lokacija ispada.
+    // Cooldown 7d — dovoljno da se dokaže vrednost ali ne dosadno.
+    var showBatteryPrompt by remember { mutableStateOf(false) }
+    LaunchedEffect(showWhatsNew) {
+        // Ne pokazuj istovremeno sa whats-new-om — daj mu redosled.
+        if (showWhatsNew) return@LaunchedEffect
+        val exempt = org.krug.app.core.permissions.PermissionUtils.isIgnoringBatteryOptimizations(context)
+        if (!exempt && viewModel.batteryPromptCooldownExpired()) {
+            showBatteryPrompt = true
+            viewModel.markBatteryPromptShown()
+        }
+    }
+    if (showBatteryPrompt) {
+        AlertDialog(
+            onDismissRequest = { showBatteryPrompt = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Outlined.BatteryFull,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            },
+            title = { Text(stringResource(R.string.reliability_dialog_title)) },
+            text = { Text(stringResource(R.string.reliability_dialog_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBatteryPrompt = false
+                    (context as? android.app.Activity)?.let {
+                        org.krug.app.core.permissions.PermissionUtils.openBatteryOptimizationRequest(it)
+                    }
+                }) {
+                    Text(stringResource(R.string.reliability_dialog_open))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatteryPrompt = false }) {
+                    Text(stringResource(R.string.reliability_dialog_later))
+                }
+            },
+        )
     }
     // Pending refocus: kad user tapne Osveži, pamtimo (uid, since). Kad stigne
     // sveži location.updatedAt > since za taj uid, automatski flyTo na novu poziciju.
@@ -779,8 +824,13 @@ fun MapScreen(
 
         val detailMember = detailUid?.let { uid -> state.members.firstOrNull { it.uid == uid } }
         if (detailMember != null) {
+            // skipPartiallyExpanded: sheet se odmah otvara na punu visinu. Bez ovog,
+            // ModalBottomSheet default-uje na half-expanded pa donja dugmad (View history)
+            // ostaju iza fold-a i mogu se accidentalno kliknuti dok se sheet zatvara.
+            val detailSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
             ModalBottomSheet(
                 onDismissRequest = { detailUid = null },
+                sheetState = detailSheetState,
                 containerColor = MaterialTheme.colorScheme.surface,
             ) {
                 MemberDetailSheet(
@@ -820,9 +870,6 @@ fun MapScreen(
                     onOpenHistory = {
                         detailUid = null
                         onOpenHistory(detailMember.uid, detailMember.displayName)
-                    },
-                    loadDrivingRoute = { fromLat, fromLng, toLat, toLng ->
-                        viewModel.loadDrivingRoute(fromLat, fromLng, toLat, toLng)
                     },
                 )
             }
@@ -2256,17 +2303,6 @@ private fun batteryColor(pct: Int): Color = when {
 
 // haversineMeters / formatDistance — preseljeni u core.util.Geo radi unit testabilnosti.
 
-/** Formatiraj ETA sekunde u human-readable string: "12 min" / "1h 15m". */
-private fun formatEta(seconds: Double): String {
-    val mins = (seconds / 60).toInt()
-    return when {
-        mins < 1 -> "<1 min"
-        mins < 60 -> "$mins min"
-        else -> "${mins / 60}h ${mins % 60}m"
-    }
-}
-
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun MemberDetailSheet(
     member: MemberWithLocation,
@@ -2276,30 +2312,12 @@ private fun MemberDetailSheet(
     onOpenInMaps: () -> Unit,
     onRefresh: () -> Unit,
     onOpenHistory: () -> Unit,
-    loadDrivingRoute: suspend (Double, Double, Double, Double) -> org.krug.app.core.directions.DirectionsRepository.DrivingRoute?,
 ) {
     var refreshTriggered by remember { mutableStateOf(false) }
     LaunchedEffect(refreshTriggered) {
         if (refreshTriggered) {
             kotlinx.coroutines.delay(5000)
             refreshTriggered = false
-        }
-    }
-    // Putna udaljenost — null dok se učitava ili fail, tad UI fallback-uje na haversine.
-    // Refetch trigger-uje samo na promenu uid-a, ne svaku poziciju (cache bucketuje 100m).
-    var drivingDistanceMeters by remember(member.uid) { mutableStateOf<Double?>(null) }
-    var drivingDurationSec by remember(member.uid) { mutableStateOf<Double?>(null) }
-    val selfLat = selfLocation?.lat
-    val selfLng = selfLocation?.lng
-    val memberLat = member.location?.lat
-    val memberLng = member.location?.lng
-    LaunchedEffect(member.uid, selfLat, selfLng, memberLat, memberLng) {
-        if (!member.isSelf && selfLat != null && selfLng != null &&
-            memberLat != null && memberLng != null
-        ) {
-            val route = loadDrivingRoute(selfLat, selfLng, memberLat, memberLng)
-            drivingDistanceMeters = route?.distanceMeters
-            drivingDurationSec = route?.durationSeconds
         }
     }
     val markerColor = when {
@@ -2310,6 +2328,7 @@ private fun MemberDetailSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp)
             .padding(bottom = 24.dp)
             .navigationBarsPadding(),
@@ -2506,94 +2525,94 @@ private fun MemberDetailSheet(
         }
 
         Spacer(Modifier.height(20.dp))
-        // FlowRow umesto Row: kad je 4+ chip-a, wrap u drugi red (bolje od truncation-a).
-        androidx.compose.foundation.layout.FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            maxItemsInEachRow = 3,
-        ) {
+        // Fixed 2×2 grid: layout se ne pomera kad član uđe u pokret ili offline.
+        // Za druge: Battery+Distance / Speed+Last seen. Za self: Battery+Speed / Last seen (full).
+        // Za private mode: samo Last seen full width (baterija/brzina/pozicija su zabludljive).
+        if (isPrivate) {
+            StatChip(
+                label = stringResource(R.string.member_chip_last_seen),
+                value = compactLastSeen(LocalContext.current, member.location?.updatedAt),
+                accentColor = PrivateGray,
+                icon = Icons.Outlined.AccessTime,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
             val batt = member.location?.batteryPct
-            // Sakrijemo bateriju u privatnom modu — vrednost je stara/zabludljiva.
-            if (!isPrivate && batt != null && batt in 0..100) {
-                val charging = member.location.charging
-                StatChip(
-                    label = if (charging) stringResource(R.string.member_chip_battery_charging) else stringResource(R.string.member_chip_battery),
-                    value = "$batt%",
-                    accentColor = batteryColor(batt),
-                    icon = if (charging) Icons.Filled.BatteryChargingFull
-                    else Icons.Outlined.BatteryFull,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            // Udaljenost — putna distance preko Mapbox Directions, fallback na vazdušnu
-            // dok se učitava ili ako network fail. Show samo za druge, kad imamo obe lokacije.
-            if (!member.isSelf && !isPrivate && selfLocation != null && member.location != null) {
-                val drivingMeters = drivingDistanceMeters
-                val displayMeters = drivingMeters
-                    ?: haversineMeters(
-                        selfLocation.lat, selfLocation.lng,
-                        member.location.lat, member.location.lng,
-                    )
-                // Kompas: bearing ka peer-u. Navigation ikona (arrow up) rotirana za taj
-                // ugao daje user-u vizuelni pokazivač ka drugu (pretpostavlja north-up
-                // mapu). Nema smisla za rastojanja < 30m — user je već blizu, smer nije
-                // informativan (default 0 = strelica stoji ka gore).
-                val bearing = if (displayMeters >= 30.0) {
-                    bearingDegrees(
-                        selfLocation.lat, selfLocation.lng,
-                        member.location.lat, member.location.lng,
-                    )
-                } else 0f
-                StatChip(
-                    label = if (drivingMeters != null) stringResource(R.string.member_chip_distance) else stringResource(R.string.member_chip_distance_aerial),
-                    value = formatDistance(LocalContext.current, displayMeters),
-                    accentColor = MaterialTheme.colorScheme.primary,
-                    // Navigation icon (kite/paper-plane oblik) pokazuje UP by default (=0° u
-                    // kompas prostoru = sever). Rotacija = bearing direktno bez offset-a.
-                    // Klasičan "kompas arrow" simbol koji ljudi prepoznaju.
-                    icon = Icons.Filled.Navigation,
-                    iconRotationDeg = bearing,
-                    modifier = Modifier.weight(1f),
-                )
-                // ETA chip — prikazuje se samo ako Mapbox Directions vrati duration
-                // (traffic-agnostic za free tier, ali OK približna procena).
-                val etaSec = drivingDurationSec
-                if (etaSec != null && etaSec > 0.0) {
+            val charging = member.location?.charging == true
+            val speedMps = member.location?.speed ?: 0f
+            val kmh = (speedMps * 3.6f).toInt().coerceAtLeast(0)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Slot 1: Battery (uvek za oba, ali placeholder ako nema fresh vrednosti)
+                    if (batt != null && batt in 0..100) {
+                        StatChip(
+                            label = if (charging) stringResource(R.string.member_chip_battery_charging) else stringResource(R.string.member_chip_battery),
+                            value = "$batt%",
+                            accentColor = batteryColor(batt),
+                            icon = if (charging) Icons.Filled.BatteryChargingFull else Icons.Outlined.BatteryFull,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                    // Slot 2: Distance za druge, Speed za self.
+                    if (!member.isSelf && selfLocation != null && member.location != null) {
+                        val displayMeters = haversineMeters(
+                            selfLocation.lat, selfLocation.lng,
+                            member.location.lat, member.location.lng,
+                        )
+                        val bearing = if (displayMeters >= 30.0) {
+                            bearingDegrees(
+                                selfLocation.lat, selfLocation.lng,
+                                member.location.lat, member.location.lng,
+                            )
+                        } else 0f
+                        StatChip(
+                            label = stringResource(R.string.member_chip_distance_aerial),
+                            value = formatDistance(LocalContext.current, displayMeters),
+                            accentColor = MaterialTheme.colorScheme.primary,
+                            icon = Icons.Filled.Navigation,
+                            iconRotationDeg = bearing,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else if (member.isSelf) {
+                        StatChip(
+                            label = stringResource(R.string.member_chip_speed),
+                            value = stringResource(R.string.member_chip_speed_value, kmh),
+                            accentColor = MaterialTheme.colorScheme.tertiary,
+                            icon = Icons.Outlined.Speed,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Row 2: Speed+LastSeen za druge, samo LastSeen (full) za self.
+                    if (!member.isSelf) {
+                        StatChip(
+                            label = stringResource(R.string.member_chip_speed),
+                            value = stringResource(R.string.member_chip_speed_value, kmh),
+                            accentColor = MaterialTheme.colorScheme.tertiary,
+                            icon = Icons.Outlined.Speed,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                     StatChip(
-                        label = stringResource(R.string.member_chip_eta),
-                        value = formatEta(etaSec),
+                        label = stringResource(R.string.member_chip_last_seen),
+                        value = compactLastSeen(LocalContext.current, member.location?.updatedAt),
                         accentColor = MaterialTheme.colorScheme.primary,
                         icon = Icons.Outlined.AccessTime,
                         modifier = Modifier.weight(1f),
                     )
                 }
             }
-            StatChip(
-                label = stringResource(R.string.member_chip_last_seen),
-                value = compactLastSeen(LocalContext.current, member.location?.updatedAt),
-                accentColor = if (isPrivate) PrivateGray else MaterialTheme.colorScheme.primary,
-                icon = Icons.Outlined.AccessTime,
-                modifier = Modifier.weight(1f),
-            )
-            // Speed chip — prikazuje se SAMO ako se peer stvarno kreće (> 1 m/s = 3.6 km/h).
-            // Bez ovog uslova, statičan član bi imao "0 km/h" chip koji nije informativan
-            // i troši prostor. Cutoff od 1 m/s filtrira GPS noise (drift kod mirujućeg
-            // uređaja može dati fake 0.3-0.8 m/s). isPrivate skriva sve, isto kao battery.
-            val speedMps = member.location?.speed ?: 0f
-            if (!isPrivate && speedMps > 1f) {
-                val kmh = (speedMps * 3.6f).toInt()
-                StatChip(
-                    label = stringResource(R.string.member_chip_speed),
-                    value = stringResource(R.string.member_chip_speed_value, kmh),
-                    accentColor = MaterialTheme.colorScheme.tertiary,
-                    icon = Icons.Outlined.Speed,
-                    modifier = Modifier.weight(1f),
-                )
-            }
         }
 
         Spacer(Modifier.height(20.dp))
-        if (member.isSelf) {
+        // Refresh: full-width primary. Za self uvek, za druge samo ako !private && !long-offline.
+        val showRefresh = member.isSelf || (!isPrivate && !isLongOffline && member.location != null)
+        if (showRefresh) {
             androidx.compose.material3.Button(
                 onClick = {
                     onRefresh()
@@ -2602,48 +2621,42 @@ private fun MemberDetailSheet(
                 enabled = !refreshTriggered,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (refreshTriggered) stringResource(R.string.member_refresh_self_done) else stringResource(R.string.member_refresh_self))
+                Text(
+                    if (member.isSelf) {
+                        if (refreshTriggered) stringResource(R.string.member_refresh_self_done) else stringResource(R.string.member_refresh_self)
+                    } else {
+                        if (refreshTriggered) stringResource(R.string.member_refresh_other_sent) else stringResource(R.string.member_refresh_other)
+                    },
+                )
             }
-            if (member.location != null) {
-                Spacer(Modifier.height(8.dp))
+        }
+        // Row: [Open in Maps outlined weight 1] [View History filled tonal weight 1.2].
+        // View History je bitniji od Google Maps (core value action), pa dobija fill styling
+        // i malo više širine. Sekundarni utility (Maps) ostaje outlined.
+        if (member.location != null) {
+            if (showRefresh) Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.material3.OutlinedButton(
                     onClick = onOpenInMaps,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.weight(1f),
                 ) {
-                    Text(stringResource(R.string.action_open_in_google_maps))
+                    Text(
+                        text = stringResource(R.string.action_open_in_google_maps),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = onOpenHistory,
+                    modifier = Modifier.weight(1.2f),
+                ) {
+                    Text(
+                        text = stringResource(R.string.history_cta),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
-        } else if (member.location != null) {
-            // Long-offline članovi: refresh neće raditi (njihov FGS sigurno ne radi 24h+),
-            // disable button da user ne čeka uzalud na zahtev koji nikad ne stiže.
-            if (!isPrivate && !isLongOffline) {
-                androidx.compose.material3.Button(
-                    onClick = {
-                        onRefresh()
-                        refreshTriggered = true
-                    },
-                    enabled = !refreshTriggered,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (refreshTriggered) stringResource(R.string.member_refresh_other_sent) else stringResource(R.string.member_refresh_other))
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-            androidx.compose.material3.OutlinedButton(
-                onClick = onOpenInMaps,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.action_open_in_google_maps))
-            }
-            Spacer(Modifier.height(8.dp))
-            androidx.compose.material3.OutlinedButton(
-                onClick = onOpenHistory,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.history_cta))
-            }
-            // Padding od donje ivice sheet-a — bez ovog, na Samsung One UI navigation
-            // gesture bar preklapa donje dugme.
             Spacer(Modifier.height(24.dp))
         }
     }

@@ -43,6 +43,15 @@
     <string name="onb_bat_body">Isključite optimizaciju baterije za Krug da deljenje lokacije ne bi prestajalo dok telefon spava</string>
     <string name="onb_bat_open">Otvori podešavanja baterije</string>
 
+    <!-- Reliability re-prompt (Settings warning + startup dialog kad battery opt nije exempt) -->
+    <string name="reliability_warning_title">Lokacija može ispasti van mreže</string>
+    <string name="reliability_warning_body">Optimizacija baterije je uključena za Krug. Sistem može ugasiti deljenje lokacije kada je ekran isključen.</string>
+    <string name="reliability_warning_cta">Popravi sada</string>
+    <string name="reliability_dialog_title">Da lokacija ne ispada</string>
+    <string name="reliability_dialog_body">Da bi deljenje lokacije radilo pouzdano, isključite optimizaciju baterije za Krug. U suprotnom sistem može ugasiti aplikaciju dok telefon spava i članovi kruga će vas videti kao van mreže.</string>
+    <string name="reliability_dialog_open">Otvori podešavanja</string>
+    <string name="reliability_dialog_later">Kasnije</string>
+
     <string name="onb_done_title">Sve je spremno</string>
     <string name="onb_done_body">Napravite prvi krug ili se pridružite postojećem</string>
     <string name="onb_done_cta">Završi i otvori Krug</string>
@@ -171,10 +180,8 @@
     <string name="history_title">Istorija lokacije</string>
     <string name="history_empty">Nema podataka za ovaj dan</string>
     <string name="history_empty_hint">Krug beleži lokaciju dok se krećeš. Vrati se kasnije da vidiš današnji trag.</string>
-    <string name="history_time_label">Vreme: %1$s</string>
     <string name="history_points_count">%1$d tačaka</string>
     <string name="history_cta">Istorija kretanja</string>
-    <string name="privacy_my_history_cta">Moja istorija kretanja</string>
     <string name="history_stat_distance">Pređeno</string>
     <string name="history_stat_active">Aktivno</string>
     <string name="history_stat_points">Tačaka</string>
@@ -206,7 +213,6 @@
     <string name="places_sort_by_date">Sort po datumu</string>
     <string name="places_search_cta">Traži adresu</string>
     <string name="places_search_hint">Adresa, grad, POI…</string>
-    <string name="member_chip_eta">Za</string>
 
     <!-- Map UI -->
     <string name="map_members_sheet_title">Članovi</string>

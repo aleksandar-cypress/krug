@@ -19,7 +19,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.krug.app.core.auth.AuthRepository
 import org.krug.app.core.circle.CircleRepository
-import org.krug.app.core.directions.DirectionsRepository
 import org.krug.app.core.location.LocationModel
 import org.krug.app.core.location.LocationRepository
 import org.krug.app.core.places.PlaceEventModel
@@ -82,7 +81,6 @@ class MapViewModel @Inject constructor(
     private val locationRepository: LocationRepository,
     private val sosRepository: SosRepository,
     private val localPrefs: LocalPrefs,
-    private val directionsRepository: DirectionsRepository,
     private val userRepository: UserRepository,
     private val networkMonitor: NetworkMonitor,
     private val powerSaveMonitor: PowerSaveMonitor,
@@ -129,21 +127,17 @@ class MapViewModel @Inject constructor(
         localPrefs.lastSeenWhatsNewVersion = version
     }
 
-    /**
-     * Driving distance fetch — koristi se iz MemberDetailSheet preko LaunchedEffect-a.
-     * Vraća putnu distance u metrima (Mapbox Directions API), ili null ako je network fail
-     * ili koordinate identične. UI fallback-uje na haversine dok je null.
-     */
-    suspend fun loadDrivingDistance(
-        fromLat: Double, fromLng: Double,
-        toLat: Double, toLng: Double,
-    ): Double? = directionsRepository.drivingDistanceMeters(fromLat, fromLng, toLat, toLng)
+    /** True kad je prošlo > 7 dana od poslednjeg re-prompt-a (ili prvi put). */
+    fun batteryPromptCooldownExpired(): Boolean {
+        val last = localPrefs.lastBatteryPromptMs
+        if (last == 0L) return true
+        val week = 7L * 24 * 60 * 60 * 1000
+        return System.currentTimeMillis() - last > week
+    }
 
-    suspend fun loadDrivingRoute(
-        fromLat: Double, fromLng: Double,
-        toLat: Double, toLng: Double,
-    ): org.krug.app.core.directions.DirectionsRepository.DrivingRoute? =
-        directionsRepository.drivingRoute(fromLat, fromLng, toLat, toLng)
+    fun markBatteryPromptShown() {
+        localPrefs.lastBatteryPromptMs = System.currentTimeMillis()
+    }
 
     init {
         localPrefs.onboardingCompleted = true

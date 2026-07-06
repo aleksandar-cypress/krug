@@ -132,16 +132,7 @@ fun KrugNavHost() {
             )
         }
         composable<Privacy> {
-            val ctx = androidx.compose.ui.platform.LocalContext.current
-            val auth = remember { com.google.firebase.auth.FirebaseAuth.getInstance() }
-            PrivacyScreen(
-                onBack = { nav.popBackStack() },
-                onOpenMyHistory = {
-                    val uid = auth.currentUser?.uid ?: return@PrivacyScreen
-                    val name = auth.currentUser?.displayName ?: ctx.getString(R.string.privacy_my_history_cta)
-                    nav.navigate(History(uid = uid, displayName = name))
-                },
-            )
+            PrivacyScreen(onBack = { nav.popBackStack() })
         }
         composable<BatteryMode> {
             BatteryModeScreen(onBack = { nav.popBackStack() })
