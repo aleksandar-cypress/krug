@@ -87,17 +87,33 @@ class MapViewModel @Inject constructor(
     private val placeRepository: PlaceRepository,
 ) : ViewModel() {
 
+    /**
+     * Efektivan aktivan circleId sa fallback logikom — MORA da bude konzistentno sa
+     * `combineForUser` (linija 275): ako stored activeCircleId ne postoji među user-ovim
+     * krugovima ili je null, pada na prvi krug. Ranije je `activePlaces` observirao
+     * direktno `localPrefs.activeCircleIdFlow` bez fallback-a → za fresh user-e koji
+     * nikad nisu eksplicitno pozvali setActiveCircle, `activeCircleId` je null pa je
+     * `activePlaces` = empty čak i kad ima krug sa mestima → mape prikazuje members
+     * (koji imaju fallback) ali ne i places.
+     */
+    private val effectiveActiveCircleId: Flow<String?> = authRepository.observeAuthState()
+        .flatMapLatest { user ->
+            if (user == null) flowOf(null)
+            else circleRepository.observeMyCircles(user.uid)
+                .combine(localPrefs.activeCircleIdFlow) { circles, stored ->
+                    (circles.firstOrNull { it.id == stored } ?: circles.firstOrNull())?.id
+                }
+        }
+
     /** Places za trenutno aktivan krug — MapScreen ih rendera kao pinove. */
-    val activePlaces: StateFlow<List<PlaceModel>> = uiStateHolder@ run {
-        localPrefs.activeCircleIdFlow.flatMapLatest { activeId ->
-            if (activeId.isNullOrBlank()) flowOf(emptyList())
-            else placeRepository.observePlaces(activeId)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    }
+    val activePlaces: StateFlow<List<PlaceModel>> = effectiveActiveCircleId.flatMapLatest { activeId ->
+        if (activeId.isNullOrBlank()) flowOf(emptyList())
+        else placeRepository.observePlaces(activeId)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Poslednji event po placeId za aktivan krug — koristi se u PlaceDetailSheet. */
     val eventsByPlace: StateFlow<Map<String, PlaceEventModel>> = run {
-        localPrefs.activeCircleIdFlow.flatMapLatest { activeId ->
+        effectiveActiveCircleId.flatMapLatest { activeId ->
             if (activeId.isNullOrBlank()) flowOf(emptyList())
             else placeRepository.observeRecentEvents(activeId, limit = 100)
         }.map { events ->

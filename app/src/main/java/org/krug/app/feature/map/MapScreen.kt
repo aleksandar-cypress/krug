@@ -48,6 +48,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ChildCare
+import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.NearMe
@@ -342,7 +343,9 @@ fun MapScreen(
     // Zoom se skalira sa radius-om: veći krug = širi pogled da se ceo krug vidi.
     val pendingPlaceFocus by org.krug.app.core.places.PlaceFocusBus.pending.collectAsStateWithLifecycle()
     LaunchedEffect(pendingPlaceFocus) {
-        val focus = pendingPlaceFocus ?: return@LaunchedEffect
+        val focus = pendingPlaceFocus
+        Timber.d("PlaceFocus effect: pending=$focus, activePlaces.size=${activePlaces.size}")
+        if (focus == null) return@LaunchedEffect
         // Čekaj da mapa bude spremna pre flyTo.
         var attempts = 0
         while ((mapViewState.mapView == null || !mapViewState.styleLoaded) && attempts < 100) {
@@ -352,6 +355,7 @@ fun MapScreen(
         // Formula: baseline 100m → zoom 16.5, svako 2x radius smanji zoom za 1.
         // 50m → 17.5, 100m → 16.5, 200m → 15.5, 400m → 14.5, 500m → ~14.2.
         val zoom = 16.5 - kotlin.math.log2(focus.radius / 100.0)
+        Timber.i("PlaceFocus flyTo: name='${focus.name}' lat=${focus.lat} lng=${focus.lng} zoom=$zoom (waited ${attempts * 50}ms)")
         mapViewState.flyTo(focus.lng, focus.lat, zoom.coerceIn(12.0, 18.0))
         org.krug.app.core.places.PlaceFocusBus.consume()
     }
@@ -456,6 +460,15 @@ fun MapScreen(
         val loc = state.selfLocation ?: return@LaunchedEffect
         Timber.d("FlyTo trigger: lat=${loc.lat}, lng=${loc.lng}, didFlyToSelf=${mapViewState.didFlyToSelf}")
         if (mapViewState.didFlyToSelf) return@LaunchedEffect
+        // Ako je user došao preko PlaceFocusBus (klik na Place row → nav pop u Map),
+        // pending focus ima prioritet — self flyTo bi override-ovao mesto koje je user
+        // hteo da vidi (race: oba LaunchedEffect-a startuju istovremeno, self setCamera
+        // je poslednji pa prebrisuje). Skip da PlaceFocus flyTo bude poslednji.
+        if (org.krug.app.core.places.PlaceFocusBus.pending.value != null) {
+            Timber.d("FlyTo skip self: pending PlaceFocus has priority")
+            mapViewState.didFlyToSelf = true
+            return@LaunchedEffect
+        }
         // Sačekaj i da factory završi (mapView != null) i da style završi load
         // (styleLoaded = true). Bez čekanja na style, flyTo poziv pre style-loaded
         // se "izgubi" — Mapbox queue-uje camera op-ove ali setCamera u factory (Belgrade)
@@ -470,6 +483,12 @@ fun MapScreen(
         val mv = mapViewState.mapView
         if (mv == null || !mapViewState.styleLoaded) {
             Timber.w("FlyTo skip: mapView=${mv != null} style=${mapViewState.styleLoaded} posle ${attempts * 50}ms")
+            return@LaunchedEffect
+        }
+        // Sekundarni check: ako je PlaceFocus pending stigao dok smo čekali mapView, skip.
+        if (org.krug.app.core.places.PlaceFocusBus.pending.value != null) {
+            Timber.d("FlyTo skip self (post-wait): pending PlaceFocus has priority")
+            mapViewState.didFlyToSelf = true
             return@LaunchedEffect
         }
         Timber.i("setCamera self: lat=${loc.lat}, lng=${loc.lng} (waited ${attempts * 50}ms)")
@@ -524,6 +543,7 @@ fun MapScreen(
         pm.deleteAll()
         prm.deleteAll()
         mapViewState.annotationToPlaceId.clear()
+        Timber.d("Rendering ${activePlaces.size} place pin(s): ${activePlaces.joinToString { "${it.name}(${it.id.take(6)})" }}")
         if (activePlaces.isEmpty()) return@LaunchedEffect
         activePlaces.forEach { place ->
             val (colorHex, _) = MapMarkers.categoryStyle(place.category)
@@ -2643,31 +2663,64 @@ private fun MemberDetailSheet(
                 )
             }
         }
-        // Row: [Open in Maps outlined weight 1] [View History filled tonal weight 1.2].
-        // View History je bitniji od Google Maps (core value action), pa dobija fill styling
-        // i malo više širine. Sekundarni utility (Maps) ostaje outlined.
+        // Row: [Icon-only directions - LogoTeal filled] [View history - LogoBlue filled].
+        // Text "Open in Google Maps" ne staje pored View history bez truncation-a, a "Maps"
+        // ili "Navigate" konfuziraju kad je pozadina već mapa. Icon-only sa directions
+        // strelicom je univerzalna konvencija (Google Maps/Uber/Yelp), View history dobija
+        // pun tekstualni prostor. Oba dugmeta imaju istu visinu (48dp), rounded 24dp, ista
+        // brand paleta (LogoTeal za "navigate/directions" — mapa/kretanje asocijacija,
+        // LogoBlue za View history — primary brand color-a).
         if (member.location != null) {
             if (showRefresh) Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                androidx.compose.material3.OutlinedButton(
-                    onClick = onOpenInMaps,
-                    modifier = Modifier.weight(1f),
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = org.krug.app.ui.theme.LogoTeal,
+                    modifier = Modifier
+                        .size(width = 56.dp, height = 48.dp)
+                        .clickable(onClick = onOpenInMaps),
                 ) {
-                    Text(
-                        text = stringResource(R.string.action_open_in_google_maps),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.Directions,
+                            contentDescription = stringResource(R.string.action_open_in_google_maps),
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                 }
-                androidx.compose.material3.FilledTonalButton(
-                    onClick = onOpenHistory,
-                    modifier = Modifier.weight(1.2f),
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = org.krug.app.ui.theme.LogoBlue,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clickable(onClick = onOpenHistory),
                 ) {
-                    Text(
-                        text = stringResource(R.string.history_cta),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.AccessTime,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(R.string.history_cta),
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))

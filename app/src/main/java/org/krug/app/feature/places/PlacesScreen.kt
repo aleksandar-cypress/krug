@@ -171,6 +171,7 @@ fun PlacesScreen(
                             place = place,
                             presence = presenceByPlace[place.id].orEmpty(),
                             onClick = {
+                                timber.log.Timber.i("PlacesScreen: clicked place '${place.name}' id=${place.id.take(6)} lat=${place.lat} lng=${place.lng}")
                                 org.krug.app.core.places.PlaceFocusBus.request(
                                     lat = place.lat, lng = place.lng,
                                     name = place.name, radius = place.radius,

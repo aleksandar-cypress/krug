@@ -73,8 +73,23 @@ fun HistoryScreen(
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var polylineManager by remember { mutableStateOf<PolylineAnnotationManager?>(null) }
     var pointManager by remember { mutableStateOf<com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager?>(null) }
-    var scrubTime by remember { mutableStateOf(1f) } // 0..1 = start..end dana
+    // Scrub-ratio 0..1 mapiran na EFEKTIVNI range dana (prvi → poslednji point), ne na
+    // 24h. Bez ovog, scrubbar spans 24h ali user je aktivan samo 3h → dve trećine slajdera
+    // su "mrtve" (00:00-08:00, 20:00-23:59). Sa effective range: slajder ceo pokriva
+    // stvarnu aktivnost, playback ima smisla.
+    var scrubTime by remember(range.fromMs) { mutableStateOf(1f) }
     var playing by remember { mutableStateOf(false) }
+    // Effective range = min/max timestamp iz stvarnih point-a za taj dan. Fallback na
+    // range.fromMs/toMs (00:00-23:59) samo ako nema point-a (empty state ionako pokrivamo
+    // odvojeno). Za današnji dan max se coerce-uje ka NOW ako je poslednji point stariji
+    // (user zna da je live, showuje "sada" umesto "pre 10 min").
+    val now = System.currentTimeMillis()
+    val effectiveFromMs = points.firstOrNull()?.timestamp?.time ?: range.fromMs
+    val effectiveToMs = run {
+        val lastPointMs = points.lastOrNull()?.timestamp?.time ?: return@run range.toMs
+        val isToday = now in range.fromMs..range.toMs
+        if (isToday) maxOf(lastPointMs, now) else lastPointMs
+    }
     var playbackSpeed by remember { mutableStateOf(1f) } // 0.5x / 1x / 2x / 4x
     // Fit-bounds samo jednom po (dan, points-first-load). Kad user počne da menja
     // scrub, ne pomeramo kameru — dozvoljavamo mu manuelnu kontrolu (pinch zoom, pan).
@@ -117,7 +132,9 @@ fun HistoryScreen(
             )
         }
         if (points.isEmpty()) return@LaunchedEffect
-        val cutoff = range.fromMs + ((range.toMs - range.fromMs) * scrubTime).toLong()
+        // Cutoff interpolira preko EFEKTIVNOG range-a (prvi → poslednji point), ne preko
+        // 24h intervala. scrubTime=0 → prvi point, scrubTime=1 → poslednji point / NOW.
+        val cutoff = effectiveFromMs + ((effectiveToMs - effectiveFromMs) * scrubTime).toLong()
         val visible = points.filter { p -> (p.timestamp?.time ?: 0L) <= cutoff }
         // Start marker — prva tačka dana (zelena)
         points.firstOrNull()?.let { start ->
@@ -314,7 +331,7 @@ fun HistoryScreen(
                         // Prikaz trenutnog vremena scrub pozicije bez "Time:" prefix-a — visual
                         // je jasan iz konteksta (iznad slajdera, uz play dugme).
                         Text(
-                            formatTime(range.fromMs, scrubTime),
+                            formatTimeAt(effectiveFromMs, effectiveToMs, scrubTime),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -457,8 +474,11 @@ private fun formatDay(ms: Long, deviceLocale: Locale): String {
     return sdf.format(java.util.Date(ms))
 }
 
-private fun formatTime(fromMs: Long, ratio: Float): String {
-    val ms = fromMs + (24 * 60 * 60_000L * ratio).toLong()
+private fun formatTimeAt(fromMs: Long, toMs: Long, ratio: Float): String {
+    // Interpolira između PRAVIH boundary-ja aktivnosti dana (prvi → poslednji point),
+    // ne 24h intervala. Bez ovog scrubbar je pokazivao 00:00 (ponoć narednog dana) na
+    // ratio=1.0 iako user možda nije bio aktivan cele noći.
+    val ms = fromMs + ((toMs - fromMs) * ratio).toLong()
     val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
     return sdf.format(java.util.Date(ms))
 }
