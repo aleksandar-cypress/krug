@@ -219,6 +219,7 @@
     <string name="history_stat_active">Aktivno</string>
     <string name="history_stat_points">Tačaka</string>
     <string name="history_stat_max_speed">Max brzina</string>
+    <string name="history_stat_hard_braking">Nagla kočenja</string>
     <string name="places_stats_line">%1$d mesta · %2$d događaja danas</string>
     <string name="places_presence_line">Trenutno ovde: %1$s</string>
     <string name="car_title">Krug</string>

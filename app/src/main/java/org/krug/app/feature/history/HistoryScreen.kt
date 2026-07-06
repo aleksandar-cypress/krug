@@ -416,6 +416,18 @@ fun HistoryScreen(
                         modifier = Modifier.weight(1f),
                     )
                 }
+                // Drugi red — safety stats. Zasada samo hard braking count; kasnije se
+                // može dodati "sudden acceleration" ili "phone usage" (accelerometer +
+                // screen state korelacija) za driving reports feature.
+                if (stats.hardBrakingCount > 0) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                        StatCell(
+                            label = stringResource(R.string.history_stat_hard_braking),
+                            value = stats.hardBrakingCount.toString(),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
             }
         }
     }
@@ -475,6 +487,8 @@ private data class HistoryStats(
     val activeMs: Long,
     val maxSpeedMps: Float,
     val avgSpeedMps: Float,
+    /** Broj naglih kočenja — deceleration > 4 m/s² između uzastopnih point-a. */
+    val hardBrakingCount: Int,
 )
 
 /**
@@ -482,12 +496,16 @@ private data class HistoryStats(
  * Active time: sabira interval samo ako je gap između tačaka < 15min
  * (>15min pretpostavljamo da je user bio ne-aktivan, npr. spava).
  * Speed: max iz `speed` polja (m/s), avg = distance / activeTime.
+ * Hard braking: broji deceleration > 4 m/s² (agresivno kočenje) između
+ * uzastopnih point-a dok je bio u pokretu (avg speed > 5 m/s = ~18 km/h,
+ * filtrira šetnju i sporo kretanje gde 4 m/s² decel nije stvarno kočenje).
  */
 private fun computeStats(points: List<org.krug.app.core.location.LocationHistoryPoint>): HistoryStats {
-    if (points.size < 2) return HistoryStats(0.0, 0L, 0f, 0f)
+    if (points.size < 2) return HistoryStats(0.0, 0L, 0f, 0f, 0)
     var dist = 0.0
     var active = 0L
     var maxSpeed = 0f
+    var hardBrakes = 0
     for (i in 1 until points.size) {
         val a = points[i - 1]
         val b = points[i]
@@ -497,9 +515,20 @@ private fun computeStats(points: List<org.krug.app.core.location.LocationHistory
         val gap = (b.timestamp?.time ?: 0L) - (a.timestamp?.time ?: 0L)
         if (gap in 1L..15 * 60_000L) active += gap
         if (b.speed > maxSpeed) maxSpeed = b.speed
+        // Hard braking: deceleration = (v_prev - v_curr) / dt (s). Threshold 4 m/s²
+        // je "aggressive braking" po industry standardu (Google/Uber telemetry). Filter:
+        // avg speed > 5 m/s eliminuje slucaj kad staneš iz šetnje što nije decel-4.
+        if (gap > 0L) {
+            val dt = gap / 1000.0 // sekunde
+            val avgSpeed = (a.speed + b.speed) / 2f
+            if (avgSpeed > 5f) {
+                val decel = (a.speed - b.speed) / dt
+                if (decel > 4.0) hardBrakes++
+            }
+        }
     }
     val avg = if (active > 0) (dist / (active / 1000.0)).toFloat() else 0f
-    return HistoryStats(dist, active, maxSpeed, avg)
+    return HistoryStats(dist, active, maxSpeed, avg, hardBrakes)
 }
 
 private fun formatSpeed(mps: Float): String {

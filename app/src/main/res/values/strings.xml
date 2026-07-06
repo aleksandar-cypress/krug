@@ -215,6 +215,7 @@
     <string name="history_stat_active">Active time</string>
     <string name="history_stat_points">Points</string>
     <string name="history_stat_max_speed">Max speed</string>
+    <string name="history_stat_hard_braking">Hard brakes</string>
     <string name="places_stats_line">%1$d places · %2$d events today</string>
     <string name="places_presence_line">Currently here: %1$s</string>
     <string name="car_title">Krug</string>
