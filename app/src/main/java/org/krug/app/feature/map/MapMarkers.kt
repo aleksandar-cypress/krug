@@ -160,11 +160,12 @@ object MapMarkers {
         initials: String? = null,
         batteryPct: Int? = null,
         isSelf: Boolean = false,
+        clusterExtras: Int = 0,
     ): Bitmap {
         // Bucket batteryPct na korake od 10% (0, 10, 20…100) da cache key ne menja
         // na svaku 1% promenu baterije — to je bio leak izvor.
         val battBucket = batteryPct?.let { ((it + 5) / 10) * 10 }?.coerceIn(0, 100) ?: -1
-        val cacheKey = "$hex|${photo?.hashCode() ?: 0}|${initials.orEmpty()}|$battBucket|${if (isSelf) "self" else "other"}"
+        val cacheKey = "$hex|${photo?.hashCode() ?: 0}|${initials.orEmpty()}|$battBucket|${if (isSelf) "self" else "other"}|c$clusterExtras"
         cache[cacheKey]?.let { return it }
 
         val density = context.resources.displayMetrics.density
@@ -221,6 +222,37 @@ object MapMarkers {
         // Battery ring oko cele pin glave — luk dužine batteryPct%, počinje na vrhu.
         if (batteryPct != null && batteryPct in 0..100) {
             drawBatteryRing(canvas, cx, cy, batteryRadius, batteryStroke, batteryPct)
+        }
+
+        // Cluster badge — kad je 2+ članova unutar 100m u istoj lokaciji, jedan pin pokriva
+        // sve njih. Badge u gornjem desnom uglu bubble-a signalizira "još N ovde". Bez ovog
+        // 2 pina se prekrivaju (razdvojeni ~500m usled async publish-a) što izgleda kao
+        // 2 odvojena člana — a zapravo putuju u istom autu.
+        if (clusterExtras > 0) {
+            val badgeR = density * 9f * scale
+            val badgeCx = cx + bubbleR * 0.72f
+            val badgeCy = cy - bubbleR * 0.72f
+            // Beli outer ring za kontrast preko pin fill boje.
+            canvas.drawCircle(
+                badgeCx, badgeCy, badgeR + density * 1.5f * scale,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = Color.WHITE },
+            )
+            // LogoBlue background (brand accent — ne konflikuje sa battery ring bojama).
+            canvas.drawCircle(
+                badgeCx, badgeCy, badgeR,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = "#3A86C8".toColorInt() },
+            )
+            // "+N" tekst — cap na 9 (10+ postaje "9+" da stane).
+            val badgeText = if (clusterExtras >= 10) "9+" else "+$clusterExtras"
+            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = Color.WHITE
+                textAlign = Paint.Align.CENTER
+                textSize = density * 10f * scale
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+            }
+            val fm = textPaint.fontMetrics
+            val textY = badgeCy - (fm.ascent + fm.descent) / 2f
+            canvas.drawText(badgeText, badgeCx, textY, textPaint)
         }
 
         cache[cacheKey] = bmp

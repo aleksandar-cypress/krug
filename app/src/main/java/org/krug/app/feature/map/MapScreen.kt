@@ -1750,34 +1750,56 @@ private fun MapboxContainer(
 
             manager.deleteAll()
             holder.annotationToUid.clear()
-            members.forEach { member ->
-                val loc = member.location ?: return@forEach
-                val priv = member.isPrivate()
+            // Klasterovanje: članovi u istom vozilu se async publikuju lokaciju (30-90s
+            // razmak), pa car pomeranje između njihovih fix-eva izgleda kao 2 odvojena
+            // pina na mapi iako su fizički zajedno. Merge unutar 100m u jedan pin sa
+            // "+N" badge-om — vizuelno jasno da su zajedno. Self ostaje solo (uvek
+            // vidljiv sa svojim brand kolor pin-om, ne meša se sa cluster ikoničnošću).
+            val (selfSolo, others) = members.partition { it.isSelf }
+            val clusters = clusterByProximity(others, thresholdMeters = 100.0)
+            val allGroups: List<List<MemberWithLocation>> = selfSolo.map { listOf(it) } + clusters
+            allGroups.forEach { group ->
+                val primary = group.first()
+                val loc = primary.location ?: return@forEach
+                val priv = primary.isPrivate()
                 val color = when {
-                    member.sos != null -> HEX_SOS_RED
+                    primary.sos != null -> HEX_SOS_RED
                     priv -> HEX_PRIVATE_GRAY
-                    member.isSelf -> HEX_SELF_BLUE
-                    else -> MapMarkers.colorForUid(member.uid)
+                    primary.isSelf -> HEX_SELF_BLUE
+                    else -> MapMarkers.colorForUid(primary.uid)
                 }
-                val photo = member.photoUrl?.let { photoCache[it] }
-                val initials = MapMarkers.computeInitials(member.displayName)
-                val label = member.displayName
-                    .ifBlank { if (member.isSelf) labelYou else labelMember }
-                    .take(18)
-                val batteryPct = member.location.batteryPct.takeIf { it in 0..100 }
+                val photo = primary.photoUrl?.let { photoCache[it] }
+                val initials = MapMarkers.computeInitials(primary.displayName)
+                val label = if (group.size == 1) {
+                    primary.displayName
+                        .ifBlank { if (primary.isSelf) labelYou else labelMember }
+                        .take(18)
+                } else {
+                    // Cluster label: prva 2 imena spojena zarezom, ako je više — "Ime i N".
+                    val names = group.map { it.displayName.ifBlank { labelMember }.take(10) }
+                    when (group.size) {
+                        2 -> "${names[0]}, ${names[1]}"
+                        else -> "${names[0]} i ${group.size - 1}"
+                    }
+                }
+                val batteryPct = primary.location.batteryPct.takeIf { it in 0..100 }
                 // Vizuelna gradacija pina po stepenu odsutnosti — isti pattern kao rowAlpha
                 // u member listi. 24h+ ghost (0.4), trenutno offline (30s+ disconnect) blaži
                 // fade (0.65), online normalno. Bez srednjeg stepena, offline peer i online
                 // peer izgledaju identično na mapi.
                 val iconOpacity = when {
-                    member.isLongOffline() -> 0.4
-                    member.isOffline() -> 0.65
+                    primary.isLongOffline() -> 0.4
+                    primary.isOffline() -> 0.65
                     else -> 1.0
                 }
                 val annotation = manager.create(
                     PointAnnotationOptions()
                         .withPoint(Point.fromLngLat(loc.lng, loc.lat))
-                        .withIconImage(MapMarkers.pinMarker(context, color, photo, initials, batteryPct, isSelf = member.isSelf))
+                        .withIconImage(MapMarkers.pinMarker(
+                            context, color, photo, initials, batteryPct,
+                            isSelf = primary.isSelf,
+                            clusterExtras = group.size - 1,
+                        ))
                         .withIconOpacity(iconOpacity)
                         .withTextField(label)
                         .withTextSize(12.0)
@@ -1787,13 +1809,52 @@ private fun MapboxContainer(
                         .withTextHaloWidth(2.0)
                         .withTextOpacity(iconOpacity),
                 )
-                holder.annotationToUid[annotation.id] = member.uid
+                // Klik: solo → normal detail sheet. Cluster → primary member.
+                // (User može da tapne Members listu za druge iz clustera.)
+                holder.annotationToUid[annotation.id] = primary.uid
             }
             // FlyTo na self je preseljen u MapScreen LaunchedEffect (vidi
             // `LaunchedEffect(state.selfLocation, ...)`) — radi i kad user nema krugove
             // (members je prazna) jer koristi `state.selfLocation` direktno iz FGS publish-a.
         },
     )
+}
+
+/**
+ * Grupiše članove koji su geografski blizu (unutar `thresholdMeters`) u zajedničke
+ * klastere. Koristi se za "putuju u istom autu" scenario: async publish (30-90s razmak)
+ * daje 2 pina na različitim mestima iako su fizički zajedno. Cluster ih spaja u 1 pin
+ * sa "+N" badge-om.
+ *
+ * Algoritam: greedy — za svakog člana, traži postojeći klaster gde je barem jedan član
+ * unutar threshold-a; ako nađe, pridruži; ako ne, novi klaster. Nije optimalno (single-link
+ * clustering može da spoji lanac razdvojenih tačaka), ali za <20 članova + realistične
+ * distance nije problem.
+ *
+ * Članovi bez lokacije se preskaču (ne pojavljuju u output-u).
+ */
+private fun clusterByProximity(
+    members: List<MemberWithLocation>,
+    thresholdMeters: Double,
+): List<List<MemberWithLocation>> {
+    val groups = mutableListOf<MutableList<MemberWithLocation>>()
+    for (m in members) {
+        val loc = m.location ?: continue
+        var placed = false
+        for (group in groups) {
+            val near = group.any { existing ->
+                val el = existing.location ?: return@any false
+                haversineMeters(loc.lat, loc.lng, el.lat, el.lng) < thresholdMeters
+            }
+            if (near) {
+                group.add(m)
+                placed = true
+                break
+            }
+        }
+        if (!placed) groups.add(mutableListOf(m))
+    }
+    return groups
 }
 
 /**
@@ -2655,7 +2716,11 @@ private fun MemberDetailSheet(
 
         Spacer(Modifier.height(20.dp))
         // Refresh: full-width primary. Za self uvek, za druge samo ako !private && !long-offline.
+        // Visina 48dp + rounded 24dp — matching dole (icon + view history), da su sve tri
+        // dugmadi vizuelno konzistentne visine i corner radius-a.
         val showRefresh = member.isSelf || (!isPrivate && !isLongOffline && member.location != null)
+        val buttonHeight = 48.dp
+        val buttonShape = RoundedCornerShape(24.dp)
         if (showRefresh) {
             androidx.compose.material3.Button(
                 onClick = {
@@ -2663,7 +2728,8 @@ private fun MemberDetailSheet(
                     refreshTriggered = true
                 },
                 enabled = !refreshTriggered,
-                modifier = Modifier.fillMaxWidth(),
+                shape = buttonShape,
+                modifier = Modifier.fillMaxWidth().height(buttonHeight),
             ) {
                 Text(
                     if (member.isSelf) {
@@ -2674,64 +2740,51 @@ private fun MemberDetailSheet(
                 )
             }
         }
-        // Row: [Icon-only directions - LogoTeal filled] [View history - LogoBlue filled].
-        // Text "Open in Google Maps" ne staje pored View history bez truncation-a, a "Maps"
-        // ili "Navigate" konfuziraju kad je pozadina već mapa. Icon-only sa directions
-        // strelicom je univerzalna konvencija (Google Maps/Uber/Yelp), View history dobija
-        // pun tekstualni prostor. Oba dugmeta imaju istu visinu (48dp), rounded 24dp, ista
-        // brand paleta (LogoTeal za "navigate/directions" — mapa/kretanje asocijacija,
-        // LogoBlue za View history — primary brand color-a).
+        // Row: [Icon-only directions LogoTeal] [View history LogoBlue full remaining].
+        // Row fillMaxWidth + weight na View history — bez ovog Row ne zauzima ceo prostor
+        // (visual mismatch sa Refresh iznad).
         if (member.location != null) {
             if (showRefresh) Spacer(Modifier.height(8.dp))
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Surface(
-                    shape = RoundedCornerShape(24.dp),
-                    color = org.krug.app.ui.theme.LogoTeal,
-                    modifier = Modifier
-                        .size(width = 56.dp, height = 48.dp)
-                        .clickable(onClick = onOpenInMaps),
+                androidx.compose.material3.FilledIconButton(
+                    onClick = onOpenInMaps,
+                    shape = buttonShape,
+                    colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
+                        containerColor = org.krug.app.ui.theme.LogoTeal,
+                        contentColor = Color.White,
+                    ),
+                    modifier = Modifier.size(width = 64.dp, height = buttonHeight),
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Filled.Directions,
-                            contentDescription = stringResource(R.string.action_open_in_google_maps),
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Filled.Directions,
+                        contentDescription = stringResource(R.string.action_open_in_google_maps),
+                        modifier = Modifier.size(24.dp),
+                    )
                 }
-                Surface(
-                    shape = RoundedCornerShape(24.dp),
-                    color = org.krug.app.ui.theme.LogoBlue,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .clickable(onClick = onOpenHistory),
+                androidx.compose.material3.Button(
+                    onClick = onOpenHistory,
+                    shape = buttonShape,
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = org.krug.app.ui.theme.LogoBlue,
+                        contentColor = Color.White,
+                    ),
+                    modifier = Modifier.weight(1f).height(buttonHeight),
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.AccessTime,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = stringResource(R.string.history_cta),
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.Outlined.AccessTime,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(R.string.history_cta),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
             Spacer(Modifier.height(24.dp))
