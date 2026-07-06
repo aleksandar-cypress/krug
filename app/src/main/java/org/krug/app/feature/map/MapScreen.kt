@@ -204,17 +204,30 @@ private fun MemberWithLocation.isLongOffline(now: Long = System.currentTimeMilli
 }
 
 /**
- * Trenutno offline: server-side onDisconnect handler je označio member-a kao izgubio
- * vezu (~30s posle stvarnog disconnect-a). Različito od `isPrivate` (deliberatno pauza)
- * i `isLongOffline` (24h+ tišina — verovatno uninstalled). "Van mreže" je *kratkotrajno*
- * stanje: tunel, lift, dead battery, force-stop.
+ * Grace period pre nego što UI signalizira offline: 5 minuta. Pokriva kratke WiFi
+ * flicker-e (šetnja između AP-eva, ulaz u lift) gde RTDB onDisconnect firira `online=false`
+ * ~30s posle stvarnog dropout-a — bez grace-a, member "trepće" između offline i online
+ * na svaki mrežni hicu. 5min je dovoljno za realne short disruptions ali dovoljno kratko
+ * da user vidi problem kad je stvarno dugotrajno.
  */
-private fun MemberWithLocation.isOffline(): Boolean {
+private const val OFFLINE_GRACE_MS = 5L * 60L * 1000L
+
+/**
+ * Trenutno offline: server-side onDisconnect handler je označio member-a kao izgubio
+ * vezu (~30s posle stvarnog disconnect-a) I nema fresh publish-a u poslednjih 5min.
+ * Grace period sprečava false-positive "Van mreže" pri kratkim network flicker-ima —
+ * ako klijent reconnect-uje u tih 5min i pošalje nov fix, UI ostaje "online" bez treperenja.
+ * Različito od `isPrivate` (deliberatno pauza) i `isLongOffline` (24h+ tišina).
+ */
+private fun MemberWithLocation.isOffline(now: Long = System.currentTimeMillis()): Boolean {
     if (isSelf) return false
     val loc = location ?: return false
     if (loc.paused) return false // paused ima svoj chip, nije isto
     if (loc.updatedAt <= 0L) return false // nikad nije publikovao — ne pokazuj offline
-    return !loc.online
+    if (loc.online) return false
+    // online=false ali updatedAt fresh (< 5min): verovatno kratak network flicker,
+    // klijent se već reconnected pre nego što bi onDisconnect ušao u effect.
+    return (now - loc.updatedAt) > OFFLINE_GRACE_MS
 }
 
 
@@ -3002,6 +3015,15 @@ private fun computeMissingPermissions(context: android.content.Context): List<St
         !org.krug.app.core.permissions.PermissionUtils.hasNotifications(context)
     ) {
         missing += context.getString(R.string.permission_missing_notifications)
+    }
+    // Battery-opt exemption i activity-recognition nisu runtime permissions u strogom
+    // smislu (jedan je OS setting, drugi je opciona permisija), ali su i dalje reliability
+    // gate-ovi. Uključujemo ih u banner listu da user vidi ceo problem odjednom.
+    if (!org.krug.app.core.permissions.PermissionUtils.isIgnoringBatteryOptimizations(context)) {
+        missing += context.getString(R.string.permission_missing_battery)
+    }
+    if (!org.krug.app.core.permissions.PermissionUtils.hasActivityRecognition(context)) {
+        missing += context.getString(R.string.permission_missing_activity)
     }
     return missing
 }

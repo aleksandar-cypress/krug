@@ -45,12 +45,43 @@
 
     <!-- Reliability re-prompt (Settings warning + startup dialog kad battery opt nije exempt) -->
     <string name="reliability_warning_title">Lokacija može ispasti van mreže</string>
-    <string name="reliability_warning_body">Optimizacija baterije je uključena za Krug. Sistem može ugasiti deljenje lokacije kada je ekran isključen.</string>
-    <string name="reliability_warning_cta">Popravi sada</string>
+    <string name="reliability_warning_body">Neka podešavanja ometaju pouzdano deljenje lokacije. Popravi ih ispod.</string>
+    <string name="reliability_issue_battery">Optimizacija baterije</string>
+    <string name="reliability_issue_battery_body">Sistem može ugasiti deljenje lokacije kada je ekran isključen.</string>
+    <string name="reliability_issue_bglocation">Lokacija u pozadini</string>
+    <string name="reliability_issue_bglocation_body">Lokacija se ne deli kada Krug radi u pozadini.</string>
+    <string name="reliability_issue_notifications">Notifikacije</string>
+    <string name="reliability_issue_notifications_body">Nećete dobiti SOS ni obaveštenja o mestima.</string>
+    <string name="reliability_issue_activity">Detekcija aktivnosti</string>
+    <string name="reliability_issue_activity_body">App ne može da prilagodi frekvenciju praćenja kretanju, troši više baterije.</string>
+    <string name="reliability_issue_fix">Popravi</string>
     <string name="reliability_dialog_title">Da lokacija ne ispada</string>
     <string name="reliability_dialog_body">Da bi deljenje lokacije radilo pouzdano, isključite optimizaciju baterije za Krug. U suprotnom sistem može ugasiti aplikaciju dok telefon spava i članovi kruga će vas videti kao van mreže.</string>
     <string name="reliability_dialog_open">Otvori podešavanja</string>
     <string name="reliability_dialog_later">Kasnije</string>
+
+    <!-- Reliability full screen (user-facing "zašto sam offline") -->
+    <string name="reliability_screen_title">Pouzdanost lokacije</string>
+    <string name="reliability_screen_all_ok_title">Sve je u redu</string>
+    <string name="reliability_screen_all_ok_body">Uređaj je podešen za pouzdano deljenje lokacije.</string>
+    <plurals name="reliability_screen_has_issues_title">
+        <item quantity="one">%1$d problem</item>
+        <item quantity="few">%1$d problema</item>
+        <item quantity="other">%1$d problema</item>
+    </plurals>
+    <string name="reliability_screen_has_issues_body">Klikni Popravi na svakom redu ispod da lokacija nastavi da radi.</string>
+    <string name="reliability_status_last_publish">Poslednji update poslat</string>
+    <string name="reliability_status_service">Servis lokacije</string>
+    <string name="reliability_status_service_on">Radi</string>
+    <string name="reliability_status_service_off">Zaustavljen</string>
+    <string name="reliability_status_never">Nikad</string>
+    <string name="reliability_settings_row_title">Pouzdanost lokacije</string>
+    <string name="reliability_settings_row_subtitle_ok">Sve provere prolaze</string>
+    <plurals name="reliability_settings_row_subtitle_issues">
+        <item quantity="one">%1$d problem</item>
+        <item quantity="few">%1$d problema</item>
+        <item quantity="other">%1$d problema</item>
+    </plurals>
 
     <string name="onb_done_title">Sve je spremno</string>
     <string name="onb_done_body">Napravite prvi krug ili se pridružite postojećem</string>
@@ -367,6 +398,8 @@
     <string name="permission_missing_location">Lokacija</string>
     <string name="permission_missing_location_background">Lokacija u pozadini</string>
     <string name="permission_missing_notifications">Obaveštenja</string>
+    <string name="permission_missing_battery">Optimizacija baterije</string>
+    <string name="permission_missing_activity">Detekcija aktivnosti</string>
 
     <!-- Offline banner -->
     <string name="offline_banner_title">Nema internet veze</string>

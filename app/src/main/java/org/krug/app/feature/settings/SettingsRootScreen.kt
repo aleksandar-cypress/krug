@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.HealthAndSafety
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.filled.Warning
@@ -41,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -88,9 +90,22 @@ fun SettingsRootScreen(
     onAccount: () -> Unit,
     onPrivacy: () -> Unit,
     onBattery: () -> Unit,
+    onReliability: () -> Unit,
     onAbout: () -> Unit,
     onDiagnostics: () -> Unit = {},
 ) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    // Zajednički resumeTick za banner card + row subtitle — obe UI-jevine reaguju na
+    // dolazak iz sistemskih podešavanja (grant/revoke permission).
+    var resumeTick by remember { mutableStateOf(0) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumeTick++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     SettingsSubScaffold(
         title = stringResource(R.string.settings_title),
         onBack = onBack,
@@ -124,10 +139,31 @@ fun SettingsRootScreen(
                     ),
                 ),
             )
+            // Reliability row subtitle: live issue count. Dinamički se recompute-uje
+            // uz warning card, kroz istu resumeTick logiku.
+            val reliabilityIssueCount = remember(resumeTick) {
+                collectReliabilityIssues(context).size
+            }
+            val reliabilitySubtitle = if (reliabilityIssueCount == 0) {
+                stringResource(R.string.reliability_settings_row_subtitle_ok)
+            } else {
+                pluralStringResource(
+                    R.plurals.reliability_settings_row_subtitle_issues,
+                    reliabilityIssueCount,
+                    reliabilityIssueCount,
+                )
+            }
             add(
                 SettingsSection(
                     header = stringResource(R.string.settings_section_performance),
                     items = listOf(
+                        SettingsItem(
+                            title = stringResource(R.string.reliability_settings_row_title),
+                            subtitle = reliabilitySubtitle,
+                            icon = Icons.Outlined.HealthAndSafety,
+                            accentColor = if (reliabilityIssueCount == 0) LogoTeal else LogoOrange,
+                            onClick = onReliability,
+                        ),
                         SettingsItem(
                             title = stringResource(R.string.settings_battery),
                             subtitle = stringResource(R.string.settings_battery_subtitle),
@@ -171,10 +207,10 @@ fun SettingsRootScreen(
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            // Reliability warning banner — visible samo kad battery-opt nije exempt.
-            // Ovo je najviše mesto u Settings-u pa je nemoguće da ga user propusti kad
-            // gleda zašto lokacija ne radi.
-            item { ReliabilityWarningCard() }
+            // Reliability warning banner — visible samo kad postoji issue. Najviše
+            // mesto u Settings-u pa je nemoguće da ga user propusti kad gleda
+            // zašto lokacija ne radi.
+            item { ReliabilityWarningCard(resumeTick = resumeTick) }
             items(sections.size) { idx ->
                 SettingsSectionBlock(sections[idx])
             }
@@ -182,67 +218,124 @@ fun SettingsRootScreen(
     }
 }
 
+private data class ReliabilityIssue(
+    val titleRes: Int,
+    val bodyRes: Int,
+    val onFix: (Activity) -> Unit,
+)
+
 @Composable
-private fun ReliabilityWarningCard() {
+private fun ReliabilityWarningCard(resumeTick: Int) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var ignoring by remember { mutableStateOf(PermissionUtils.isIgnoringBatteryOptimizations(context)) }
-    // Rescan on ON_RESUME — kad se user vrati iz sistemskih podešavanja, banner odmah nestane.
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                ignoring = PermissionUtils.isIgnoringBatteryOptimizations(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-    if (ignoring) return
+    val issues = remember(resumeTick) { collectReliabilityIssues(context) }
+    if (issues.isEmpty()) return
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp)),
         colors = CardDefaults.cardColors(containerColor = LogoOrange.copy(alpha = 0.12f)),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Warning,
-                contentDescription = null,
-                tint = LogoOrange,
-                modifier = Modifier.size(24.dp),
-            )
-            Spacer(Modifier.size(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.reliability_warning_title),
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface,
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Icon(
+                    imageVector = Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = LogoOrange,
+                    modifier = Modifier.size(24.dp),
                 )
-                Spacer(Modifier.size(4.dp))
-                Text(
-                    text = stringResource(R.string.reliability_warning_body),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.size(8.dp))
-                TextButton(
-                    onClick = {
-                        (context as? Activity)?.let { PermissionUtils.openBatteryOptimizationRequest(it) }
-                    },
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                ) {
+                Spacer(Modifier.size(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = stringResource(R.string.reliability_warning_cta),
-                        color = LogoOrange,
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        text = stringResource(R.string.reliability_warning_title),
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        text = stringResource(R.string.reliability_warning_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
+            Spacer(Modifier.size(12.dp))
+            issues.forEachIndexed { idx, issue ->
+                if (idx > 0) Spacer(Modifier.size(8.dp))
+                ReliabilityIssueRow(issue)
+            }
         }
     }
+}
+
+@Composable
+private fun ReliabilityIssueRow(issue: ReliabilityIssue) {
+    val context = LocalContext.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(issue.titleRes),
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(issue.bodyRes),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.size(8.dp))
+        TextButton(
+            onClick = { (context as? Activity)?.let { issue.onFix(it) } },
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.reliability_issue_fix),
+                color = LogoOrange,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+            )
+        }
+    }
+}
+
+/**
+ * Prikupi sve reliability issues koji trenutno postoje. Redosled = prioritet u UI-ju:
+ * background location (najkritičnije za CORE), pa battery-opt (drugo najkritičnije),
+ * pa notifications i activity recognition (nice-to-have za UX/uštedu baterije).
+ */
+private fun collectReliabilityIssues(context: android.content.Context): List<ReliabilityIssue> {
+    val issues = mutableListOf<ReliabilityIssue>()
+    if (!PermissionUtils.hasBackgroundLocation(context)) {
+        issues += ReliabilityIssue(
+            titleRes = R.string.reliability_issue_bglocation,
+            bodyRes = R.string.reliability_issue_bglocation_body,
+            onFix = { PermissionUtils.openAppSettings(it) },
+        )
+    }
+    if (!PermissionUtils.isIgnoringBatteryOptimizations(context)) {
+        issues += ReliabilityIssue(
+            titleRes = R.string.reliability_issue_battery,
+            bodyRes = R.string.reliability_issue_battery_body,
+            onFix = { PermissionUtils.openBatteryOptimizationRequest(it) },
+        )
+    }
+    if (!PermissionUtils.hasNotifications(context)) {
+        issues += ReliabilityIssue(
+            titleRes = R.string.reliability_issue_notifications,
+            bodyRes = R.string.reliability_issue_notifications_body,
+            onFix = { PermissionUtils.openAppSettings(it) },
+        )
+    }
+    if (!PermissionUtils.hasActivityRecognition(context)) {
+        issues += ReliabilityIssue(
+            titleRes = R.string.reliability_issue_activity,
+            bodyRes = R.string.reliability_issue_activity_body,
+            onFix = { PermissionUtils.openAppSettings(it) },
+        )
+    }
+    return issues
 }
 
 @Composable

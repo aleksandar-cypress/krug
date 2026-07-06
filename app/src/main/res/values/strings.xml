@@ -45,12 +45,41 @@
 
     <!-- Reliability re-prompt (Settings warning + startup dialog when battery opt not exempt) -->
     <string name="reliability_warning_title">Location may drop offline</string>
-    <string name="reliability_warning_body">Battery optimization is on for Krug. The system may kill location sharing when the screen is off.</string>
-    <string name="reliability_warning_cta">Fix now</string>
+    <string name="reliability_warning_body">Some settings block reliable location sharing. Fix them below.</string>
+    <string name="reliability_issue_battery">Battery optimization</string>
+    <string name="reliability_issue_battery_body">System may kill location sharing when the screen is off.</string>
+    <string name="reliability_issue_bglocation">Background location</string>
+    <string name="reliability_issue_bglocation_body">Location is not shared when Krug runs in background.</string>
+    <string name="reliability_issue_notifications">Notifications</string>
+    <string name="reliability_issue_notifications_body">You will not receive SOS or place alerts.</string>
+    <string name="reliability_issue_activity">Activity detection</string>
+    <string name="reliability_issue_activity_body">App cannot adapt tracking rate to your movement, drains more battery.</string>
+    <string name="reliability_issue_fix">Fix</string>
     <string name="reliability_dialog_title">Keep location working</string>
     <string name="reliability_dialog_body">To keep sharing your location reliably, turn off battery optimization for Krug. Otherwise, the system may kill the app when your phone sleeps and family members will see you as offline.</string>
     <string name="reliability_dialog_open">Open settings</string>
     <string name="reliability_dialog_later">Later</string>
+
+    <!-- Reliability full screen (user-facing "why offline") -->
+    <string name="reliability_screen_title">Location reliability</string>
+    <string name="reliability_screen_all_ok_title">All checks pass</string>
+    <string name="reliability_screen_all_ok_body">Your device is set up for reliable location sharing.</string>
+    <plurals name="reliability_screen_has_issues_title">
+        <item quantity="one">%1$d issue found</item>
+        <item quantity="other">%1$d issues found</item>
+    </plurals>
+    <string name="reliability_screen_has_issues_body">Tap Fix on each row below to keep location sharing working.</string>
+    <string name="reliability_status_last_publish">Last update sent</string>
+    <string name="reliability_status_service">Location service</string>
+    <string name="reliability_status_service_on">Running</string>
+    <string name="reliability_status_service_off">Stopped</string>
+    <string name="reliability_status_never">Never</string>
+    <string name="reliability_settings_row_title">Location reliability</string>
+    <string name="reliability_settings_row_subtitle_ok">All checks pass</string>
+    <plurals name="reliability_settings_row_subtitle_issues">
+        <item quantity="one">%1$d issue needs attention</item>
+        <item quantity="other">%1$d issues need attention</item>
+    </plurals>
 
     <string name="onb_done_title">You\'re all set</string>
     <string name="onb_done_body">Create your first circle or join an existing one</string>
@@ -365,6 +394,8 @@
     <string name="permission_missing_location">Location</string>
     <string name="permission_missing_location_background">Background location</string>
     <string name="permission_missing_notifications">Notifications</string>
+    <string name="permission_missing_battery">Battery optimization</string>
+    <string name="permission_missing_activity">Activity detection</string>
 
     <!-- Offline banner -->
     <string name="offline_banner_title">No internet connection</string>

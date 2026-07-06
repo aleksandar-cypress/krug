@@ -93,11 +93,14 @@
 
         <!-- Android Auto — CarAppService (Navigation template). Auto host bind-uje kad
              telefon konektuje sa autom preko USB/wireless. exported=true jer Auto host
-             (odvojen proces) treba da bind-uje. -->
+             (odvojen proces) treba da bind-uje.
+
+             NEMA foregroundServiceType — CarAppService NIJE user foreground service; Auto
+             host sam upravlja lifecycle-om. Prisustvo foregroundServiceType je često uzrok
+             zbog kojeg Auto host odbije da list-uje app u meniju. -->
         <service
             android:name=".core.car.KrugCarAppService"
-            android:exported="true"
-            android:foregroundServiceType="location">
+            android:exported="true">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
                 <category android:name="androidx.car.app.category.NAVIGATION" />

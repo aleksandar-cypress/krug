@@ -25,6 +25,7 @@ import kotlinx.serialization.Serializable
 @Serializable object Account
 @Serializable object Privacy
 @Serializable object BatteryMode
+@Serializable object Reliability
 @Serializable object NotificationsSettings
 @Serializable object About
 @Serializable object DeleteAccount
