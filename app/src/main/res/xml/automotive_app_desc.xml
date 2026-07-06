@@ -5,8 +5,9 @@
   eligible za projected mode.
 
   Uses:
-    template  — koristi Car App Library template-e (Navigation, Place, itd.).
+    template  — koristi Car App Library template-e (Place, Map, itd.).
 -->
 <automotiveApp>
     <uses name="template" />
 </automotiveApp>
+

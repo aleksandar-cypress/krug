@@ -26,7 +26,7 @@ crashlytics-plugin = "3.0.2"
 mapbox = "11.8.1"
 
 # Android Auto — Car App Library
-car-app = "1.4.0"
+car-app = "1.7.0"
 
 # Misc
 coroutines = "1.9.0"
