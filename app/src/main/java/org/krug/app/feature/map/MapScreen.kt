@@ -357,9 +357,7 @@ fun MapScreen(
         org.krug.app.core.places.PlaceFocusBus.consumeId()
     }
     LaunchedEffect(pendingPlaceFocus) {
-        val focus = pendingPlaceFocus
-        Timber.d("PlaceFocus effect: pending=$focus, activePlaces.size=${activePlaces.size}")
-        if (focus == null) return@LaunchedEffect
+        val focus = pendingPlaceFocus ?: return@LaunchedEffect
         // Čekaj da mapa bude spremna pre flyTo.
         var attempts = 0
         while ((mapViewState.mapView == null || !mapViewState.styleLoaded) && attempts < 100) {
@@ -557,7 +555,6 @@ fun MapScreen(
         pm.deleteAll()
         prm.deleteAll()
         mapViewState.annotationToPlaceId.clear()
-        Timber.d("Rendering ${activePlaces.size} place pin(s): ${activePlaces.joinToString { "${it.name}(${it.id.take(6)})" }}")
         if (activePlaces.isEmpty()) return@LaunchedEffect
         activePlaces.forEach { place ->
             val (colorHex, _) = MapMarkers.categoryStyle(place.category)
