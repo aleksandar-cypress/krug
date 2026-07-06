@@ -17,7 +17,15 @@ import kotlinx.serialization.Serializable
 @Serializable data class CircleDetail(val circleId: String)
 @Serializable data class MemberDetail(val circleId: String, val memberId: String)
 @Serializable data class Places(val circleId: String)
-@Serializable data class AddPlace(val circleId: String)
+@Serializable data class AddPlace(
+    val circleId: String,
+    // Optional prefill iz Place Suggestion-a (auto-detektovan hotspot iz history-ja).
+    // Ako je non-null, AddPlaceScreen: (1) fly-to na (lat,lng) umesto current location,
+    // (2) prefill name text field.
+    val prefillLat: Double? = null,
+    val prefillLng: Double? = null,
+    val prefillName: String? = null,
+)
 @Serializable data class History(val uid: String, val displayName: String)
 
 // Settings sub-tree.

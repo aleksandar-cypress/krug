@@ -61,12 +61,20 @@ import org.krug.app.core.places.PlaceModel
 fun PlacesScreen(
     onBack: () -> Unit,
     onAddPlace: () -> Unit,
+    onAddPlaceFromSuggestion: (lat: Double, lng: Double, name: String) -> Unit = { _, _, _ -> },
     onShowOnMap: () -> Unit,
     viewModel: PlacesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val recentEvents by viewModel.recentEvents.collectAsStateWithLifecycle()
     val presenceByPlace by viewModel.presenceByPlace.collectAsStateWithLifecycle()
+    val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(state.loaded) {
+        // Lazy trigger — čekaj da places lista bude loaded (za filter već-postojećih),
+        // pa learn suggestions iz zadnjih 7 dana history-ja. Blokira UI ~200ms na
+        // veliki dataset, ali samo prvi put po sesiji.
+        if (state.loaded) viewModel.loadSuggestions()
+    }
     var pendingDelete by remember { mutableStateOf<PlaceModel?>(null) }
     var sortByName by remember { mutableStateOf(false) }
     val limitReached = state.places.size >= PlaceModel.FREE_TIER_MAX_PER_CIRCLE
@@ -176,6 +184,22 @@ fun PlacesScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
+                    // Auto-suggest banner — top hotspot iz zadnjih 7d self history-ja.
+                    // Ne prikazuje se ako je user već dostigao limit (nema mesta gde
+                    // treba više).
+                    if (!limitReached) {
+                        items(suggestions, key = { "sug:${it.lat},${it.lng}" }) { s ->
+                            SuggestionCard(
+                                suggestion = s,
+                                onCreate = {
+                                    val name = context.getString(nameResFor(s.suggestedType))
+                                    onAddPlaceFromSuggestion(s.lat, s.lng, name)
+                                    viewModel.dismissSuggestion(s)
+                                },
+                                onDismiss = { viewModel.dismissSuggestion(s) },
+                            )
+                        }
+                    }
                     items(sortedPlaces, key = { it.id }) { place ->
                         PlaceRow(
                             place = place,
@@ -436,6 +460,59 @@ private fun PlaceRow(
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error,
                 )
+            }
+        }
+    }
+}
+
+private fun nameResFor(type: org.krug.app.core.places.SuggestedNameType): Int = when (type) {
+    org.krug.app.core.places.SuggestedNameType.HOME -> R.string.place_suggestion_name_home
+    org.krug.app.core.places.SuggestedNameType.WORK -> R.string.place_suggestion_name_work
+    org.krug.app.core.places.SuggestedNameType.GENERIC -> R.string.place_suggestion_name_generic
+}
+
+@Composable
+private fun SuggestionCard(
+    suggestion: org.krug.app.core.places.PlaceSuggestion,
+    onCreate: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val suggestedName = stringResource(nameResFor(suggestion.suggestedType))
+    Card(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+        ),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Outlined.Place,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(Modifier.size(10.dp))
+                Text(
+                    stringResource(R.string.place_suggestion_banner_title),
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                )
+            }
+            Spacer(Modifier.size(8.dp))
+            Text(
+                stringResource(R.string.place_suggestion_banner_body, suggestedName),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.size(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.place_suggestion_dismiss))
+                }
+                Spacer(Modifier.weight(1f))
+                androidx.compose.material3.Button(onClick = onCreate) {
+                    Text(stringResource(R.string.place_suggestion_create))
+                }
             }
         }
     }

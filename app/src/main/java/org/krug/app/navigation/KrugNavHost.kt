@@ -226,11 +226,27 @@ fun KrugNavHost() {
             PlacesScreen(
                 onBack = { nav.popBackStack() },
                 onAddPlace = { nav.navigate(AddPlace(circleId = args.circleId)) },
+                onAddPlaceFromSuggestion = { lat, lng, name ->
+                    nav.navigate(
+                        AddPlace(
+                            circleId = args.circleId,
+                            prefillLat = lat,
+                            prefillLng = lng,
+                            prefillName = name,
+                        ),
+                    )
+                },
                 onShowOnMap = { nav.popBackStack(Map, inclusive = false) },
             )
         }
-        composable<AddPlace> {
-            AddPlaceScreen(onBack = { nav.popBackStack() })
+        composable<AddPlace> { entry ->
+            val args = entry.toRoute<AddPlace>()
+            AddPlaceScreen(
+                onBack = { nav.popBackStack() },
+                prefillLat = args.prefillLat,
+                prefillLng = args.prefillLng,
+                prefillName = args.prefillName,
+            )
         }
         composable<History> {
             HistoryScreen(onBack = { nav.popBackStack() })

@@ -54,6 +54,26 @@ class LocationHistoryRepository @Inject constructor(
      * Vraća history point-e za user-a između from i to timestamp-a (server timestamp ms).
      * Poziva se sa PlaceScreen ili HistoryScreen-om za render trag-a na mapi.
      */
+    /**
+     * One-shot query — history point-i user-a od `sinceMs` do sada. Koristi se za
+     * Place suggestion (analiziramo zadnje 7 dana da nadjemo hotspot-e).
+     * Ne subscribuje se — samo jedan get() poziv. Vraća prazno na error.
+     */
+    suspend fun queryHistorySince(uid: String, sinceMs: Long): List<LocationHistoryPoint> {
+        return runCatching {
+            historyCol(uid)
+                .whereGreaterThanOrEqualTo("timestamp", Date(sinceMs))
+                .orderBy("timestamp", Query.Direction.ASCENDING)
+                .get()
+                .await()
+                .documents
+                .mapNotNull { it.toObject(LocationHistoryPoint::class.java) }
+        }.getOrElse {
+            Timber.w(it, "queryHistorySince failed uid=%s since=%d", uid, sinceMs)
+            emptyList()
+        }
+    }
+
     fun observeHistory(uid: String, fromMs: Long, toMs: Long): Flow<List<LocationHistoryPoint>> =
         callbackFlow {
             val reg = historyCol(uid)

@@ -19,10 +19,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.krug.app.core.circle.CircleRepository
 import org.krug.app.core.directions.GeocodingRepository
+import org.krug.app.core.location.LocationHistoryRepository
 import org.krug.app.core.location.LocationModel
 import org.krug.app.core.location.LocationRepository
 import org.krug.app.core.places.PlaceModel
 import org.krug.app.core.places.PlaceRepository
+import org.krug.app.core.places.PlaceSuggestion
+import org.krug.app.core.places.detectPlaceSuggestions
 import org.krug.app.core.user.UserRepository
 import timber.log.Timber
 
@@ -47,6 +50,7 @@ class PlacesViewModel @Inject constructor(
     private val circleRepository: CircleRepository,
     private val userRepository: UserRepository,
     private val geocodingRepository: GeocodingRepository,
+    private val historyRepository: LocationHistoryRepository,
     private val auth: FirebaseAuth,
 ) : ViewModel() {
 
@@ -93,6 +97,36 @@ class PlacesViewModel @Inject constructor(
     fun retrySearch() {
         if (lastQuery.isNotBlank()) searchAddress(lastQuery)
     }
+
+    // Place suggestions — top hotspot iz zadnjih 7d self history-ja. Kompajlira se
+    // lazy prvi put kad se PlacesScreen otvori (loadSuggestions() poziv). Sa
+    // dismiss-om, kod ostaje u memoriji ali UI ne pokazuje ovaj session.
+    private val _suggestions = MutableStateFlow<List<PlaceSuggestion>>(emptyList())
+    val suggestions: StateFlow<List<PlaceSuggestion>> = _suggestions.asStateFlow()
+    private var suggestionsLoaded = false
+    private val dismissedSuggestions = mutableSetOf<String>() // key = "lat,lng" rounded
+
+    fun loadSuggestions() {
+        if (suggestionsLoaded) return
+        suggestionsLoaded = true
+        viewModelScope.launch {
+            val uid = auth.currentUser?.uid ?: return@launch
+            val sinceMs = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+            val history = historyRepository.queryHistorySince(uid, sinceMs)
+            val existing = _state.value.places
+            val detected = detectPlaceSuggestions(history, existing, maxSuggestions = 2)
+                .filterNot { s -> keyForSuggestion(s) in dismissedSuggestions }
+            _suggestions.value = detected
+        }
+    }
+
+    fun dismissSuggestion(s: PlaceSuggestion) {
+        dismissedSuggestions.add(keyForSuggestion(s))
+        _suggestions.value = _suggestions.value.filterNot { it === s }
+    }
+
+    private fun keyForSuggestion(s: PlaceSuggestion): String =
+        "%.4f,%.4f".format(s.lat, s.lng)
 
     fun clearSearchResults() {
         searchJob?.cancel()

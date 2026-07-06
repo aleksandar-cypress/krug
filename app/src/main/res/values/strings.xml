@@ -246,6 +246,15 @@
     <string name="places_search_retry">Try again</string>
     <string name="places_search_no_results">No results for this query</string>
 
+    <!-- Place auto-suggest (na osnovu History-ja) -->
+    <string name="place_suggestion_name_home">Home</string>
+    <string name="place_suggestion_name_work">Work</string>
+    <string name="place_suggestion_name_generic">Place</string>
+    <string name="place_suggestion_banner_title">Place suggestion</string>
+    <string name="place_suggestion_banner_body">You spent a lot of time near this location in the past 7 days. Create "%1$s" as a place?</string>
+    <string name="place_suggestion_create">Create place</string>
+    <string name="place_suggestion_dismiss">Dismiss</string>
+
     <!-- Map UI -->
     <string name="map_members_sheet_title">Members</string>
     <string name="map_member_last_seen_now">just now</string>

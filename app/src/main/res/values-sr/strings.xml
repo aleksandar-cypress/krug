@@ -250,6 +250,15 @@
     <string name="places_search_retry">Pokušaj ponovo</string>
     <string name="places_search_no_results">Nema rezultata za ovu pretragu</string>
 
+    <!-- Place auto-suggest (na osnovu History-ja) -->
+    <string name="place_suggestion_name_home">Kuća</string>
+    <string name="place_suggestion_name_work">Posao</string>
+    <string name="place_suggestion_name_generic">Mesto</string>
+    <string name="place_suggestion_banner_title">Predlog mesta</string>
+    <string name="place_suggestion_banner_body">Provodiš dosta vremena kod ove lokacije u zadnjih 7 dana. Kreiraj "%1$s" kao mesto?</string>
+    <string name="place_suggestion_create">Kreiraj mesto</string>
+    <string name="place_suggestion_dismiss">Odbaci</string>
+
     <!-- Map UI -->
     <string name="map_members_sheet_title">Članovi</string>
     <string name="map_member_last_seen_now">upravo sada</string>

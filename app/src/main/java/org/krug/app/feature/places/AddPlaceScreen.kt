@@ -66,12 +66,17 @@ import org.krug.app.core.places.PlaceModel
 @Composable
 fun AddPlaceScreen(
     onBack: () -> Unit,
+    prefillLat: Double? = null,
+    prefillLng: Double? = null,
+    prefillName: String? = null,
     viewModel: PlacesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val searchState by viewModel.searchState.collectAsStateWithLifecycle()
-    var name by remember { mutableStateOf("") }
-    var nameEdited by remember { mutableStateOf(false) }
+    // Prefill iz Route (Place Suggestion click) — ime + fokus map-e na predloženu lokaciju
+    // umesto current location.
+    var name by remember { mutableStateOf(prefillName.orEmpty()) }
+    var nameEdited by remember { mutableStateOf(prefillName != null) }
     var radius by remember { mutableStateOf(PlaceModel.DEFAULT_RADIUS_M.toFloat()) }
     var category by remember { mutableStateOf(PlaceCategory.OTHER) }
     var searchQuery by remember { mutableStateOf("") }
@@ -91,8 +96,32 @@ fun AddPlaceScreen(
         showDiscardConfirm = true
     }
 
-    // Kad stigne current lokacija, centriraj kameru jednom (samo prvi put).
+    // Prefill iz Place Suggestion-a — ako imamo prefillLat/Lng, fokus na tu tačku
+    // umesto current location. Radi se jednom pri kompoziciji.
+    LaunchedEffect(prefillLat, prefillLng) {
+        if (prefillLat != null && prefillLng != null && !initialCenterApplied) {
+            // Sacekaj map inicijalizaciju.
+            repeat(20) {
+                val map = mapViewRef.map?.mapboxMap
+                if (map != null) {
+                    map.setCamera(
+                        com.mapbox.maps.CameraOptions.Builder()
+                            .center(com.mapbox.geojson.Point.fromLngLat(prefillLng, prefillLat))
+                            .zoom(16.0)
+                            .build(),
+                    )
+                    initialCenterApplied = true
+                    return@LaunchedEffect
+                }
+                kotlinx.coroutines.delay(100)
+            }
+        }
+    }
+
+    // Kad stigne current lokacija, centriraj kameru jednom (samo prvi put) — SKIP ako
+    // je vec applied kroz prefill iz suggestion-a (gornji effect).
     LaunchedEffect(state.currentLat, state.currentLng) {
+        if (initialCenterApplied) return@LaunchedEffect
         val lat = state.currentLat
         val lng = state.currentLng
         val mv = mapViewRef.map ?: return@LaunchedEffect
