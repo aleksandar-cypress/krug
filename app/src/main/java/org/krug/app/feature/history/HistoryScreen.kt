@@ -90,6 +90,10 @@ fun HistoryScreen(
         val isToday = now in range.fromMs..range.toMs
         if (isToday) maxOf(lastPointMs, now) else lastPointMs
     }
+    // No-movement detekcija: user je publikovao lokaciju N puta ali sve tačke su unutar
+    // ~50m (GPS noise threshold). Bez ovog, Play dugme radi ali animacija ne pokazuje
+    // ništa vizuelno (svi points prekriveni jedni preko drugih) — user misli da je bug.
+    val hasMovement = remember(points) { computeHasMovement(points, minSpanMeters = 50.0) }
     var playbackSpeed by remember { mutableStateOf(1f) } // 0.5x / 1x / 2x / 4x
     // Fit-bounds samo jednom po (dan, points-first-load). Kad user počne da menja
     // scrub, ne pomeramo kameru — dozvoljavamo mu manuelnu kontrolu (pinch zoom, pan).
@@ -248,6 +252,35 @@ fun HistoryScreen(
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         )
                     }
+                } else if (!hasMovement) {
+                    // Points postoje ali sve u ~50m radius-u (user je bio na istom mestu ceo
+                    // dan). Bez ovog user gleda play dugme koje "radi" a mapu koja se ne menja.
+                    val name = viewModel.displayName.ifBlank { stringResource(R.string.history_title) }
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(24.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                                MaterialTheme.shapes.medium,
+                            )
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            stringResource(R.string.history_no_movement),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                        Spacer(Modifier.size(6.dp))
+                        Text(
+                            stringResource(R.string.history_no_movement_hint, name),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
                 }
             }
 
@@ -318,7 +351,10 @@ fun HistoryScreen(
                                 playing = !playing
                             }
                         },
-                        enabled = points.isNotEmpty(),
+                        // Disable ako nema point-a ILI nema kretanja (< 50m). Bez ovog user
+                        // kliktne Play, animacija "radi" u pozadini ali vizuelno se ništa
+                        // ne dešava jer su svi point-i na istoj lokaciji.
+                        enabled = points.isNotEmpty() && hasMovement,
                     ) {
                         Icon(
                             imageVector = if (scrubTime >= 1f) Icons.Filled.Replay
@@ -412,6 +448,26 @@ private fun StatCell(label: String, value: String, modifier: Modifier = Modifier
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+/**
+ * True ako je user tokom dana pomerao vise od `minSpanMeters` (bounding box diagonala).
+ * Ispod tog threshold-a: user je bio na istom mestu, ne treba playback (svi points bi
+ * bili prekriveni jedni preko drugih vizuelno). GPS noise threshold ~50m — realno
+ * kretanje daje daleko vece span-ove.
+ */
+private fun computeHasMovement(
+    points: List<org.krug.app.core.location.LocationHistoryPoint>,
+    minSpanMeters: Double,
+): Boolean {
+    if (points.size < 2) return false
+    val minLat = points.minOf { it.lat }
+    val maxLat = points.maxOf { it.lat }
+    val minLng = points.minOf { it.lng }
+    val maxLng = points.maxOf { it.lng }
+    val res = FloatArray(1)
+    android.location.Location.distanceBetween(minLat, minLng, maxLat, maxLng, res)
+    return res[0] > minSpanMeters
 }
 
 private data class HistoryStats(

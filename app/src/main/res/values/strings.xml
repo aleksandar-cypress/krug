@@ -207,6 +207,8 @@
     <string name="history_title">Location history</string>
     <string name="history_empty">No location data for this day</string>
     <string name="history_empty_hint">Krug records location while you move. Come back later to see today\'s trail.</string>
+    <string name="history_no_movement">No movement recorded</string>
+    <string name="history_no_movement_hint">%1$s stayed at the same location today.</string>
     <string name="history_points_count">%1$d points</string>
     <string name="history_cta">View history</string>
     <string name="history_stat_distance">Distance</string>

@@ -211,6 +211,8 @@
     <string name="history_title">Istorija lokacije</string>
     <string name="history_empty">Nema podataka za ovaj dan</string>
     <string name="history_empty_hint">Krug beleži lokaciju dok se krećeš. Vrati se kasnije da vidiš današnji trag.</string>
+    <string name="history_no_movement">Nema zabeleženog kretanja</string>
+    <string name="history_no_movement_hint">%1$s je ceo dan bio/la na istoj lokaciji.</string>
     <string name="history_points_count">%1$d tačaka</string>
     <string name="history_cta">Istorija kretanja</string>
     <string name="history_stat_distance">Pređeno</string>
