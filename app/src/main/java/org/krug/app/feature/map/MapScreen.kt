@@ -102,6 +102,7 @@ import org.krug.app.core.util.confirmHaptic
 import org.krug.app.core.util.rejectHaptic
 import androidx.compose.ui.res.painterResource
 import org.krug.app.ui.brand.pressScaleClickable
+import org.krug.app.ui.brand.pressScaleCombinedClickable
 import timber.log.Timber
 import android.view.HapticFeedbackConstants
 import androidx.compose.ui.res.stringResource
@@ -879,6 +880,33 @@ fun MapScreen(
                             mapViewState.flyTo(loc.lng, loc.lat)
                         }
                         detailUid = uid
+                    },
+                    onQuickRefresh = { uid ->
+                        haptic()
+                        sheetVisible = false
+                        val member = state.members.firstOrNull { it.uid == uid } ?: return@MembersSheet
+                        if (member.isSelf) {
+                            LocationTrackingService.refreshSelf(context)
+                        } else {
+                            viewModel.refreshMember(uid)
+                        }
+                    },
+                    onQuickOpenMaps = { uid ->
+                        haptic()
+                        val member = state.members.firstOrNull { it.uid == uid } ?: return@MembersSheet
+                        member.location?.let { loc ->
+                            val uri = android.net.Uri.parse(
+                                "geo:${loc.lat},${loc.lng}?q=${loc.lat},${loc.lng}(${member.displayName})",
+                            )
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
+                            runCatching { context.startActivity(intent) }
+                        }
+                    },
+                    onQuickHistory = { uid ->
+                        haptic()
+                        sheetVisible = false
+                        val member = state.members.firstOrNull { it.uid == uid } ?: return@MembersSheet
+                        onOpenHistory(uid, member.displayName)
                     },
                 )
             }
@@ -2229,6 +2257,9 @@ private fun MembersSheet(
     photoCache: Map<String, Bitmap>,
     autoStatusByUid: Map<String, String> = emptyMap(),
     onMemberClick: (String) -> Unit,
+    onQuickRefresh: ((String) -> Unit)? = null,
+    onQuickOpenMaps: ((String) -> Unit)? = null,
+    onQuickHistory: ((String) -> Unit)? = null,
 ) {
     // Sort: self prvi, pa SOS, pa active (recent updatedAt), pa long-offline ghost.
     // Bez ovog redosled je nepredvidiv (Firestore snapshot order) — user mora da
@@ -2268,6 +2299,9 @@ private fun MembersSheet(
                         photo = m.photoUrl?.let { photoCache[it] },
                         autoStatus = autoStatusByUid[m.uid],
                         onClick = { onMemberClick(m.uid) },
+                        onQuickRefresh = onQuickRefresh?.let { { it(m.uid) } },
+                        onQuickOpenMaps = onQuickOpenMaps?.let { { it(m.uid) } },
+                        onQuickHistory = onQuickHistory?.let { { it(m.uid) } },
                     )
                 }
                 // Hint kad je user sam u krugu — pomaže novom user-u da shvati šta dalje
@@ -2303,7 +2337,11 @@ private fun MemberRow(
     photo: Bitmap?,
     autoStatus: String? = null,
     onClick: () -> Unit = {},
+    onQuickRefresh: (() -> Unit)? = null,
+    onQuickOpenMaps: (() -> Unit)? = null,
+    onQuickHistory: (() -> Unit)? = null,
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
     val markerColor = when {
         member.sos != null -> SosRed
         member.isSelf -> MaterialTheme.colorScheme.primary
@@ -2320,12 +2358,25 @@ private fun MemberRow(
         isOffline -> 0.72f
         else -> 1f
     }
+    val hasQuickActions = onQuickRefresh != null || onQuickOpenMaps != null || onQuickHistory != null
+    Box {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .pressScaleClickable(pressedScale = 0.98f, onClick = onClick)
+            .let { mod ->
+                if (hasQuickActions) {
+                    // Long-press otvara quick actions dropdown menu; short-tap = detail sheet.
+                    mod.pressScaleCombinedClickable(
+                        pressedScale = 0.98f,
+                        onClick = onClick,
+                        onLongClick = { menuExpanded = true },
+                    )
+                } else {
+                    mod.pressScaleClickable(pressedScale = 0.98f, onClick = onClick)
+                }
+            }
             .padding(14.dp)
             .alpha(rowAlpha),
         verticalAlignment = Alignment.CenterVertically,
@@ -2418,6 +2469,45 @@ private fun MemberRow(
         if (!member.isPrivate() && member.location?.batteryPct != null && member.location.batteryPct >= 0) {
             BatteryBadge(pct = member.location.batteryPct, charging = member.location.charging)
         }
+    }
+    // Long-press quick actions dropdown — pojavljuje se na long-press na row, sa 3
+    // akcije: Refresh location, Open in Google Maps, View history. Ne zamenjuje tap
+    // (tap i dalje otvara detail sheet); ovo je power-user shortcut.
+    androidx.compose.material3.DropdownMenu(
+        expanded = menuExpanded,
+        onDismissRequest = { menuExpanded = false },
+    ) {
+        if (onQuickRefresh != null) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text(stringResource(R.string.member_quick_action_refresh)) },
+                leadingIcon = { Icon(Icons.Outlined.NearMe, contentDescription = null) },
+                onClick = {
+                    menuExpanded = false
+                    onQuickRefresh()
+                },
+            )
+        }
+        if (onQuickOpenMaps != null) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text(stringResource(R.string.member_quick_action_maps)) },
+                leadingIcon = { Icon(Icons.Filled.Directions, contentDescription = null) },
+                onClick = {
+                    menuExpanded = false
+                    onQuickOpenMaps()
+                },
+            )
+        }
+        if (onQuickHistory != null) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text(stringResource(R.string.member_quick_action_history)) },
+                leadingIcon = { Icon(Icons.Outlined.AccessTime, contentDescription = null) },
+                onClick = {
+                    menuExpanded = false
+                    onQuickHistory()
+                },
+            )
+        }
+    }
     }
 }
 

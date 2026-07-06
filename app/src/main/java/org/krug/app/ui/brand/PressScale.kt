@@ -5,6 +5,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
@@ -55,5 +57,41 @@ fun Modifier.pressScaleClickable(
             enabled = enabled,
             role = role,
             onClick = onClick,
+        )
+}
+
+/**
+ * Varijanta sa long-press support-om. Koristi combinedClickable umesto plain clickable.
+ * Ne extract-ovana kao default arg-om na `pressScaleClickable` jer `combinedClickable`
+ * ima drugačiju semantiku (može da eat-uje ripple na long-press) i experimental API.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun Modifier.pressScaleCombinedClickable(
+    pressedScale: Float = 0.96f,
+    enabled: Boolean = true,
+    role: Role? = Role.Button,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val currentScale by animateFloatAsState(
+        targetValue = if (isPressed && enabled) pressedScale else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "press-scale",
+    )
+    return this
+        .scale(currentScale)
+        .combinedClickable(
+            interactionSource = interactionSource,
+            indication = LocalIndication.current,
+            enabled = enabled,
+            role = role,
+            onClick = onClick,
+            onLongClick = onLongClick,
         )
 }

@@ -32,6 +32,7 @@ data class PlacesUiState(
     val currentLng: Double? = null,
     val saving: Boolean = false,
     val loaded: Boolean = false,
+    val refreshing: Boolean = false,
     val error: String? = null,
     val sheetOpen: Boolean = false,
     val editingPlace: PlaceModel? = null,
@@ -80,6 +81,22 @@ class PlacesViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(PlacesUiState())
     val state: StateFlow<PlacesUiState> = _state.asStateFlow()
+
+    /**
+     * Pull-to-refresh gesture handler. Firestore snapshot listener već isporučuje updates
+     * real-time (bez potrebe za pull-to-refresh) — ali user mental model je "povuci pa se
+     * osveži". Pružamo mu vizuelno UX feedback (spinner ~700ms) i force-trigger recompose
+     * kroz `places` StateFlow re-emit. Ne pravimo novi Firestore fetch — nema smisla,
+     * imamo real-time listener.
+     */
+    fun refresh() {
+        if (_state.value.refreshing) return
+        _state.value = _state.value.copy(refreshing = true)
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(700)
+            _state.value = _state.value.copy(refreshing = false)
+        }
+    }
 
     val places: StateFlow<List<PlaceModel>> = placeRepository.observePlaces(circleId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

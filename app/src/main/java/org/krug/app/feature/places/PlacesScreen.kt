@@ -1,16 +1,21 @@
 package org.krug.app.feature.places
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -33,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -98,10 +104,14 @@ fun PlacesScreen(
             }
         },
     ) { padding ->
+        PullToRefreshBox(
+            isRefreshing = state.refreshing,
+            onRefresh = viewModel::refresh,
+            modifier = Modifier.fillMaxSize().padding(padding),
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .padding(horizontal = 20.dp),
         ) {
             if (!state.loaded) {
@@ -112,7 +122,7 @@ fun PlacesScreen(
                     androidx.compose.material3.CircularProgressIndicator()
                 }
             } else if (state.places.isEmpty()) {
-                EmptyState()
+                EmptyState(onAddPlace = onAddPlace)
             } else {
                 // Kompaktne statistike — broj mesta i događaja danas (0h-24h).
                 val todayEventCount = remember(recentEvents) {
@@ -197,6 +207,7 @@ fun PlacesScreen(
                 }
             }
         }
+        } // PullToRefreshBox close
     }
 
     if (state.sheetOpen) {
@@ -312,23 +323,33 @@ private fun humanTimeAgo(date: java.util.Date): String {
 }
 
 @Composable
-private fun EmptyState() {
+private fun EmptyState(onAddPlace: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            Icons.Outlined.Place,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(64.dp),
-        )
-        Spacer(Modifier.size(16.dp))
+        // LogoBlue circle sa Place ikonom — brand accent umesto raw outlined icon-a.
+        // 96dp cirkular sa 40% opacity daje "empty prostor" oseeaj bez da bude previše
+        // dominantan.
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Outlined.Place,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(48.dp),
+            )
+        }
+        Spacer(Modifier.size(20.dp))
         Text(
             stringResource(R.string.places_empty_title),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
         Spacer(Modifier.size(8.dp))
@@ -338,6 +359,22 @@ private fun EmptyState() {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
+        Spacer(Modifier.size(24.dp))
+        // CTA dugme — user ne mora da traži FAB u dnu, može direktno tap iz empty
+        // state-a. Reduces "šta sad?" moment za nove usere.
+        androidx.compose.material3.Button(
+            onClick = onAddPlace,
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+        ) {
+            Icon(
+                Icons.Outlined.Add,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.size(8.dp))
+            Text(stringResource(R.string.places_add_cta))
+        }
     }
 }
 
