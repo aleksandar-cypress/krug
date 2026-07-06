@@ -342,6 +342,20 @@ fun MapScreen(
     // Place focus deep-link — PlacesScreen postavi Focus, ovde flyTo + consume.
     // Zoom se skalira sa radius-om: veći krug = širi pogled da se ceo krug vidi.
     val pendingPlaceFocus by org.krug.app.core.places.PlaceFocusBus.pending.collectAsStateWithLifecycle()
+    val pendingPlaceId by org.krug.app.core.places.PlaceFocusBus.pendingId.collectAsStateWithLifecycle()
+    // Notif click → PlaceFocusBus.requestById(placeId) → MainActivity → ovde:
+    // čekamo da activePlaces sadrži place, pa emit-ujemo standard Focus. Bez ovog,
+    // notif klik samo otvara app a mapa ostane na prethodnoj kameri.
+    LaunchedEffect(pendingPlaceId, activePlaces) {
+        val id = pendingPlaceId ?: return@LaunchedEffect
+        val place = activePlaces.firstOrNull { it.id == id } ?: return@LaunchedEffect
+        Timber.i("PlaceFocus resolved id=$id → name='${place.name}' lat=${place.lat} lng=${place.lng}")
+        org.krug.app.core.places.PlaceFocusBus.request(
+            lat = place.lat, lng = place.lng,
+            name = place.name, radius = place.radius,
+        )
+        org.krug.app.core.places.PlaceFocusBus.consumeId()
+    }
     LaunchedEffect(pendingPlaceFocus) {
         val focus = pendingPlaceFocus
         Timber.d("PlaceFocus effect: pending=$focus, activePlaces.size=${activePlaces.size}")

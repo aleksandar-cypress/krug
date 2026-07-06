@@ -27,4 +27,22 @@ object PlaceFocusBus {
     fun consume() {
         _pending.value = null
     }
+
+    /**
+     * Deep-link iz notifikacije (Place event enter/exit) prosleđuje samo `placeId` jer
+     * PlaceEventNotifier nema instant pristup lokaciji/nazivu/radius-u (Firestore snapshot
+     * može biti stale). MapScreen collect-uje ovaj flow, čeka da `activePlaces` u
+     * MapViewModel-u sadrži place sa tim id-om, pa resolve-uje u Focus i emituje kroz
+     * regular `pending` flow. Tako flyTo logika ima jedan pattern za sve pozive.
+     */
+    private val _pendingId = MutableStateFlow<String?>(null)
+    val pendingId: StateFlow<String?> = _pendingId.asStateFlow()
+
+    fun requestById(placeId: String) {
+        _pendingId.value = placeId
+    }
+
+    fun consumeId() {
+        _pendingId.value = null
+    }
 }

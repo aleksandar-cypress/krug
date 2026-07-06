@@ -76,6 +76,10 @@ class MainActivity : ComponentActivity() {
             ).localPrefs()
             prefs.setActiveCircleId(circleId)
         }
+        // Emit placeId u focus bus — MapScreen ga collect-uje, čeka da activePlaces
+        // sadrži place, pa fly-to na tu koordinatu. Bez ovog, notif klik samo otvara
+        // app i mapa ostaje gde je user prethodno bio (loše UX — pointless notification).
+        org.krug.app.core.places.PlaceFocusBus.requestById(placeId)
         intent.removeExtra(org.krug.app.core.places.PlaceEventNotifier.EXTRA_FOCUS_PLACE_ID)
         intent.removeExtra(org.krug.app.core.places.PlaceEventNotifier.EXTRA_FOCUS_CIRCLE_ID)
     }
