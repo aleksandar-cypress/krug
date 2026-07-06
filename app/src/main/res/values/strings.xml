@@ -402,11 +402,6 @@
     <!-- Auto-status pill (kod imena člana u Members listi + MemberDetailSheet header) -->
     <string name="auto_status_moving">Moving · %1$d km/h</string>
 
-    <!-- Long-press quick actions na Member row-u (Members sheet lista) -->
-    <string name="member_quick_action_refresh">Refresh location</string>
-    <string name="member_quick_action_maps">Open in Google Maps</string>
-    <string name="member_quick_action_history">View history</string>
-
     <!-- Self-share broken banner (prikazuje se kad user-ova lokacija ne stize na server
          pa ga drugi ne vide, iako on ne zna) -->
     <string name="self_share_broken_title">Others can\'t see you right now</string>
