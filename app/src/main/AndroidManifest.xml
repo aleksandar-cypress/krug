@@ -36,11 +36,15 @@
     <!-- Boot receiver — resume sharing after reboot if user opted in -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- Android Auto — Car App Library dozvole. Koristi se POI kategorija (a ne NAVIGATION)
-         jer NAVIGATION zahteva Play Store approval od Google-a; sideloaded debug APK-ovi bi
-         se filtrirali cak i sa Unknown Sources ON. POI (Points of Interest) radi bez Google
-         approval-a i odgovara semantici Krug-a (prikazi lokacije clanova + Places pin-ove).
-         MAP_TEMPLATES je dovoljno; NAVIGATION_TEMPLATES uklonjeno (nema smisla za POI). -->
+    <!-- Android Auto — POI (Points of Interest) kategorija. Semantika Krug-a je pokazivanje
+         lokacija clanova kruga + Places pin-ova, sto je tacno definicija POI. Prednosti:
+         - Google Maps automatski render-uje mapu (bez SurfaceCallback-a i custom tile
+           rendering-a koji NAVIGATION zahteva)
+         - Play Store review prolazi glatko (POI = tacna kategorija, NAVIGATION bi bio
+           odbijen jer Krug ne pruza turn-by-turn)
+         - Sa Unknown Sources ON u dev/debug + production sa Play Store approval, POI apps
+           se ISO prikazuju u Auto launcher-u kao standalone ikone (kao Yelp, ChargePoint,
+           itd.). Ranija pretpostavka da POI apps "launch-uju iz Maps-a" bila je pogresna. -->
     <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
 
     <!-- Android Auto feature declaration (opciono ali preporučeno za Play Store filter). -->

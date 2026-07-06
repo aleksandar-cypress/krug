@@ -222,6 +222,7 @@
     <string name="car_no_members">No members with location right now</string>
     <string name="car_action_refresh">Refresh</string>
     <string name="car_loading">Loading circle…</string>
+    <string name="car_signin_required">Open Krug on your phone and sign in to see your circle here.</string>
 
     <!-- What's new in v1.1 -->
     <string name="whats_new_title">What\'s new</string>

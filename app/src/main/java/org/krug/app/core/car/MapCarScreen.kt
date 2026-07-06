@@ -24,6 +24,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -35,6 +36,8 @@ import org.krug.app.core.places.PlaceModel
 import org.krug.app.core.places.PlaceRepository
 import org.krug.app.core.prefs.LocalPrefs
 import org.krug.app.core.user.UserRepository
+import org.krug.app.core.util.formatDistance
+import org.krug.app.core.util.haversineMeters
 import timber.log.Timber
 
 /**
@@ -77,23 +80,46 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
     @Volatile private var members: List<CarMember> = emptyList()
     @Volatile private var places: List<PlaceModel> = emptyList()
     @Volatile private var loaded: Boolean = false
+    /** Sopstvena (auto) lat/lng za distance-to-member u subtitle. Null dok nemamo fix. */
+    @Volatile private var selfLat: Double? = null
+    @Volatile private var selfLng: Double? = null
+
+    private val authListener = com.google.firebase.auth.FirebaseAuth.AuthStateListener {
+        // User signs in/out — refresh Screen and (re)start observers ako je user prisutan.
+        invalidate()
+        if (it.currentUser != null && collectorJob == null) {
+            startObserving()
+        }
+    }
 
     init {
         startObserving()
+        auth.addAuthStateListener(authListener)
+        lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+            override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) {
+                auth.removeAuthStateListener(authListener)
+                collectorJob?.cancel()
+                scope.cancel()
+            }
+        })
     }
 
     override fun onGetTemplate(): Template {
         val listBuilder = ItemList.Builder()
-        if (!loaded) {
+        if (auth.currentUser == null) {
+            listBuilder.setNoItemsMessage(carContext.getString(R.string.car_signin_required))
+        } else if (!loaded) {
             listBuilder.setNoItemsMessage(carContext.getString(R.string.car_loading))
         } else if (members.isEmpty() && places.isEmpty()) {
             listBuilder.setNoItemsMessage(carContext.getString(R.string.car_no_members))
         } else {
+            val sLat = selfLat
+            val sLng = selfLng
             // Prvo članovi (češće relevant), pa Places.
             members.forEach { m ->
                 val row = Row.Builder()
                     .setTitle(m.name)
-                    .addText(m.subtitle)
+                    .addText(withDistance(m.subtitle, sLat, sLng, m.lat, m.lng))
                 if (m.lat != null && m.lng != null) {
                     val place = Place.Builder(CarLocation.create(m.lat, m.lng))
                         .setMarker(
@@ -118,7 +144,7 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
                     .build()
                 val row = Row.Builder()
                     .setTitle("📍 ${p.name}")
-                    .addText("${p.radius} m")
+                    .addText(withDistance("${p.radius} m", sLat, sLng, p.lat, p.lng))
                     .setMetadata(Metadata.Builder().setPlace(place).build())
                     .setOnClickListener { launchNavigate(p.lat, p.lng, p.name) }
                     .setBrowsable(true)
@@ -136,10 +162,6 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
                     .build(),
             )
             .build()
-        // PlaceListMapTemplate (POI kategorija) umesto PlaceListNavigationTemplate
-        // (NAVIGATION kategorija). Razlog: NAVIGATION kategorija zahteva Play Store approval
-        // od Google-a; sideloaded/debug APK-ovi se filtriraju cak i sa Unknown Sources ON.
-        // POI kategorija radi sa Unknown Sources bez Google approval-a.
         return PlaceListMapTemplate.Builder()
             .setTitle(carContext.getString(R.string.car_title))
             .setHeaderAction(Action.APP_ICON)
@@ -203,6 +225,33 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
                 invalidate()
             }
         }
+        // Self location — puni selfLat/selfLng za distance kalkulaciju u onGetTemplate.
+        // Koristi isti Firebase Realtime DB feed kao peer-i (LocationTrackingService FGS
+        // ga pushuje kad je Krug u foreground-u ili share aktivan). Ako user nema aktivan
+        // share, subtitle jednostavno nema distance prefix — graceful degradation.
+        scope.launch {
+            locationRepository.observe(selfUid).collectLatest { loc ->
+                selfLat = loc?.lat
+                selfLng = loc?.lng
+                invalidate()
+            }
+        }
+    }
+
+    /**
+     * Prepend distance-to-target ako imamo sopstvenu lokaciju i target coords, npr.
+     * "3.2 km · sada · GPS 25m". Kad nema self fix-a, vraca original subtitle.
+     */
+    private fun withDistance(
+        base: String,
+        selfLat: Double?,
+        selfLng: Double?,
+        tgtLat: Double?,
+        tgtLng: Double?,
+    ): String {
+        if (selfLat == null || selfLng == null || tgtLat == null || tgtLng == null) return base
+        val meters = haversineMeters(selfLat, selfLng, tgtLat, tgtLng)
+        return "${formatDistance(carContext, meters)} · $base"
     }
 
     private fun launchNavigate(lat: Double, lng: Double, label: String) {
