@@ -223,20 +223,59 @@ nije bilo dogovoreno + imao je bug (white background stuck posle dismiss zbog
 neispisanog Press interaction-a u interactionSource). Vraceno na plain
 `pressScaleClickable`.
 
-### I) Preostalo za sledeću sesiju
+### I) Post-scriptum 3 (nastavak sesije, još 5 commit-a)
 
-1. **Fizički Auto test** — priključi S24 na auto, verifikuj da se Krug list-uje
-   u Auto meniju (posle 5+ fixeva: POI kategorija, car-app 1.7.0,
-   minCarApiLevel=4, service label/icon, Play Store installer flag).
+Sesija je nastavljena posle STATUS.md post-scriptum #2 sa još 5 commit-a
+(`0d43c3a` → `092d9b0`) — ukupno 28 commit-a u toku 28. sesije.
+
+**Member removal (`0d43c3a`)**: iz P1 audit-a. `CircleRepository.removeMember()`
+novi metod, `CircleDetailViewModel.removeMember()` wrapper, `MemberRow`
+DropdownMenu dobija "Remove from circle" stavku (crveni text), AlertDialog
+confirm sa imenom. Owner-only, ne za self ni za owner target.
+
+**Geocoding retry UX (`ff1bb45`)**: `GeocodingRepository.SearchResult` sealed
+class (Success/Empty/Error), `PlacesViewModel.SearchState` 5-branch state,
+`retrySearch()` funkcija, `AddPlaceScreen` when(state) UI sa Loading spinner-om,
+Error crveni text + "Try again", "No results" tekst, itd.
+
+**Place auto-suggest (`eb5f715`)**: automatska detekcija hotspot-ova iz 7d
+self history-ja. `PlaceSuggestion` data class + `detectPlaceSuggestions()`
+algoritam (grid 100m, 20+ pointova preko 3+ dana, filter 200m od postojećih
+places). `SuggestedNameType` enum (HOME/WORK/GENERIC) sa vremenskim heuristikom.
+`LocationHistoryRepository.queryHistorySince()` one-shot query. `SuggestionCard`
+composable u PlacesScreen. `AddPlace` route + Screen prima
+`prefillLat/prefillLng/prefillName` — auto-fokus mape na predloženu tačku.
+
+**Hard braking count (`7fbfc91`)**: MVP driving reports feature. `HistoryStats`
+dobija `hardBrakingCount: Int`. Algoritam: deceleration > 4 m/s² (industry
+standard) između uzastopnih pointova, filter avg speed > 5 m/s da eliminiše
+pešačku setnju. Chip u HistoryScreen prikaz-uje se samo ako count > 0.
+
+**Play Services geofence reconciliation filter (`092d9b0`)**: user javio da
+je iz čista mira dobio 3 spam notifikacije bez fizičkog kretanja Jelene.
+Root cause: Play Services "reconciles" geofence state kad se GPS accuracy
+oporavi posle nesigurnog perioda — fire-uje sintetičke EXIT+ENTER events da
+"corrigira" percepciju. Three-layer fix u `GeofenceBroadcastReceiver`:
+- Accuracy filter: skip ako triggeringLocation.accuracy > 150m
+- Age filter: skip ako triggeringLocation.time > 5 min u prošlosti
+- Dedup window: 60s → 5min (reconciliation storm-ovi mogu trajati 2-3 min)
+
+### J) Preostalo za sledeću sesiju
+
+1. **Fizički Auto test** — priključi S24 na auto, verifikuj da se Krug list-uje.
 2. **Play Store closed testing** — 9/12 opted-in tester-a, treba 3 još.
 3. **Untested feature-e** — SOS end-to-end, Refresh location ping-back,
    Silent hours enforcement, auto-status Speed uvek prikazan.
-4. **Onboarding/Auth audit** — nije uradjen ove sesije (SOS/Places/Circle jesu).
-5. **Unit testovi** — `computeHasMovement`, `clusterByProximity`, `isOffline`
-   grace period, `formatTimeAt` — sve pure funkcije, trenutno bez pokrivenosti.
-6. **Bigger feature (deferred iz audit-a)** — member removal (Circle),
-   ownership transfer, `usecase="poi"` u automotive_app_desc.xml (nepotvrđeno
-   da li menja Auto ponašanje).
+4. **Big features iz roadmap-a** — Home widget (Glance API, 3-5h), Crash
+   detection (sensor logic + false-positive tuning, 3-4h), Weekly driving
+   report aggregate.
+5. **Ownership transfer** — Circle owner-to-member ownership handoff sa
+   picker UI (postojeći `deleteCircle` je fallback ako owner hoće da napusti).
+6. **FCM token upload** — trenutno se ne piše u Firestore (nema FirebaseMessagingService
+   za onNewToken). Blocked feature: Cloud Functions push (server-triggered SOS,
+   backup fetch for offline members).
+7. **Unit testovi** — proširiti `Cluster.kt` sa velikim datasetima, dodati
+   testove za `computeHasMovement`, `formatTimeAt`, `detectPlaceSuggestions`.
 
 ---
 
