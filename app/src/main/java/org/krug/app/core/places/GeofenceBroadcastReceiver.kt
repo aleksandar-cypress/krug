@@ -35,6 +35,18 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    companion object {
+        /**
+         * In-memory dedup: (placeId + type) → last event time. Defence layer preko fixera
+         * u GeofenceManager (INITIAL_TRIGGER = 0) — čak i ako Google Play Services zbog
+         * bug-a ili race-a fire-uje duplicate ENTER/EXIT unutar kratkog vremena, ne pišemo
+         * duplicate write u Firestore. Cooldown 60s pokriva realne re-trigger scenarije
+         * (npr. GPS jitter oko boundary-ja).
+         */
+        private const val DEDUP_WINDOW_MS = 60_000L
+        private val lastEventTimes = mutableMapOf<String, Long>()
+    }
+
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent == null) return
         if (intent.action != GeofenceManager.ACTION_GEOFENCE_TRANSITION) return
@@ -74,6 +86,15 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                 val userName = fetchUserName(uid)
                 triggered.forEach { fence ->
                     val (circleId, placeId) = parseRequestId(fence.requestId) ?: return@forEach
+                    // Dedup: preskoči duplicate event unutar 60s (isti place, isti transition).
+                    val key = "$placeId:$type"
+                    val now = System.currentTimeMillis()
+                    val last = synchronized(lastEventTimes) { lastEventTimes[key] } ?: 0L
+                    if (now - last < DEDUP_WINDOW_MS) {
+                        Timber.d("GeofenceReceiver: dedup skip $key (last ${now - last}ms ago)")
+                        return@forEach
+                    }
+                    synchronized(lastEventTimes) { lastEventTimes[key] = now }
                     val placeName = fetchPlaceName(circleId, placeId) ?: placeId
                     placeRepository.logEvent(
                         circleId = circleId,

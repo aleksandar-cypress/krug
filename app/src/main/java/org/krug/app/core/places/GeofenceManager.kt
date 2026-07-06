@@ -79,8 +79,15 @@ class GeofenceManager @Inject constructor(
                 .setNotificationResponsiveness(30_000)
                 .build()
         }
+        // INITIAL_TRIGGER = 0: NE fire-uj ENTER event samo zato što je user unutar geofence-a
+        // pri registraciji. Bez ovog: svaki put kad se places lista promeni (kreiran nov
+        // place, edit, snapshot re-fire zbog reconnect-a), sve geofences se re-registruju
+        // i ENTER fire-uje za sve place-ove gde je user trenutno unutra. Rezultat: spam
+        // notifikacija ostalim članovima kruga ("Aleksandar stigao kod kuće" x4 iako se
+        // Aleksandar nije pomerio). Enter/exit će se fire-ovati SAMO kad user fizički
+        // pređe granicu, što je jedina korisna semantika.
         val request = GeofencingRequest.Builder()
-            .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
+            .setInitialTrigger(0)
             .addGeofences(geofences)
             .build()
         return try {

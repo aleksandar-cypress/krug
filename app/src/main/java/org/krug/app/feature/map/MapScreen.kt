@@ -864,6 +864,7 @@ fun MapScreen(
                 MembersSheet(
                     members = state.members,
                     photoCache = photoCache,
+                    autoStatusByUid = autoStatusByUid,
                     onMemberClick = { uid ->
                         haptic()
                         sheetVisible = false
@@ -889,6 +890,7 @@ fun MapScreen(
                 MembersSheet(
                     members = chooserMembers,
                     photoCache = photoCache,
+                    autoStatusByUid = autoStatusByUid,
                     onMemberClick = { uid ->
                         haptic()
                         clusterChooserUids = null
@@ -2218,6 +2220,7 @@ private fun CirclePickerRow(
 private fun MembersSheet(
     members: List<MemberWithLocation>,
     photoCache: Map<String, Bitmap>,
+    autoStatusByUid: Map<String, String> = emptyMap(),
     onMemberClick: (String) -> Unit,
 ) {
     // Sort: self prvi, pa SOS, pa active (recent updatedAt), pa long-offline ghost.
@@ -2256,6 +2259,7 @@ private fun MembersSheet(
                     MemberRow(
                         member = m,
                         photo = m.photoUrl?.let { photoCache[it] },
+                        autoStatus = autoStatusByUid[m.uid],
                         onClick = { onMemberClick(m.uid) },
                     )
                 }
@@ -2290,6 +2294,7 @@ private fun MembersSheet(
 private fun MemberRow(
     member: MemberWithLocation,
     photo: Bitmap?,
+    autoStatus: String? = null,
     onClick: () -> Unit = {},
 ) {
     val markerColor = when {
@@ -2381,19 +2386,18 @@ private fun MemberRow(
                 else -> lastSeenLabel(member.location?.updatedAt)
             }
             // Ako je displayName već device naziv (anon user bez nicknamea), ne ponavljaj
-            // device u status liniji — bila bi duplikacija.
-            val deviceSuffix = if (
+            // device u status liniji — bila bi duplikacija. AutoStatus (u pokretu / u
+            // mestu) ima prednost nad device suffix-om jer je informativniji.
+            val suffix = when {
+                !autoStatus.isNullOrBlank() && member.sos == null && !priv && !offline -> " · $autoStatus"
                 member.deviceModel.isNotBlank() &&
-                member.sos == null &&
-                !priv &&
-                !member.displayName.equals(member.deviceModel, ignoreCase = true)
-            ) {
-                " · ${member.deviceModel}"
-            } else {
-                ""
+                    member.sos == null &&
+                    !priv &&
+                    !member.displayName.equals(member.deviceModel, ignoreCase = true) -> " · ${member.deviceModel}"
+                else -> ""
             }
             Text(
-                text = statusLine + deviceSuffix,
+                text = statusLine + suffix,
                 style = MaterialTheme.typography.bodySmall,
                 color = when {
                     member.sos != null -> SosRed
