@@ -66,8 +66,11 @@ class PlaceEventNotifier @Inject constructor(
             R.string.places_notif_body_exit
         }
         val body = context.getString(bodyRes, userName, event.placeName)
+        // ic_notification je bela silueta na transparent — Android system status bar
+        // ignoriše boju i koristi samo alpha. ic_launcher_foreground (koji je bio ovde)
+        // je obojena launcher ikonica pa je sistem prikazivao kao sivi kvadratić.
         val notif = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.places_notif_title))
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -76,7 +79,7 @@ class PlaceEventNotifier @Inject constructor(
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .addAction(
-                R.drawable.ic_launcher_foreground,
+                R.drawable.ic_notification,
                 context.getString(R.string.places_notif_action_view),
                 pi,
             )
