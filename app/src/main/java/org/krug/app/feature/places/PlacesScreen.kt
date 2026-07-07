@@ -302,7 +302,8 @@ private fun EventRow(event: org.krug.app.core.places.PlaceEventModel) {
         if (isEnter) R.string.places_activity_verb_enter
         else R.string.places_activity_verb_exit,
     )
-    val timeAgo = event.timestamp?.let { humanTimeAgo(it) } ?: "-"
+    val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val timeAgo = event.timestamp?.let { formatEventTimestamp(it, locale) } ?: "-"
     // Enter = zeleni "in" arrow, Exit = narandžasti "out" arrow. Semantički trenutan
     // signal umesto samo teksta ("stigla" vs "otišla" na dvo-jezičnom se lako promasi).
     // Zelena strelica dole = enter (dolazak); narandžasta gore = exit (odlazak).
@@ -335,14 +336,44 @@ private fun EventRow(event: org.krug.app.core.places.PlaceEventModel) {
     }
 }
 
-private fun humanTimeAgo(date: java.util.Date): String {
-    val diff = System.currentTimeMillis() - date.time
-    val mins = diff / 60_000L
-    return when {
-        mins < 1 -> "sada"
-        mins < 60 -> "pre ${mins}min"
-        mins < 24 * 60 -> "pre ${mins / 60}h"
-        else -> "pre ${mins / 60 / 24}d"
+/**
+ * Apsolutno vreme za event (dolazak/odlazak). User feedback: relativno vreme ("pre 2h")
+ * nije precizno kad user hoće da zna tačno kad se šta desilo.
+ *
+ * Format:
+ *  - Danas → "14:32"
+ *  - Juče → "juče, 14:32" (sr) / "yesterday, 2:32 PM" (en)
+ *  - Ove nedelje → "pon, 14:32"
+ *  - Stariji → "3. jul, 14:32"
+ */
+private fun formatEventTimestamp(date: java.util.Date, locale: java.util.Locale): String {
+    val now = java.util.Calendar.getInstance()
+    val evCal = java.util.Calendar.getInstance().apply { time = date }
+    val timeFmt = java.text.SimpleDateFormat("HH:mm", locale)
+    val time = timeFmt.format(date)
+
+    val sameDay = now[java.util.Calendar.YEAR] == evCal[java.util.Calendar.YEAR] &&
+        now[java.util.Calendar.DAY_OF_YEAR] == evCal[java.util.Calendar.DAY_OF_YEAR]
+    if (sameDay) return time
+
+    val yesterday = java.util.Calendar.getInstance().apply {
+        add(java.util.Calendar.DAY_OF_YEAR, -1)
+    }
+    val isYesterday = yesterday[java.util.Calendar.YEAR] == evCal[java.util.Calendar.YEAR] &&
+        yesterday[java.util.Calendar.DAY_OF_YEAR] == evCal[java.util.Calendar.DAY_OF_YEAR]
+    if (isYesterday) {
+        val yLabel = if (locale.language == "sr") "juče" else "yesterday"
+        return "$yLabel, $time"
+    }
+
+    val diffMs = System.currentTimeMillis() - date.time
+    val withinWeek = diffMs < 7L * 24 * 60 * 60 * 1000
+    return if (withinWeek) {
+        val dayFmt = java.text.SimpleDateFormat("EEE", locale)
+        "${dayFmt.format(date)}, $time"
+    } else {
+        val dateFmt = java.text.SimpleDateFormat("d. MMM", locale)
+        "${dateFmt.format(date)}, $time"
     }
 }
 

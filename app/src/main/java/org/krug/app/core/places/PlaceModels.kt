@@ -27,8 +27,11 @@ data class PlaceModel(
         const val MIN_RADIUS_M = 50
         const val MAX_RADIUS_M = 500
 
-        /** Free tier: max 3 places per circle. Premium (v1.1+): unlimited. */
-        const val FREE_TIER_MAX_PER_CIRCLE = 3
+        /**
+         * Max places per circle. Trenutno 10 za sve. Kad premium tier bude implementiran
+         * (v1.2+), plan je: 0-1 free (demo), 10 premium. Za sada svi tester-i imaju 10.
+         */
+        const val FREE_TIER_MAX_PER_CIRCLE = 10
     }
 }
 

@@ -367,6 +367,40 @@ class LocationTrackingService : Service() {
         observeCircleSos()
         observeCirclePlaces()
         registerActivityRecognition()
+        startHeartbeatLoop()
+    }
+
+    /**
+     * Periodični heartbeat — refresh-uje updatedAt na RTDB bez publish-a novog fix-a.
+     *
+     * Scenario koji ovo rešava: user je zaključao telefon i stoji u mestu.
+     * - FGS je živ (isRunning=true)
+     * - RTDB `.info/connected` je i dalje true (nema disconnect-a)
+     * - Ali GPS callback je throttled od strane Doze mode-a (može trajati 15+min bez fix-a)
+     * - Peers vide `online=true` (RTDB radi) ali `updatedAt` je stariji od 5min
+     * - `MemberWithLocation.isOffline()` = true → user greškom prikazan kao offline
+     *
+     * Heartbeat piše samo `updatedAt=ServerValue.TIMESTAMP` svakih HEARTBEAT_INTERVAL_MS
+     * ako je poslednji publish stariji od tog intervala. Cheap ~200B write.
+     *
+     * NE menja lat/lng/battery — te vrednosti ostaju "poslednje poznate" dok GPS ne
+     * fix-uje svež. Ali peers više neće videti isOffline() jer je updatedAt fresh.
+     *
+     * Ako je publishLocation upravo pisao (< HEARTBEAT_INTERVAL_MS), heartbeat skipuje —
+     * `updatedAt` je već svež kroz publish path.
+     */
+    private fun startHeartbeatLoop() {
+        scope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(HEARTBEAT_INTERVAL_MS)
+                val uid = firebaseAuth.currentUser?.uid ?: continue
+                if (!currentSettings.shareLocationGlobal) continue
+                val sinceLastPublish = System.currentTimeMillis() - lastPublishAtMs
+                if (sinceLastPublish < HEARTBEAT_INTERVAL_MS) continue
+                runCatching { locationRepository.heartbeat(uid) }
+                    .onSuccess { Timber.d("heartbeat ok (age=%dms)", sinceLastPublish) }
+            }
+        }
     }
 
     /**
@@ -941,6 +975,12 @@ class LocationTrackingService : Service() {
         const val HISTORY_MAX_INTERVAL_MS = 10 * 60_000L
         /** Force publish za freshness signal čak i bez kretanja. */
         const val FORCE_PUBLISH_INTERVAL_MS = 90_000L
+        /**
+         * Heartbeat interval — updatedAt-only write kad publish nije bio u ovom prozoru.
+         * 3 min < isOffline() prag (5 min), pa peers uvek vide fresh updatedAt dok je FGS živ.
+         * Cheaper od force publish (~200B vs full location payload).
+         */
+        const val HEARTBEAT_INTERVAL_MS = 3 * 60_000L
         /** Maksimum prihvatljive accuracy — fixevi gori od ovog su nepouzdani. */
         const val MAX_ACCEPTABLE_ACCURACY_M = 100f
         /**

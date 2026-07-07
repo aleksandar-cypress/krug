@@ -211,7 +211,23 @@ private fun MemberWithLocation.isLongOffline(now: Long = System.currentTimeMilli
  * na svaki mrežni hicu. 5min je dovoljno za realne short disruptions ali dovoljno kratko
  * da user vidi problem kad je stvarno dugotrajno.
  */
-private const val OFFLINE_GRACE_MS = 5L * 60L * 1000L
+// 10min umesto 5min — sa novim heartbeat-om FGS piše updatedAt svakih 3min čak i u Doze-u,
+// pa 10min grace je i dalje "sveza" data od pouzdanog FGS-a. Sirok grace period ubija false-
+// positive treperenje "online → offline → online" pri kratkim mrežnim prekidima (metro, lift,
+// tunel). Ako je stvarno offline duže od 10min, i dalje se prikazuje jasno.
+private const val OFFLINE_GRACE_MS = 10L * 60L * 1000L
+
+/**
+ * Bottom padding u pixel-ima za flyTo kad je ModalBottomSheet otvoren. ModalBottomSheet
+ * (skipPartiallyExpanded=true) zauzima ~55% ekrana. Bez ovog offset-a, Mapbox centrira pin
+ * u vizuelnom centru mape → pin završi ispod sheet-a, user ga ne vidi.
+ *
+ * 1100px je kompromis: dovoljno da pin ostane iznad sheet-a na phone-ovima 1080x2340 (S24),
+ * dovoljno malo da ne shift-uje kameru previše na malim ekranima. Bolje bi bilo dinamički
+ * čitati sheet visinu, ali Mapbox easeTo/flyTo očekuju sync vrednost pre nego što sheet
+ * animacija završi — statička vrednost radi za sve uobičajene resolucije.
+ */
+private const val MEMBER_SHEET_OFFSET_PX = 1100.0
 
 /**
  * Trenutno offline: server-side onDisconnect handler je označio member-a kao izgubio
@@ -335,7 +351,7 @@ fun MapScreen(
         val uid = pendingSosFocus ?: return@LaunchedEffect
         val member = state.members.firstOrNull { it.uid == uid } ?: return@LaunchedEffect
         val loc = member.location ?: return@LaunchedEffect
-        mapViewState.flyTo(loc.lng, loc.lat)
+        mapViewState.flyTo(loc.lng, loc.lat, sheetOffsetPx = MEMBER_SHEET_OFFSET_PX)
         detailUid = uid
         org.krug.app.core.sos.SosFocusBus.consume()
     }
@@ -393,6 +409,14 @@ fun MapScreen(
                     }
                 }
                 androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
+                    // 1) Self-refresh — kad user otvori Krug, forsiraj svež publish tako
+                    //    da članovi kruga odmah vide njegovu lokaciju kao svežu (bez čekanja
+                    //    sledećeg FORCE_PUBLISH_INTERVAL_MS ciklusa).
+                    org.krug.app.core.location.LocationTrackingService.refreshSelf(context)
+                    // 2) Auto-ping stale članova — njihov FGS ako je živ će odgovoriti sa
+                    //    svežom lokacijom u par sekundi. Ovo je client-side alternativa za
+                    //    Cloud Functions push (koji još nemamo).
+                    viewModel.refreshStaleMembers()
                     val snap = snapshotUpdatedAt ?: return@LifecycleEventObserver
                     snapshotUpdatedAt = null
                     if (currentDetailUidRef.value != null) return@LifecycleEventObserver
@@ -423,7 +447,7 @@ fun MapScreen(
         val (uid, since) = pending
         val loc = state.members.firstOrNull { it.uid == uid }?.location
         if (loc != null && loc.updatedAt > since) {
-            mapViewState.flyTo(loc.lng, loc.lat)
+            mapViewState.flyTo(loc.lng, loc.lat, sheetOffsetPx = MEMBER_SHEET_OFFSET_PX)
             pendingRefocus = null
         }
     }
@@ -643,7 +667,7 @@ fun MapScreen(
             if (uids.size == 1) {
                 val uid = uids.first()
                 state.members.firstOrNull { it.uid == uid }?.location?.let { loc ->
-                    mapViewState.flyTo(loc.lng, loc.lat)
+                    mapViewState.flyTo(loc.lng, loc.lat, sheetOffsetPx = MEMBER_SHEET_OFFSET_PX)
                 }
                 detailUid = uid
             } else {
@@ -876,7 +900,7 @@ fun MapScreen(
                         haptic()
                         sheetVisible = false
                         state.members.firstOrNull { it.uid == uid }?.location?.let { loc ->
-                            mapViewState.flyTo(loc.lng, loc.lat)
+                            mapViewState.flyTo(loc.lng, loc.lat, sheetOffsetPx = MEMBER_SHEET_OFFSET_PX)
                         }
                         detailUid = uid
                     },
@@ -902,7 +926,7 @@ fun MapScreen(
                         haptic()
                         clusterChooserUids = null
                         state.members.firstOrNull { it.uid == uid }?.location?.let { loc ->
-                            mapViewState.flyTo(loc.lng, loc.lat)
+                            mapViewState.flyTo(loc.lng, loc.lat, sheetOffsetPx = MEMBER_SHEET_OFFSET_PX)
                         }
                         detailUid = uid
                     },
@@ -942,7 +966,7 @@ fun MapScreen(
                         //    nekoliko sekundi. Bez ovog, kamera ne reaguje na tap dok ne
                         //    stigne refresh odgovor (može da deluje kao da dugme ne radi).
                         detailMember.location?.let { loc ->
-                            mapViewState.flyTo(loc.lng, loc.lat)
+                            mapViewState.flyTo(loc.lng, loc.lat, sheetOffsetPx = MEMBER_SHEET_OFFSET_PX)
                         }
                         // 2) Baseline = CURRENT updatedAt — kad stigne fresh fix sa novim
                         //    server timestamp-om, LaunchedEffect(pendingRefocus, members)
@@ -1925,11 +1949,24 @@ private class MapViewHolder {
     var onPinClick: ((List<String>) -> Unit)? = null
     var lastFingerprint: String = ""
 
-    fun flyTo(lng: Double, lat: Double, zoom: Double = 16.5) {
+    /**
+     * flyTo sa opcionim bottom padding-om za scenario kad je ModalBottomSheet otvoren.
+     * ModalBottomSheet zauzima ~55% ekrana; bez padding-a, flyTo centrira pin u sredini
+     * ekrana što znači da pin završi ispod sheet-a i user ga ne vidi. Sa bottom padding-om
+     * (u pikselima), Mapbox pomera visual center gore pa pin ostaje vidljiv u gornjem
+     * delu mape iznad sheet-a.
+     *
+     * Default sheetOffsetPx=0 očuvava postojeće ponašanje za pozive bez sheet-a.
+     */
+    fun flyTo(lng: Double, lat: Double, zoom: Double = 16.5, sheetOffsetPx: Double = 0.0) {
+        val padding = if (sheetOffsetPx > 0.0) {
+            EdgeInsets(0.0, 0.0, sheetOffsetPx, 0.0)
+        } else null
         mapView?.mapboxMap?.flyTo(
             CameraOptions.Builder()
                 .center(Point.fromLngLat(lng, lat))
                 .zoom(zoom)
+                .apply { if (padding != null) padding(padding) }
                 .build(),
             MapAnimationOptions.mapAnimationOptions { duration(1200L) },
         )
@@ -2743,8 +2780,11 @@ private fun MemberDetailSheet(
 
         Spacer(Modifier.height(20.dp))
         // Refresh: full-width primary. Za self uvek, za druge samo ako !private && !long-offline.
-        // Visina 48dp + rounded 24dp — matching dole (icon + view history), da su sve tri
-        // dugmadi vizuelno konzistentne visine i corner radius-a.
+        // Ne disable-uje se za isOffline (5min bez publish-a) jer to ne znaci nuzno da je FGS
+        // mrtav — moze biti Doze ili kratak WiFi drop; refresh moze da uspe kad se povrati.
+        // Long-offline (24h+) skriva refresh potpuno preko showRefresh check-a.
+        //
+        // Visina 48dp + rounded 24dp — matching dole (icon + view history).
         val showRefresh = member.isSelf || (!isPrivate && !isLongOffline && member.location != null)
         val buttonHeight = 48.dp
         val buttonShape = RoundedCornerShape(24.dp)
@@ -3160,11 +3200,23 @@ private fun PermissionWarningBanner(onOpenSettings: () -> Unit) {
 private fun SelfShareBrokenBanner(onOpenReliability: () -> Unit) {
     // Rescan on ON_RESUME + periodic tick — banner treba da se auto-otkrije kad FGS
     // vremenom prestane da publish-uje (bez čekanja da user ide van + nazad na screen).
+    //
+    // Grace period 20s posle ON_RESUME: kad user otključa telefon posle dužeg Doze
+    // perioda, FGS ima 15-20s da publikuje svež fix (one-shot request-uje se u
+    // onStartCommand ili triggeruje kroz LocationTracking observer). Bez grace-a,
+    // banner fire-uje momentalno na wake-up (jer je lastPublish 15+min star), a
+    // 3s kasnije FGS publikuje pa banner nestane. User zbunjeno vidi "click to fix"
+    // pa otvori ReliabilityScreen i tamo je sve OK — ova UX nesaglasnost je bila
+    // glavni user feedback (task 9).
     var tick by remember { mutableStateOf(0) }
+    var resumedAt by remember { mutableStateOf(System.currentTimeMillis()) }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) tick++
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                resumedAt = System.currentTimeMillis()
+                tick++
+            }
         }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
@@ -3175,13 +3227,25 @@ private fun SelfShareBrokenBanner(onOpenReliability: () -> Unit) {
             tick++
         }
     }
+    // Posle svakog resume-a, forsiraj re-check 25s kasnije (nakon grace expiry) —
+    // ako je FGS uspeo da publikuje tokom grace-a, banner ostaje sakriven; ako
+    // nije, banner sada fajruje bez čekanja sledećeg 60s tick-a.
+    LaunchedEffect(resumedAt) {
+        kotlinx.coroutines.delay(25_000L)
+        tick++
+    }
 
     val (isBroken, minutesStale) = remember(tick) {
         val running = org.krug.app.core.location.LocationTrackingService.isRunning.get()
         val lastPublish = org.krug.app.core.location.LocationTrackingService.lastPublishAtMs
         val now = System.currentTimeMillis()
         val ageMinutes = if (lastPublish > 0L) ((now - lastPublish) / 60_000L).toInt() else -1
-        val broken = !running || (ageMinutes >= 10)
+        val sinceResume = now - resumedAt
+        // Grace: prvih 20s posle ON_RESUME ne pokazuj banner ako je servis running —
+        // dozvoli FGS-u da publikuje svež fix pre alarma. Ne blokira slucaj kad je FGS
+        // ubijen (!running → banner odmah).
+        val inGrace = sinceResume < 20_000L && running
+        val broken = if (inGrace) false else (!running || (ageMinutes >= 10))
         broken to ageMinutes
     }
 

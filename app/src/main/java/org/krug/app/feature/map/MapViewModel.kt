@@ -260,6 +260,41 @@ class MapViewModel @Inject constructor(
     }
 
     /**
+     * Auto-refresh svih članova čije je poslednje ažuriranje starije od [staleThresholdMs].
+     * Poziva se pri otvaranju MapScreen-a i pri ON_RESUME. Za svakog stale člana šalje
+     * RTDB refresh ping; ako je njihov FGS živ (Doze/screen off ali proces živi), oni će
+     * u kratkom roku publish-ovati svežu lokaciju. Ako je FGS mrtav, ping ostaje bez
+     * odgovora — ne šteti, samo pojede par sekundi.
+     *
+     * Ne pinguje self niti long-offline članove (24h+) jer je verovatnoća uspeha nula.
+     * Rate-limit: `lastAutoRefreshMs` per uid — ne pinguj isti uid češće od 60s (tim
+     * FGS-om je već poslao BURST boost).
+     */
+    private val lastAutoRefreshMs = mutableMapOf<String, Long>()
+    fun refreshStaleMembers(staleThresholdMs: Long = 3L * 60L * 1000L) {
+        val selfUid = authRepository.currentUser?.uid ?: return
+        val now = System.currentTimeMillis()
+        val members = uiState.value.members
+        members.forEach { m ->
+            if (m.uid == selfUid) return@forEach
+            val loc = m.location ?: return@forEach
+            val age = now - loc.updatedAt
+            // Long-offline 24h+ preskoči — FGS je verovatno mrtav.
+            if (age > 24L * 60L * 60L * 1000L) return@forEach
+            // Fresh — ne treba refresh.
+            if (age < staleThresholdMs) return@forEach
+            // Rate-limit.
+            val last = lastAutoRefreshMs[m.uid] ?: 0L
+            if (now - last < 60_000L) return@forEach
+            lastAutoRefreshMs[m.uid] = now
+            viewModelScope.launch {
+                runCatching { locationRepository.requestRefresh(m.uid, selfUid) }
+                    .onFailure { Timber.d("auto-refresh ping failed for %s: %s", m.uid, it.message) }
+            }
+        }
+    }
+
+    /**
      * Auto-status po uid-u: "Kuća" / "U pokretu • 45 km/h" / null.
      * Priority: place presence > motion > null.
      */

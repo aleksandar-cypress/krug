@@ -42,3 +42,12 @@ Thumbs.db
 .externalNativeBuild
 .cxx
 .kotlin/
+
+# Claude Code local settings (per-user, not for commit)
+.claude/
+
+# Screenshot dump (test artifacts, ne komituje se)
+Screenshots/
+
+# Cloud Functions Node modules
+functions/node_modules/

@@ -171,6 +171,35 @@ class CircleRepository @Inject constructor(
     }
 
     /**
+     * Prebaci vlasništvo kruga na drugog člana. Trenutni owner mora da bude signed-in
+     * user (rules enforce-uju). newOwnerUid mora da bude u `memberIds` (verifikacija u
+     * transakciji — ako se u međuvremenu izbačen, transferOwnership fail-uje).
+     *
+     * Transakcija:
+     *  1. Update circle.ownerId = newOwnerUid
+     *  2. Update members/{newOwnerUid}.role = "owner"
+     *  3. Update members/{currentOwnerUid}.role = "member"
+     *
+     * Bez transakcije, race scenario: owner A prebacuje na B, istovremeno neko drugi
+     * izbaci B iz kruga → circle.ownerId = B ali B nije više član = zombie state.
+     */
+    suspend fun transferOwnership(circleId: String, currentOwnerUid: String, newOwnerUid: String) {
+        firestore.runTransaction { tx ->
+            val cref = circle(circleId)
+            val snap = tx.get(cref)
+            check(snap.exists()) { "Circle does not exist" }
+            @Suppress("UNCHECKED_CAST")
+            val memberIds = (snap.get("memberIds") as? List<String>).orEmpty()
+            check(newOwnerUid in memberIds) { "New owner is not a member" }
+            check(snap.getString("ownerId") == currentOwnerUid) { "Not current owner" }
+            tx.update(cref, "ownerId", newOwnerUid)
+            tx.update(members(circleId).document(newOwnerUid), "role", MemberModel.ROLE_OWNER)
+            tx.update(members(circleId).document(currentOwnerUid), "role", MemberModel.ROLE_MEMBER)
+        }.await()
+        Timber.i("Ownership transferred circle=%s from=%s to=%s", circleId, currentOwnerUid, newOwnerUid)
+    }
+
+    /**
      * Označi člana kao dete (ili ukloni oznaku). Owner-only operation — rules
      * dozvoljavaju ovom uid-u da update-uje samo `isChild` field na members docu.
      */

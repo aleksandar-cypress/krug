@@ -92,7 +92,8 @@ class GeofenceManager @Inject constructor(
             .build()
         return try {
             client.addGeofences(request, pendingIntent).await()
-            Timber.i("GeofenceManager: registered %d geofences", geofences.size)
+            lastRegisteredAtMs = System.currentTimeMillis()
+            Timber.i("GeofenceManager: registered %d geofences (startup grace begins)", geofences.size)
             true
         } catch (e: Exception) {
             Timber.e(e, "GeofenceManager: addGeofences failed")
@@ -139,6 +140,16 @@ class GeofenceManager @Inject constructor(
 
     companion object {
         const val ACTION_GEOFENCE_TRANSITION = "org.krug.app.GEOFENCE_TRANSITION"
+
+        /**
+         * Timestamp poslednje geofence re-registracije. Koristi ga BroadcastReceiver
+         * za "startup grace" filter — Play Services često firira spurious reconciliation
+         * event-e u prvih 60-120s posle registracije jer joj treba vreme da uskladi
+         * cache-ovan geofence state sa aktuelnom lokacijom uređaja. Ovi event-i imaju
+         * fresh accuracy i fresh timestamp, pa ih ne hvataju accuracy/age filter-i.
+         */
+        @Volatile var lastRegisteredAtMs: Long = 0L
+        const val STARTUP_GRACE_MS = 2L * 60_000L
     }
 }
 

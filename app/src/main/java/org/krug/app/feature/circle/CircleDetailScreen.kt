@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.Place
+import androidx.compose.material.icons.outlined.WorkspacePremium
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -79,6 +80,7 @@ fun CircleDetailScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showEditSheet by remember { mutableStateOf(false) }
     var pendingRemove by remember { mutableStateOf<CircleDetailMember?>(null) }
+    var pendingTransfer by remember { mutableStateOf<CircleDetailMember?>(null) }
     val editSheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
 
@@ -134,69 +136,80 @@ fun CircleDetailScreen(
             )
             Spacer(Modifier.size(24.dp))
 
-            // Vlasnik dobija dva entry-ja: običan poziv i poziv za dete (preset isChild=true
-            // čim novi član prihvati invite). Članovi (non-owner) ne vide ova dugmad.
-            if (state.isOwner) {
-                Button(
-                    onClick = { viewModel.generateInvite(forChild = false) },
-                    enabled = !state.generatingInvite,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    ButtonLeadingIconOrSpinner(
-                        loading = state.generatingInvite,
-                        icon = Icons.Outlined.PersonAdd,
-                        spinnerColor = MaterialTheme.colorScheme.onPrimary,
-                    )
-                    Spacer(Modifier.size(8.dp))
-                    Text(stringResource(R.string.circle_detail_invite_cta))
-                }
-                Spacer(Modifier.size(8.dp))
-                OutlinedButton(
-                    onClick = { viewModel.generateInvite(forChild = true) },
-                    enabled = !state.generatingInvite,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    ButtonLeadingIconOrSpinner(
-                        loading = state.generatingInvite,
-                        icon = Icons.Outlined.ChildCare,
-                        spinnerColor = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(Modifier.size(8.dp))
-                    Text(stringResource(R.string.circle_detail_invite_child))
-                }
-            } else {
-                Button(
-                    onClick = { viewModel.generateInvite(forChild = false) },
-                    enabled = !state.generatingInvite,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    ButtonLeadingIconOrSpinner(
-                        loading = state.generatingInvite,
-                        icon = Icons.Outlined.PersonAdd,
-                        spinnerColor = MaterialTheme.colorScheme.onPrimary,
-                    )
-                    Spacer(Modifier.size(8.dp))
-                    Text(stringResource(R.string.circle_detail_invite_cta))
-                }
-            }
-
-            Spacer(Modifier.size(12.dp))
-            OutlinedButton(
-                onClick = { onOpenPlaces(state.circleId) },
+            // Primary CTA — poziv članova, full-width. Ispod ide Row sekundarnih akcija
+            // (Invite child + Places) da se sačuva vertikalni prostor. Non-owner nema
+            // "Invite child" pa dobija Row sa samo Places (weight 1 + Spacer weight 1)
+            // ili može ostati full-width; ovde je Places full-width jer nema para.
+            Button(
+                onClick = { viewModel.generateInvite(forChild = false) },
+                enabled = !state.generatingInvite,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Place,
-                    contentDescription = null,
+                ButtonLeadingIconOrSpinner(
+                    loading = state.generatingInvite,
+                    icon = Icons.Outlined.PersonAdd,
+                    spinnerColor = MaterialTheme.colorScheme.onPrimary,
                 )
                 Spacer(Modifier.size(8.dp))
-                Text(
-                    if (state.placesCount > 0) {
-                        "${stringResource(R.string.places_section_title)} (${state.placesCount})"
-                    } else {
-                        stringResource(R.string.places_section_title)
-                    },
-                )
+                Text(stringResource(R.string.circle_detail_invite_cta))
+            }
+            Spacer(Modifier.size(8.dp))
+
+            val placesLabel = if (state.placesCount > 0) {
+                "${stringResource(R.string.places_section_title_short)} (${state.placesCount})"
+            } else {
+                stringResource(R.string.places_section_title_short)
+            }
+            if (state.isOwner) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { viewModel.generateInvite(forChild = true) },
+                        enabled = !state.generatingInvite,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            horizontal = 12.dp,
+                            vertical = 12.dp,
+                        ),
+                    ) {
+                        ButtonLeadingIconOrSpinner(
+                            loading = state.generatingInvite,
+                            icon = Icons.Outlined.ChildCare,
+                            spinnerColor = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.size(6.dp))
+                        Text(
+                            stringResource(R.string.circle_detail_invite_child_short),
+                            maxLines = 1,
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = { onOpenPlaces(state.circleId) },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            horizontal = 12.dp,
+                            vertical = 12.dp,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Place,
+                            contentDescription = null,
+                        )
+                        Spacer(Modifier.size(6.dp))
+                        Text(placesLabel, maxLines = 1)
+                    }
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { onOpenPlaces(state.circleId) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Place,
+                        contentDescription = null,
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text(placesLabel)
+                }
             }
 
             Spacer(Modifier.size(24.dp))
@@ -219,6 +232,13 @@ fun CircleDetailScreen(
                         },
                         onRemoveMember = if (state.isOwner && !m.isSelf && !m.isOwner) {
                             { pendingRemove = m }
+                        } else null,
+                        // Ownership transfer: samo owner vidi opciju, samo za ne-self,
+                        // ne-owner (već je vlasnik) i ne-child (deca ne mogu biti owner-i
+                        // — parental control assumption). Ako kasnije treba omogućiti,
+                        // ukloniti !m.isChild.
+                        onTransferOwner = if (state.isOwner && !m.isSelf && !m.isOwner && !m.isChild) {
+                            { pendingTransfer = m }
                         } else null,
                     )
                 }
@@ -334,6 +354,38 @@ fun CircleDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    val transferTarget = pendingTransfer
+    if (transferTarget != null) {
+        AlertDialog(
+            onDismissRequest = { pendingTransfer = null },
+            title = { Text(stringResource(R.string.member_transfer_confirm_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.member_transfer_confirm_body,
+                        transferTarget.displayName.ifBlank {
+                            stringResource(R.string.circle_detail_role_member)
+                        },
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    view.rejectHaptic()
+                    viewModel.transferOwnership(transferTarget.uid)
+                    pendingTransfer = null
+                }) {
+                    Text(stringResource(R.string.member_transfer_confirm_action))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingTransfer = null }) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },
@@ -468,6 +520,7 @@ private fun MemberRow(
     canManage: Boolean = false,
     onToggleChild: (Boolean) -> Unit = {},
     onRemoveMember: (() -> Unit)? = null,
+    onTransferOwner: (() -> Unit)? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Row(
@@ -556,6 +609,23 @@ private fun MemberRow(
                             onToggleChild(!m.isChild)
                         },
                     )
+                    // "Make owner" — prebacivanje ownership-a. Iznad Remove-a jer je
+                    // konstruktivna akcija (za razliku od destruktivnog Remove-a).
+                    if (onTransferOwner != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.member_menu_transfer_owner)) },
+                            leadingIcon = {
+                                Icon(
+                                    androidx.compose.material.icons.Icons.Outlined.WorkspacePremium,
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                menuOpen = false
+                                onTransferOwner()
+                            },
+                        )
+                    }
                     // "Remove from circle" — samo za non-self non-owner članove. Owner
                     // ne može da izbaci samog sebe (mora Delete circle) niti drugog
                     // owner-a (ne postoji multi-owner scenario, ali defensive).

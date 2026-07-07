@@ -44,8 +44,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
+import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
+import com.mapbox.maps.plugin.animation.MapAnimationOptions
+import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationManager
@@ -173,19 +176,36 @@ fun HistoryScreen(
         // Fit bounds SAMO prvi put kad points za taj dan stignu — kasnije user ima punu
         // manuelnu kontrolu (pinch zoom, pan). Bez ovog: scrub bi svaki put resetovao
         // camera i user ne bi mogao da zumira detalje.
+        //
+        // cameraForCoordinates sa padding-om (a ne manual center + fixed zoom 13.0) —
+        // ranije je fixed zoom značio da duži putevi (npr. Beograd → Novi Sad) ispadaju
+        // van view-a i user je morao ručno da zumira out. Padding pokriva TopBar (~120px
+        // sa system UI) + scrub kontrole (~260px sa slajder-om i action redovima) — bez
+        // ovog polilinija bi ušla ispod donjih kontrola.
+        //
+        // Delay 250ms: cameraForCoordinates zahteva da je map view layout completed
+        // (nenula dimenzije). LaunchedEffect fajruje čim polylineManager postane != null,
+        // ali AndroidView layout može još da bude 0x0 u tom trenutku → cameraForCoordinates
+        // vraća default (svet). Delay čeka da prvi frame prođe pa je map size valid.
+        //
+        // easeTo umesto setCamera: animirana tranzicija (700ms) da user vidi da se view
+        // menja — bez animacije, sudden jump izgleda kao bug.
         if (!cameraFitDone) {
-            val bounds = points.map { it.lat to it.lng }
-            val minLat = bounds.minOf { it.first }
-            val maxLat = bounds.maxOf { it.first }
-            val minLng = bounds.minOf { it.second }
-            val maxLng = bounds.maxOf { it.second }
-            mapView?.mapboxMap?.setCamera(
-                CameraOptions.Builder()
-                    .center(Point.fromLngLat((minLng + maxLng) / 2, (minLat + maxLat) / 2))
-                    .zoom(13.0)
-                    .build(),
-            )
             cameraFitDone = true
+            val mv = mapView ?: return@LaunchedEffect
+            kotlinx.coroutines.delay(250L)
+            val coords = points.map { Point.fromLngLat(it.lng, it.lat) }
+            val cam = mv.mapboxMap.cameraForCoordinates(
+                coordinates = coords,
+                camera = CameraOptions.Builder().build(),
+                coordinatesPadding = EdgeInsets(120.0, 60.0, 260.0, 60.0),
+                maxZoom = 16.0,
+                offset = null,
+            )
+            mv.mapboxMap.easeTo(
+                cam,
+                MapAnimationOptions.mapAnimationOptions { duration(700L) },
+            )
         }
     }
 

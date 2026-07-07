@@ -13,6 +13,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -117,12 +118,34 @@ class AuthRepository @Inject constructor(
                 ?: return SignInResult.Failure(SignInResult.Reason.Unknown)
             refreshDatabaseAuth(user)
             userRepository.upsertOnSignIn(user, deviceLabel())
+            syncFcmToken(user.uid)
             Timber.i("Sign-in: google, uid=%s", user.uid)
             SignInResult.Success(user)
         } catch (e: Exception) {
             Timber.e(e, "Firebase sign-in failed")
             SignInResult.Failure(mapFirebaseAuthError(e), e)
         }
+    }
+
+    /**
+     * Posle sign-in-a, fetch trenutni FCM token i uploaduj u Firestore. Ovo je za
+     * scenario kada je onNewToken() fajrovao PRE nego što je user bio signed-in
+     * (fresh install, prvi launch pre auth) — token bi bio poznat Firebase-u ali ne
+     * bi bio u našem Firestore user record-u. Cloud Functions čita fcmToken iz
+     * Firestore-a; bez ovog helper-a, push-evi ne bi radili do prvog token rotation-a
+     * koji Firebase periodično radi (~6 meseci).
+     *
+     * runCatching + best-effort — ako token fetch ne uspe (rare), sign-in ne pada;
+     * onNewToken će nadoknaditi kad Firebase sledeći put rotira token.
+     */
+    private suspend fun syncFcmToken(uid: String) {
+        runCatching {
+            val token = FirebaseMessaging.getInstance().token.await()
+            if (token.isNotBlank()) {
+                userRepository.updateFcmToken(uid, token)
+                Timber.i("FCM token synced post sign-in for uid=%s (len=%d)", uid, token.length)
+            }
+        }.onFailure { Timber.w(it, "syncFcmToken failed for uid=%s", uid) }
     }
 
     /**
@@ -156,6 +179,7 @@ class AuthRepository @Inject constructor(
             // konekciju da se prihvati novi token.
             refreshDatabaseAuth(user)
             userRepository.upsertOnSignIn(user, deviceLabel())
+            syncFcmToken(user.uid)
             Timber.i("Sign-in: anonymous, uid=%s", user.uid)
             SignInResult.Success(user)
         } catch (e: Exception) {

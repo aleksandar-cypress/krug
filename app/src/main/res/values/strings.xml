@@ -74,6 +74,9 @@
     <string name="reliability_status_service_on">Running</string>
     <string name="reliability_status_service_off">Stopped</string>
     <string name="reliability_status_never">Never</string>
+    <string name="reliability_status_publish_stale_action">Send now</string>
+    <string name="reliability_status_publish_stale_hint">Location wasn\'t sent recently. Tap to force a fresh update.</string>
+    <string name="reliability_status_publish_sent">Refresh requested…</string>
     <string name="reliability_settings_row_title">Location reliability</string>
     <string name="reliability_settings_row_subtitle_ok">All checks pass</string>
     <plurals name="reliability_settings_row_subtitle_issues">
@@ -380,7 +383,7 @@
     <string name="member_chip_battery">Battery</string>
     <string name="member_chip_battery_charging">Charging</string>
     <string name="member_chip_distance">Distance</string>
-    <string name="member_chip_distance_aerial">Dist. (line)</string>
+    <string name="member_chip_distance_aerial">Distance</string>
     <string name="member_chip_last_seen">Last seen</string>
     <string name="member_chip_speed">Speed</string>
     <string name="member_chip_speed_value">%1$d km/h</string>
@@ -403,6 +406,8 @@
     <string name="member_refresh_self_done">Refreshed…</string>
     <string name="member_refresh_other">Refresh location</string>
     <string name="member_refresh_other_sent">Request sent…</string>
+    <!-- Shown as subtitle under disabled refresh when target member is offline. -->
+    <string name="member_refresh_offline_hint">Can\'t wake this phone while it\'s offline. Refresh will work when they reconnect.</string>
 
     <!-- Permission banner -->
     <string name="permission_banner_missing">Permission missing</string>
@@ -421,6 +426,11 @@
     <string name="member_remove_confirm_title">Remove member?</string>
     <string name="member_remove_confirm_body">%1$s will no longer see the circle or share location with members.</string>
     <string name="member_remove_confirm_action">Remove</string>
+    <!-- Ownership transfer -->
+    <string name="member_menu_transfer_owner">Make owner</string>
+    <string name="member_transfer_confirm_title">Transfer ownership?</string>
+    <string name="member_transfer_confirm_body">%1$s will become the owner and be able to remove members, delete the circle, and invite others. You will remain a member.</string>
+    <string name="member_transfer_confirm_action">Transfer</string>
 
     <!-- Self-share broken banner (prikazuje se kad user-ova lokacija ne stize na server
          pa ga drugi ne vide, iako on ne zna) -->
@@ -468,6 +478,9 @@
 
     <!-- Circle detail: child invite -->
     <string name="circle_detail_invite_child">Invite child (parental control)</string>
+    <!-- Short labels for CircleDetail secondary button Row (Invite child + Places side-by-side). -->
+    <string name="circle_detail_invite_child_short">Invite child</string>
+    <string name="places_section_title_short">Places</string>
 
     <!-- Privacy: child mode -->
     <string name="privacy_child_lock_title">Parental control active</string>

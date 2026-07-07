@@ -145,6 +145,22 @@ class CircleDetailViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Owner-only: prebaci ownership na drugog člana. Posle uspeha, `isOwner` postaje
+     * false u state-u (jer je observer u observeCircle detektovao change ownerId-a).
+     * Ne setuje `leftOrDeleted` — user ostaje u krugu kao običan član.
+     */
+    fun transferOwnership(newOwnerUid: String) {
+        val currentUid = authRepository.currentUser?.uid ?: return
+        if (!_state.value.isOwner) return
+        if (newOwnerUid == currentUid) return
+        viewModelScope.launch {
+            runCatching {
+                circleRepository.transferOwnership(circleId, currentUid, newOwnerUid)
+            }.onFailure { Timber.w(it, "transferOwnership failed for $circleId → $newOwnerUid") }
+        }
+    }
+
     /** Owner-only edit. Vraća true ako je uspešno; false ako je duplikat ili greška. */
     suspend fun updateDetails(name: String, colorHex: String, iconKey: String): Boolean {
         val s = _state.value

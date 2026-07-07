@@ -57,13 +57,18 @@ service cloud.firestore {
         && request.resource.data.memberIds.size() == 1;
 
       // Update:
-      //   - Owner može da menja sve (osim da prebaci ownerId).
+      //   - Owner može da menja sve (uključujući ownership transfer na drugog člana).
       //   - Bilo koji authenticated user može da doda SAMO sebe u memberIds
       //     (invite-accept flow; klijent prvo proverava invite, rules ne mogu).
       allow update: if isAuthed() && (
-        // Owner update — ownerId mora ostati isti.
+        // Owner update — ownerId ili ostaje isti ili se prebacuje na drugog člana kruga.
+        // Novi owner mora biti u trenutnim memberIds (ne može se ownership prebaciti na
+        // random uid van kruga).
         (resource.data.ownerId == request.auth.uid
-          && request.resource.data.ownerId == resource.data.ownerId)
+          && (
+            request.resource.data.ownerId == resource.data.ownerId
+            || request.resource.data.ownerId in resource.data.memberIds
+          ))
         ||
         // Self-join: jedina izmena je dodavanje request.auth.uid u memberIds.
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
@@ -122,12 +127,19 @@ service cloud.firestore {
         //    bi mogao direktnim API pozivom da obori isChild=false i zaobiđe roditeljsku
         //    kontrolu, ili shareLocation=false ako se taj field jednog dana koristi za
         //    per-circle privacy.
-        //  - Owner sme da menja SAMO `isChild` field (roditeljska kontrola).
+        //  - Owner sme da menja `isChild` field (roditeljska kontrola) i `role` field
+        //    (ownership transfer — trenutni owner postavlja `role=owner` na drugog člana
+        //    i `role=member` na sebe u okviru iste transakcije). Trenutni owner je
+        //    request.auth.uid = circleData.ownerId u trenutku transakcije; posle
+        //    ownership swap-a on više neće biti owner ali u ovom transaction step-u jeste.
         allow update: if (isSelf(memberUid)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nickname']))
           || (isAuthed()
             && request.auth.uid == circleData(cid).ownerId
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isChild']));
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isChild']))
+          || (isAuthed()
+            && request.auth.uid == circleData(cid).ownerId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']));
         allow delete: if isSelf(memberUid)
           || (isAuthed() && request.auth.uid == circleData(cid).ownerId);
       }

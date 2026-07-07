@@ -106,6 +106,24 @@ class LocationRepository @Inject constructor(
     }
 
     /**
+     * Heartbeat — samo osvezi updatedAt bez novog lat/lng fix-a. Namenjeno za scenario:
+     * telefon locked u Doze, FGS radi ali GPS ne dobija svez fix (indoor, ne krece se).
+     * Bez heartbeat-a, updatedAt starije od 5min → peers vide isOffline() = true iako je
+     * user zapravo online.
+     *
+     * Piše samo `updatedAt` (single-child write, ne overwrite parent kao publish() koji
+     * postavi lat/lng/battery/etc). Cheap: ~200B write jednom u 60s.
+     *
+     * Note: `online=true` sam po sebi ne pomaze — MemberWithLocation.isOffline() zahteva
+     * i online=true I updatedAt < 5min. Zato ovaj write mora da bude updatedAt-only.
+     */
+    suspend fun heartbeat(uid: String) {
+        runCatching {
+            locationRef(uid).child("updatedAt").setValue(ServerValue.TIMESTAMP).await()
+        }.onFailure { Timber.d("heartbeat write failed: %s", it.message) }
+    }
+
+    /**
      * Označi self lokaciju kao pauziranu — peers odmah vide "Privatni mod" badge bez
      * čekanja 15min staleness threshold-a. Ne briše lat/lng (peers imaju last-known kao
      * fallback za "Otvori u Google Maps").

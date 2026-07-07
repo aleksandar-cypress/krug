@@ -2,7 +2,284 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-07-06, dvadeset osma sesija — feedback pass posle testiranja na S24 + A55)
+## Gde smo stali (2026-07-07, dvadeset deveta sesija — 10-tacka feedback + Play Store journey + FCM push infrastructure)
+
+Fokus sesije: user je jutros poslao 10 konkretnih problema (recent activity vreme,
+distance label, history fit-bounds, Auto ikonica, Places pricing, ownership transfer,
+CircleDetail buttoni, offline detekcija, banner false-positive, refresh za offline). Fix
+plan → implementacija svih 10 → Play Store internal testing rollout → 3 critical bug-a
+u produkciji → FCM push infrastructure kao dugorocno reševanje "Slobodan ispada offline"
+problema. Ukupno ~15 commit-ova plus prvi Cloud Functions deployment. Play Store journey:
+1.1.0 (versionCode 2) → 1.1.1 → 1.1.2 → 1.1.3 → 1.1.4 (versionCode 9).
+
+### A) 10 tacaka iz jutrošnjeg feedback-a
+
+1. **Recent activity apsolutno vreme** (`PlacesScreen.kt` EventRow) — `humanTimeAgo`
+   zamenjen `formatEventTimestamp(date, locale)`: danas "14:32", juče "juče, 14:32",
+   ove nedelje "pon, 14:32", starije "3. jul, 14:32". Locale-aware sa sr/en fallback.
+
+2. **Distance chip label** — "Dist. (line)" / "Udalj. (vazd.)" → "Distance" / "Razdaljina".
+   User: "ne mozemo jos da letimo, ta informacija nista ne znaci u vazdusnoj liniji".
+   Kraća oznaka koja ne otkriva implementaciju detalj (haversine).
+
+3. **History fit-bounds** — `HistoryScreen.kt:176-189` manual center+zoom=13 zamenjeno
+   `mapboxMap.cameraForCoordinates(coords, EdgeInsets(120, 60, 260, 60), maxZoom=16)`.
+   Dodat 250ms delay pre poziva (Mapbox zahteva valid map dimensions, LaunchedEffect fajruje
+   pre first frame layout-a) + `easeTo` sa 700ms animacijom umesto `setCamera` jump-a.
+   Iterirano 3 puta jer user rekao "još ne vidim celu liniju" — sitno padding tuning.
+
+4. **Android Auto diagnostic** — `KrugCarAppService` dobija `onCreate`/`onDestroy` Timber
+   log-ove (onBind je final u CarAppService pa ne može override, `onCreate` je najbliži
+   hook). Ne testirano fizicki jer user nije mogao u auto. **Realan fix za Auto-listing
+   bio je Play Store distribucija** — debug APK preko ADB-a Auto host odbija bez obzira
+   na `-i "com.android.vending"` flag. Vidi tacku D dole.
+
+5. **Places limit 3 → 10** — `PlaceModel.FREE_TIER_MAX_PER_CIRCLE`. User: "sta nam ostaje
+   za premium onda? Places treba da bude premium exclusive kad implementiramo tier". Za
+   sada svih 10 slobodno, plan za premium tier ide u v1.5+.
+
+6. **Ownership transfer** — nova `CircleRepository.transferOwnership(cid, currentOwner,
+   newOwner)` metoda sa Firestore transakcijom (update ownerId + oba role field-a).
+   `CircleDetailViewModel.transferOwnership(newOwnerUid)` wrapper. MemberRow dropdown
+   dobija "Postavi za vlasnika" (owner-only, ne za self/child/postojeći owner).
+   AlertDialog confirm. **Firestore rules ažurirane**: circle update dozvoljava
+   ownerId change ako je novi u memberIds; members update dozvoljava `role` field
+   change od strane trenutnog owner-a. Deploy-ovane pre APK rollout-a.
+
+7. **CircleDetail buttoni u redu** — `CircleDetailScreen.kt` restructure: primary "Pozovi
+   članove" ostaje full-width, ispod ide Row(Invite Child weight 1, Places weight 1)
+   samo za owner-a. Non-owner: Places full-width. Novi string-ovi `circle_detail_invite_child_short`
+   i `places_section_title_short` za kraće labele koje staju side-by-side.
+
+8. **FGS heartbeat** — `LocationRepository.heartbeat(uid)` piše samo `updatedAt=ServerValue.TIMESTAMP`
+   (single-child write, ne overwrite parent kao publish). `LocationTrackingService.startHeartbeatLoop()`
+   fires svakih 3min (`HEARTBEAT_INTERVAL_MS = 3 * 60_000L`) ako publish nije bio u tom
+   prozoru. Ne menja lat/lng/battery/speed — te ostaju "poslednje poznate". Cheap
+   (~200B RTDB write). **Rešava scenario**: telefon locked u Doze, FGS živ, GPS callback
+   throttled pa nema fresh publish → sa heartbeat-om peers vide fresh `updatedAt` i ne
+   marker-uju offline.
+
+9. **SelfShareBrokenBanner + ReliabilityScreen sync** — banner (`MapScreen.kt:3160`)
+   dobija 20s grace period posle ON_RESUME (dozvoljava FGS-u da publikuje pre firing-a).
+   `resumedAt` tracking + 25s force re-check posle grace expiry. `ReliabilityScreen`
+   sada broji "publish stale" kao issue u HeaderCard count-u + dodaje "Send now" CTA
+   dugme u LiveStatusCard kad je publish stariji od 10min. Trigger-uje `refreshSelf(context)`.
+
+10. **Refresh dugme** — inicijalno hard-disabled za offline članove sa "Can't wake this
+    phone while offline" tooltip-om. **User je odmah rekao "vraćaj to nazad, pre je radilo
+    lepo"**. Revert: refresh je uvek enabled (osim za long-offline 24h+ koji je skriven
+    postojećim `showRefresh` check-om). isOffline 5min ≠ FGS mrtav — može biti Doze/
+    kratak WiFi flicker; refresh može uspeti. Bolje probati nego lažno disable-ovati.
+
+### B) Post-feedback popravke (view-point + reliability)
+
+**View-point bug** (screenshot posle 1.1.2 install-a): kad user tapne Jelenin pin, sheet
+otvara ali pin završi ispod sheet-a (ModalBottomSheet ~55% ekrana). Fix: `mapViewState.flyTo`
+prosiren `sheetOffsetPx: Double = 0.0` param → Mapbox `padding(EdgeInsets(0, 0, offset, 0))`
+pomera visual center gore. Konstanta `MEMBER_SHEET_OFFSET_PX = 1100.0` (kompromis za phone-ove
+1080-2340px). Primenjen na 6 mesta: SOS focus, pendingRefocus, onPinClick, MembersSheet
+onMemberClick, cluster chooser onMemberClick, onRefresh flyTo.
+
+**OFFLINE_GRACE_MS 5min → 10min** — sirok grace period ubija false-positive treperenje
+"online→offline→online" pri kratkim mrežnim prekidima (metro, lift, tunel). Sa heartbeat
+paketom (3min interval) na klijent strani, 10min grace je i dalje "sveza" data.
+
+**Auto-refresh na ON_RESUME** (MapScreen DisposableEffect ON_RESUME hook):
+- `LocationTrackingService.refreshSelf(context)` — forsira svež publish tvoje pozicije
+- `viewModel.refreshStaleMembers()` — pinguje sve stale (>3min old) tuđe članove RTDB-om
+  (rate-limit 60s po uid-u). Njihov FGS ako je živ odgovara u par sekundi.
+
+### C) Play Store journey — 4 release-a, 3 critical bug-a u produkciji
+
+**1.1.1 (versionCode 5) upload → prvi tester-i dobili → app crash-uje na startup-u**
+
+Root cause: R8/ProGuard obfuscation. `PlaceModel` i `PlaceEventModel` (dodati u v1.1
+za Places feature) nisu bili u `proguard-rules.pro` keep listi. Firebase Firestore
+mapper try da toObject → traži `@ServerTimestamp createdAt` polje po imenu → R8 ga je
+preimenovao u `a` → mapper fajluje sa `java.lang.RuntimeException: No properties to
+serialize found on class s8.o`.
+
+Fix (1.1.2):
+- Dodati u keep: `PlaceModel`, `PlaceEventModel`, `LocationHistoryPoint`
+- Defense-in-depth rule: `-keepclasseswithmembers class org.krug.app.** { @com.google.firebase.firestore.ServerTimestamp <fields>; }`
+  automatski čuva bilo koji budući data class sa Firestore annotacijom
+
+**1.1.2 (versionCode 7) upload → nov bug: geofence reconciliation storm**
+
+Scenario: user uninstall + reinstall 1.1.2 (nakon 1.1.1 crash-a). Jelena istovremeno
+otišla u Banjica. Kada je Jelena stigla, **Jelena** je dobila 3 notifikacije: "Aleksandar
+arrived at Home", "Aleksandar left babina kuca", "Aleksandar LEFT Banjica". Aleksandar
+nije mrdao od kuće.
+
+Root cause: fresh reinstall → geofence subsystem morala da rekonstruiše state → Play
+Services fajruje **reconciliation events** za svaki geofence ("gde je user sada u odnosu
+na ovaj geofence") sa svežim GPS fix-om. `setInitialTrigger(0)` teoretski sprečava ovo
+ali Play Services ga ne poštuje 100% na fresh install-u. Postojeći filter-i (accuracy>150m,
+age>5min, dedup 5min) nisu hvatali jer je triggering location bio svež.
+
+Fix (1.1.3):
+- **Startup grace 2min** — `GeofenceManager.lastRegisteredAtMs` tracked. BroadcastReceiver
+  skip-uje sve transitions u prvih 2min posle re-registracije.
+- **Batch reconciliation filter** — real user ne prelazi 2+ granice istovremeno (mesta su
+  100m+ razdaljena). Broadcast sa `triggeringGeofences.size >= 2` skip-uje ceo broadcast
+  kao reconciliation.
+
+**1.1.3 (versionCode 8) upload → stabilno**
+
+### D) Play Store propagation gotchas — leksija za buducnost
+
+- **Debug APK preko ADB (`-i "com.android.vending"`) NIJE dovoljno za Auto listing**.
+  Android Auto host u fizickom vozilu proverava Play Store installer signature strogo,
+  DHU (test tool) je permisivan. Play Store distribucija je neophodna.
+- **Adding email u tester listu ≠ opt-in**. User mora aktivno da klikne opt-in URL
+  (`https://play.google.com/apps/internaltest/{app_id}`) i tap "Accept invitation" pre
+  nego što Play Store počne da nudi update. Google ne šalje email automatski.
+- **Internal Testing update NE ide kroz "Updates available"** u glavnom Play Store meniju.
+  User mora search app-a direktno ili preko opt-in link-a. Ovo je namerni Google dizajn
+  (internal = manualno testiranje, ne push distribution).
+- **Play Store cache može servirati stariju verziju posle upload-a**. Ako user vidi
+  crashujuću verziju umesto najnovije: uninstall + fresh install iz Play Store-a je
+  najbrži fix (bypasš cache).
+- **versionCode je monotoni sekvencijalni brojač** — jednom "potrošen" (rollback, retire),
+  ne može se ponovo koristiti. Nekad je potrebno preskočiti brojeve (7 → 9) zbog
+  neuspelih upload-a.
+
+### E) FCM push infrastructure — Cloud Functions + client (1.1.4)
+
+**Problem koji rešava**: čak i sa heartbeat + auto-refresh paketom (Section B), 20% edge
+case-ova ostaje — kad je FGS ubijen od strane agresivnog OEM battery killer-a (Xiaomi,
+Huawei), telefon je "gluv" za RTDB writes. Aleksandar klikne Refresh za Slobodana, RTDB
+write ide u `locationRequests/`, Slobodanov RTDB listener je queue-ovan u Doze-u, nikad
+ne procesira. "Slobodan ispada offline" ostaje.
+
+**Rešenje — server-triggered wake-up preko FCM push-a:**
+
+**Client (Android):**
+- `KrugMessagingService` (`app/src/main/java/org/krug/app/core/messaging/`) — subclass
+  `FirebaseMessagingService`, `@AndroidEntryPoint`
+- `onNewToken(token)` → `UserRepository.updateFcmToken(uid, token)` piše u Firestore
+- `onMessageReceived(RemoteMessage)` → parsira `data.type`, na "refresh" trigger-uje
+  `LocationTrackingService.refreshSelf(context)`. Data-only push (bez notification field)
+  budi proces čak i u Doze/App Standby.
+- `AuthRepository.syncFcmToken(uid)` — helper zvan posle `upsertOnSignIn` u oba flow-a
+  (Google, Anonymous). Fetch trenutni token preko `FirebaseMessaging.getInstance().token`,
+  upload. Pokriva scenario "onNewToken fajrovao pre sign-in-a".
+- Manifest deklaracija:
+  ```xml
+  <service android:name=".core.messaging.KrugMessagingService" android:exported="false">
+      <intent-filter>
+          <action android:name="com.google.firebase.MESSAGING_EVENT" />
+      </intent-filter>
+  </service>
+  ```
+- ProGuard rule `-keep class org.krug.app.core.user.UserModel { *; }` već postojao,
+  `fcmToken` polje bilo u UserModel od pre.
+
+**Server (Cloud Functions v2):**
+- `functions/index.js` (novi folder), Node.js 20 runtime
+- `exports.onLocationRefreshRequest = onValueCreated({region: "europe-west1", ref: "/locationRequests/{targetUid}/{requesterUid}", instance: "krug-86527-default-rtdb"}, async event => {...})`
+- Fetch FCM token iz Firestore `users/{targetUid}.fcmToken`
+- Send high-priority FCM message (`android.priority: high, ttl: 5min`, data-only)
+- Cleanup logic: ako send fajluje sa `messaging/registration-token-not-registered` ili
+  `invalid-argument`, briše token iz Firestore-a (device uninstall-ovan ili stariji od
+  6 meseci — Firebase periodično rotira)
+
+**Cloud Function region matters**: RTDB je u europe-west1 (google-services.json
+`firebase_url`). Funkcija mora biti u istom regionu ILI trigger fajluje sa "pattern cannot
+match any databases in region us-central1". Prvi deploy u us-central1 nije uspeo, fix je
+`region: "europe-west1"` u options.
+
+**Firebase Blaze plan requirement**: Cloud Functions zahteva Blaze (pay-as-you-go).
+Free tier: 2M invocations/mesec (Krug scenario ~200 invocations/dan = $0). Serbia tax
+gotcha: Google ne nudi "Individual" tax status u dropdown-u za Srbiju, samo "Business"
+ili "Government or Public Body". TIN field expects 9-digit PIB (business tax ID). User
+je uneo prvih 9 cifara JMBG-a — prošlo je format check, Google ne verifikuje pri signup-u.
+Za personal use na free tier-u, praktično zero rizika.
+
+**Eventarc Service Agent permission propagation**: prvi 2nd gen Cloud Function deploy
+zahteva ~2min posle Blaze upgrade-a da Eventarc permission-i propagiraju. Firebase eksplicitno
+kaže "Since this is your first time using 2nd gen functions, we need a little bit longer".
+Retry posle 2min radi.
+
+**Deploy status**: `onLocationRefreshRequest` LIVE u `europe-west1`, `state: ACTIVE`,
+verified prvim invocation-om koji je vratio "no fcmToken" za target-e (očekivano — Jelena
+i Slobodan još nisu na 1.1.4).
+
+**Testing workflow**:
+1. Svi članovi moraju da update-uju na 1.1.4 (fcmToken se auto-uploaduje na sign-in)
+2. Jelena zaključa telefon 20-30min (uđe u Doze)
+3. Aleksandar tap Refresh za Jelenu
+4. `firebase functions:log --only onLocationRefreshRequest` mora pokazati "FCM push sent"
+5. Jelenin telefon primi push u Doze (FCM je Google-owned, zaobilazi restrikcije)
+6. `KrugMessagingService.onMessageReceived` → `refreshSelf` → force one-shot GPS fix
+7. Aleksandar odmah vidi sveznu poziciju
+
+### F) Manifest fix — Android Automotive OS vs Android Auto
+
+**Bug otkriven pri 1.1.1 upload-u**: Play Store odbio AAB sa greškom "The app cannot
+declare 'android.hardware.type.automotive' device feature and 'com.google.android.gms.car.application'
+metadata at the same time".
+
+**Razjašnjenje**:
+- `android.hardware.type.automotive` uses-feature je za **Android Automotive OS** —
+  native OS ugrađen u vozilo (Volvo Polestar, Ford Mustang Mach-E). App radi na car
+  hardveru, nema telefona.
+- `com.google.android.gms.car.application` meta-data je za **Android Auto** —
+  telefon projektuje na car display preko USB/wireless.
+
+Krug je Android Auto app, ne AAOS. Uklonjen `android.hardware.type.automotive` uses-feature.
+Popularni Auto app-ovi (Waze, Spotify, WhatsApp) isto to rade — samo car.application meta-data,
+bez automotive feature.
+
+### G) Firestore rules deploy
+
+Rules objavljene 2 puta u ovoj sesiji:
+1. Prvo za ownership transfer (allow ownerId change + members role field update)
+2. Verifikacija da rules ne pucaju sa novim client kodom
+
+Deploy komanda: `firebase deploy --only firestore:rules`. Deploy je instant (~5s).
+Rules su **backward-compatible** — 1.1.0 klijent ne koristi nova pravila, samo prolazi
+kroz postojeća.
+
+### H) Session outcome — šta radi i šta ostaje
+
+**Radi (verified):**
+- ✅ Sve 10 tacaka feedback-a
+- ✅ View-point fix za MemberDetailSheet
+- ✅ ProGuard fix (crash rešen)
+- ✅ Geofence startup grace + batch filter
+- ✅ Firestore rules objavljene (ownership transfer)
+- ✅ Play Store 1.1.4 (versionCode 9) LIVE
+- ✅ Cloud Function `onLocationRefreshRequest` LIVE u europe-west1
+- ✅ FCM token upload sa aleksandarr@gmail.com verifikovan (kroz Function log — requesterUid
+  match tvom uid-u)
+
+**Ostaje za sledeću sesiju:**
+1. **Auto fizicki test** — user nije mogao u auto, Play Store install (`org.krug.app`,
+   ne `.debug`) treba da prizna Auto host. Diagnostic log-ovi spremni u `KrugCarAppService.onCreate`.
+2. **FCM push end-to-end verifikacija** — Jelena mora update na 1.1.4, onda test:
+   Jelena locked → Aleksandar Refresh → očekivano `firebase functions:log` prikaže
+   "FCM push sent" umesto "no fcmToken" + Jelena's FGS reaguje.
+3. **Ostalih 16 tester-a update** — poslati opt-in URL preko WhatsApp/SMS-a. Bez opt-in
+   accept, Play Store ih ne prepoznaje kao tester-e.
+4. **Ownership transfer test** — funkcionalnost je LIVE (Firestore rules objavljene),
+   nije još fizicki testirana.
+5. **STATUS.md**: možda dodati sekciju sa 2-3 najbitnija Play Console koraka za buduće
+   deploy-e (Halt rollout vs Pause track, opt-in URL, versionCode monotonija).
+
+### I) Krug versionCode/versionName trail
+
+- 2 (1.1.0) — production do jutros
+- 3-4 — potrošeni na Play Store manifest fix (automotive feature)
+- 5 (1.1.1) — 10 tacaka feedback-a, prvi upload → crash zbog ProGuard
+- 6 — potrošen na view-point + geofence fix rebuild
+- 7 (1.1.2) — ProGuard + view-point fix
+- 8 (1.1.3) — geofence storm fix (startup grace + batch)
+- 9 (1.1.4) — **AKTUELNI** — FCM push infrastructure (client + Cloud Function)
+
+---
+
+## Ranija sesija (2026-07-06, dvadeset osma sesija — feedback pass posle testiranja na S24 + A55)
 
 Fokus sesije: user je jutros poslao 6 screenshot-a sa konkretnim UI/UX problemima nakon testiranja V1.1. Cela sesija je iteracija na tim problemima + otkrivanje dodatnih bug-ova pri live testiranju na Galaxy S24 (Aleksandar) + Galaxy A55 (Jelena). 7 commit-ova (`7fea705` → `04a19bc`), ~800 novih linija, 220 obrisanih (DirectionsRepository dead code).
 

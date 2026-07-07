@@ -75,6 +75,32 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
             Timber.w("GeofenceReceiver: no triggering geofences")
             return
         }
+        // FILTER 1 (STARTUP GRACE): Play Services firira spurious reconciliation event-e u
+        // prvih 2min posle geofence re-registracije. Ovi event-i imaju fresh accuracy i
+        // timestamp, pa ih standardni filter-i ne hvataju. Real-world scenario koji je
+        // trigger-ovao ovo (Jul 2026): user je uninstall + reinstall (posle 1.1.1 crash-a),
+        // po instalaciji 1.1.2 geofence subsystem se re-registruje i Play Services "reconciles"
+        // stanje slanjem ENTER Home + EXIT Banjica + EXIT babina kuca istovremeno iako user
+        // nije mrdao. Drugi članovi kruga dobiju 3 spam notif-a.
+        val sinceRegister = System.currentTimeMillis() - GeofenceManager.lastRegisteredAtMs
+        if (GeofenceManager.lastRegisteredAtMs > 0L && sinceRegister < GeofenceManager.STARTUP_GRACE_MS) {
+            Timber.w(
+                "GeofenceReceiver: skip transition inside startup grace (%dms since register, type=%d, count=%d)",
+                sinceRegister, transition, triggered.size,
+            )
+            return
+        }
+        // FILTER 2 (BATCH RECONCILIATION): user u realnom svetu ne moze da predje 2+ granice
+        // istovremeno (mesta su tipicno 100m+ razdaljena). Kad Play Services firira broadcast
+        // sa 2+ geofences odjednom, to je 99% reconciliation "state fix" event, ne stvarna
+        // fizicka tranzicija. Skip ceo broadcast.
+        if (triggered.size >= 2) {
+            Timber.w(
+                "GeofenceReceiver: skip batch transition (likely reconciliation, count=%d type=%d)",
+                triggered.size, transition,
+            )
+            return
+        }
         // Filter na kvalitet triggering location-a. Google Play Services zna da "reconciliraju"
         // geofence stanje sa unbelievable events (npr. user je fizicki bio na X, GPS je jitter-ovao
         // ka Y, sad Play kaze "exit Y" iako user nikad nije bio na Y). Signal:

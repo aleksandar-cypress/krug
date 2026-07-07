@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,7 +71,18 @@ fun ReliabilityScreen(onBack: () -> Unit) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val checks = remember(resumeTick) { collectAllChecks(context) }
-    val issueCount = checks.count { !it.isOk }
+    // Live status je odvojen od permission-checks-a, ali za HeaderCard "N issues" summary
+    // uključujemo publish staleness i FGS-not-running kao logičke issue-e — inače user vidi
+    // "All ok" gore i crveni "Never/stale" dole i misli da je bug. Publish staleness ide u
+    // count samo ako je FGS pokrenut a publish stariji od 10min (matching SelfShareBrokenBanner).
+    val lastPublishNow = LocationTrackingService.lastPublishAtMs
+    val serviceRunningNow = LocationTrackingService.isRunning.get()
+    val nowMs = System.currentTimeMillis()
+    val publishStale = serviceRunningNow && lastPublishNow > 0L &&
+        (nowMs - lastPublishNow) >= 10L * 60_000L
+    val serviceNotRunning = !serviceRunningNow
+    val extraLiveIssues = (if (serviceNotRunning) 1 else 0) + (if (publishStale) 1 else 0)
+    val issueCount = checks.count { !it.isOk } + extraLiveIssues
 
     SettingsSubScaffold(
         title = stringResource(R.string.reliability_screen_title),
@@ -191,6 +203,9 @@ private fun LiveStatusCard() {
     val now = System.currentTimeMillis()
     val ageText = if (lastPublish == 0L) stringResource(R.string.reliability_status_never)
     else formatAgo(now - lastPublish)
+    val publishStale = lastPublish == 0L || (now - lastPublish) >= 10L * 60_000L
+    val context = LocalContext.current
+    var refreshTriggered by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -205,8 +220,33 @@ private fun LiveStatusCard() {
             LiveStatusRow(
                 label = stringResource(R.string.reliability_status_last_publish),
                 value = ageText,
-                ok = lastPublish != 0L && (now - lastPublish) < 10L * 60_000L,
+                ok = !publishStale,
             )
+            // Stale publish → user vidi banner "ostali te ne vide" ali ovaj ekran je
+            // prazno-zeleno. Sad dobija akciono dugme: force refresh koji zove FGS
+            // one-shot HIGH_ACCURACY fix (identičan MemberDetailSheet Refresh path-u).
+            if (publishStale && serviceRunning) {
+                Spacer(Modifier.size(4.dp))
+                Text(
+                    text = stringResource(R.string.reliability_status_publish_stale_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(
+                    onClick = {
+                        LocationTrackingService.refreshSelf(context)
+                        refreshTriggered = true
+                    },
+                    enabled = !refreshTriggered,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        text = if (refreshTriggered) stringResource(R.string.reliability_status_publish_sent)
+                        else stringResource(R.string.reliability_status_publish_stale_action),
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    )
+                }
+            }
         }
     }
 }

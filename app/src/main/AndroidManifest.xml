@@ -47,10 +47,11 @@
            itd.). Ranija pretpostavka da POI apps "launch-uju iz Maps-a" bila je pogresna. -->
     <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
 
-    <!-- Android Auto feature declaration (opciono ali preporučeno za Play Store filter). -->
-    <uses-feature
-        android:name="android.hardware.type.automotive"
-        android:required="false" />
+    <!-- NAPOMENA: NE deklariši `android.hardware.type.automotive` uses-feature.
+         Ta oznaka je za Android Automotive OS (native car OS ugradjen u vozilu, npr.
+         Volvo/Polestar). Krug koristi Android Auto (projection sa telefona) preko
+         com.google.android.gms.car.application meta-data-e. Play Store odbija AAB
+         ako se oba deklariraju istovremeno (uzajamno isključivi target-i). -->
 
     <application
         android:name=".KrugApplication"
@@ -89,6 +90,19 @@
             android:name=".core.location.LocationTrackingService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <!-- FCM service. Firebase Messaging library auto-detektuje po intent-filter-u.
+             Cloud Functions šalje high-priority data message-eve ovamo kad neko klikne
+             Refresh za nas ili triggeruje SOS. Bez ovog service-a, push-evi bi Firebase
+             SDK silently discard-ovao. Handles Doze wakeup: FCM je Google-owned pa
+             zaobilazi standardne Doze restrikcije. -->
+        <service
+            android:name=".core.messaging.KrugMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <!-- Activity Recognition receiver — Google detect transition broadcasts. -->
         <receiver

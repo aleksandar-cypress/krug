@@ -23,7 +23,10 @@
 -keep class org.krug.app.core.circle.InviteModel { *; }
 -keep class org.krug.app.core.sos.SosModel { *; }
 -keep class org.krug.app.core.location.LocationModel { *; }
+-keep class org.krug.app.core.location.LocationHistoryPoint { *; }
 -keep class org.krug.app.core.settings.UserSettings { *; }
+-keep class org.krug.app.core.places.PlaceModel { *; }
+-keep class org.krug.app.core.places.PlaceEventModel { *; }
 
 # Companion objects + default constructor su potrebni Firebase mapper-u.
 -keepclassmembers class org.krug.app.core.user.UserModel { <init>(...); }
@@ -32,4 +35,19 @@
 -keepclassmembers class org.krug.app.core.circle.InviteModel { <init>(...); }
 -keepclassmembers class org.krug.app.core.sos.SosModel { <init>(...); }
 -keepclassmembers class org.krug.app.core.location.LocationModel { <init>(...); }
+-keepclassmembers class org.krug.app.core.location.LocationHistoryPoint { <init>(...); }
 -keepclassmembers class org.krug.app.core.settings.UserSettings { <init>(...); }
+-keepclassmembers class org.krug.app.core.places.PlaceModel { <init>(...); }
+-keepclassmembers class org.krug.app.core.places.PlaceEventModel { <init>(...); }
+
+# Firebase Firestore/RTDB annotation-marked classes — defense-in-depth.
+# Bilo koji data class sa @ServerTimestamp / @DocumentId / @IgnoreExtraProperties fields
+# se automatski čuva. Ovo hvata buduće nove modele koje neko doda a zaboravi da doda
+# u eksplicit listu iznad.
+-keep @com.google.firebase.firestore.IgnoreExtraProperties class * { *; }
+-keepclasseswithmembers class org.krug.app.** {
+    @com.google.firebase.firestore.ServerTimestamp <fields>;
+}
+-keepclasseswithmembers class org.krug.app.** {
+    @com.google.firebase.firestore.DocumentId <fields>;
+}
