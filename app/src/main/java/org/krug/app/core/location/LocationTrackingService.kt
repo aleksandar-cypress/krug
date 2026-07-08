@@ -71,6 +71,8 @@ class LocationTrackingService : Service() {
     @Inject lateinit var userRepository: UserRepository
     @Inject lateinit var sosRepository: SosRepository
     @Inject lateinit var sosNotifier: SosNotifier
+    @Inject lateinit var batteryAlertNotifier: org.krug.app.core.battery.BatteryAlertNotifier
+    @Inject lateinit var tripDetector: org.krug.app.core.driving.TripDetector
     @Inject lateinit var localPrefs: LocalPrefs
     @Inject lateinit var placeRepository: org.krug.app.core.places.PlaceRepository
     @Inject lateinit var placeEventNotifier: org.krug.app.core.places.PlaceEventNotifier
@@ -84,6 +86,13 @@ class LocationTrackingService : Service() {
      * fired-ovao notifikaciju ponovo. TTL filter u loadSosNotified() drop-uje stare.
      */
     private lateinit var knownSosTriggered: MutableMap<String, Long>
+
+    /**
+     * Per-uid map: timestamp poslednjeg battery alert-a. 12h TTL sprečava spam kad je
+     * member trajno na niskoj bateriji. Kad batteryPct pređe CLEAR threshold (25%),
+     * entry se briše pa sledeći pad ispod 20% opet trigeruje.
+     */
+    private lateinit var knownBatteryAlerted: MutableMap<String, Long>
 
     private lateinit var fused: FusedLocationProviderClient
     private var activityClient: ActivityRecognitionClient? = null
@@ -152,11 +161,21 @@ class LocationTrackingService : Service() {
             }
             // Movement filter — preskoči publish ako se nismo mnogo pomerili, OSIM ako je
             // bilo predugo od poslednjeg publish-a (peers očekuju fresh updatedAt signal).
+            val uid = firebaseAuth.currentUser?.uid ?: return
+            // Trip detection radi na SVAKI fix nezavisno od publish gate-a — čak i kad
+            // movement filter odbaci publish (npr. staje na semaforu), speed je važan
+            // signal za state machine (quiet timeout).
+            tripDetector.onFix(
+                uid = uid,
+                lat = loc.latitude,
+                lng = loc.longitude,
+                speedMps = loc.speed,
+                nowMs = System.currentTimeMillis(),
+            )
             if (!shouldPublish(loc)) {
                 Timber.d("Skip publish: movement < ${SIGNIFICANT_MOVEMENT_M}m + recent publish")
                 return
             }
-            val uid = firebaseAuth.currentUser?.uid ?: return
             scope.launch {
                 runCatching {
                     locationRepository.publish(
@@ -325,6 +344,7 @@ class LocationTrackingService : Service() {
         // NPE u onStartCommand/observeCircleSos ako Android iz nekog razloga uđe u
         // metode pre dovršetka onCreate-a. Empty mapa je idempotent početni state.
         knownSosTriggered = mutableMapOf()
+        knownBatteryAlerted = mutableMapOf()
         // Android 14+ ne dozvoljava startForeground sa LOCATION type-om bez
         // ACCESS_FINE/COARSE_LOCATION. Bilo koji entry (BootReceiver, Worker, MapScreen)
         // pošto smo bili odbijeni — stopSelf gracefully umesto da app crash-uje.
@@ -354,7 +374,12 @@ class LocationTrackingService : Service() {
         startedAtMs = System.currentTimeMillis()
         // Override defensive empty init sa stvarnim disk-loaded podacima (sa TTL prune).
         knownSosTriggered = localPrefs.loadSosNotified(SOS_TTL_MS)
-        Timber.i("FGS start (loaded %d SOS dedup entries)", knownSosTriggered.size)
+        knownBatteryAlerted = localPrefs.loadBatteryAlerted(BATTERY_ALERT_TTL_MS)
+        Timber.i(
+            "FGS start (SOS dedup=%d, battery dedup=%d)",
+            knownSosTriggered.size,
+            knownBatteryAlerted.size,
+        )
         // Bind server-side presence — dok FGS živi, RTDB drži `online=true` na naš record.
         // Kad process umre (force stop, low memory kill, network loss > ~30s), server sam
         // postavlja online=false preko onDisconnect handler-a. Peer-i tako imaju precizan
@@ -366,6 +391,7 @@ class LocationTrackingService : Service() {
         observeRefreshRequests()
         observeCircleSos()
         observeCirclePlaces()
+        observeCircleBattery()
         registerActivityRecognition()
         startHeartbeatLoop()
     }
@@ -750,6 +776,64 @@ class LocationTrackingService : Service() {
         }
     }
 
+    /**
+     * Observe-uje battery% svih članova svih krugova kojima pripadam.
+     * Trigger-uje `BatteryAlertNotifier.notifyLowBattery(...)` kad peer padne ispod
+     * PEER_BATTERY_ALERT_THRESHOLD (20%) i nije na punjaču. Dedup 12h per peer.
+     * Kad batteryPct pređe PEER_BATTERY_CLEAR_THRESHOLD (25%), entry iz dedup mape
+     * se briše pa sledeći pad ispod 20% opet trigeruje (npr. sutradan).
+     *
+     * Poštuje `UserSettings.batteryAlertsEnabled` i silent hours (isti kao Place event-i).
+     */
+    private fun observeCircleBattery() {
+        val selfUid = firebaseAuth.currentUser?.uid ?: return
+        scope.launch {
+            circleRepository.observeMyCircles(selfUid)
+                .flatMapLatest { circles ->
+                    val others = circles.flatMap { it.memberIds }.toSet() - selfUid
+                    if (others.isEmpty()) flowOf(emptyMap<String, LocationModel?>())
+                    else combine(
+                        others.map { uid ->
+                            locationRepository.observe(uid).map { loc -> uid to loc }
+                        },
+                    ) { pairs -> pairs.toMap() }
+                }
+                .collectLatest { locByUid ->
+                    if (!currentSettings.batteryAlertsEnabled) return@collectLatest
+                    if (isInSilentHours(currentSettings.silentHours)) return@collectLatest
+                    val now = System.currentTimeMillis()
+                    var dirty = false
+                    locByUid.forEach { (uid, loc) ->
+                        val battery = loc?.batteryPct ?: -1
+                        // Nedostupno / nepoznato / stariji client bez baterije field-a: preskoči.
+                        if (battery < 0) return@forEach
+                        // Hysteresis: iznad clear thresholda briši dedup entry (recovered).
+                        if (battery >= PEER_BATTERY_CLEAR_THRESHOLD) {
+                            if (knownBatteryAlerted.remove(uid) != null) {
+                                batteryAlertNotifier.cancel(uid)
+                                dirty = true
+                            }
+                            return@forEach
+                        }
+                        // Iznad alert thresholda ali ispod clear-a: no-op (grey zone).
+                        if (battery >= PEER_BATTERY_ALERT_THRESHOLD) return@forEach
+                        // Ispod 20% — trigger case.
+                        // Charging = user zna, ne treba spam. Ne trigeruj i ne memoriši dedup.
+                        if (loc?.charging == true) return@forEach
+                        val last = knownBatteryAlerted[uid]
+                        if (last != null && (now - last) < BATTERY_ALERT_TTL_MS) return@forEach
+                        knownBatteryAlerted[uid] = now
+                        dirty = true
+                        scope.launch {
+                            val name = fetchDisplayName(uid)
+                            batteryAlertNotifier.notifyLowBattery(uid, name, battery)
+                        }
+                    }
+                    if (dirty) localPrefs.saveBatteryAlerted(knownBatteryAlerted)
+                }
+        }
+    }
+
     private suspend fun handleSosUpdate(uid: String, sos: SosModel?, myCircleIds: Set<String>) {        val now = System.currentTimeMillis()
         // Aktivni SOS: (1) postoji, (2) triggeredAt validan i unutar TTL, (3) u scope-u
         // (legacy SOS bez circleId-a prolazi kao fallback za backward compat sa starim
@@ -912,6 +996,13 @@ class LocationTrackingService : Service() {
         val lifetime = if (startedAtMs > 0L) System.currentTimeMillis() - startedAtMs else 0L
         lastFgsLifetimeMs = lifetime
         Timber.i("FGS destroy (lifetime=%dms)", lifetime)
+        // Trip u toku — pokušaj clean flush pre nego što proces umre. Bez ovog, trip
+        // koji nije stigao do 3-min quiet timeout-a se gubi ako Android proces ubije
+        // (memorija pritisak, force stop). Snapshot uid PRE flush-a jer flush pokreće
+        // async write na scope-u koji možda već umire.
+        firebaseAuth.currentUser?.uid?.let { uid ->
+            runCatching { tripDetector.flush(uid) }
+        }
         // Eksplicitno otkaži boost-expiry pre scope.cancel — bez ovog je trka: delay()
         // može da završi 1ms pre scope.cancel-a i applyProfile bi gađao polu-destroyed
         // fused klijent.
@@ -1030,6 +1121,12 @@ class LocationTrackingService : Service() {
         const val MAX_PLAUSIBLE_SPEED_MPS = 55f
         /** Battery below this % i ne puni se → throttle profile na ×2 interval. */
         const val LOW_BATTERY_THRESHOLD = 15
+        /** Battery alert notif se okida kad peer padne ispod ovog % (i nije na punjaču). */
+        const val PEER_BATTERY_ALERT_THRESHOLD = 20
+        /** Hysteresis — dedup entry za peer-a se briše kad batteryPct pređe ovo (spreči flicker oko 20). */
+        const val PEER_BATTERY_CLEAR_THRESHOLD = 25
+        /** Rate-limit za battery alert notif per peer — 12h. */
+        const val BATTERY_ALERT_TTL_MS = 12 * 3600 * 1000L
         private const val EXTRA_FORCE_REFRESH = "force_refresh"
         private const val EXTRA_SOS_BOOST = "sos_boost"
         const val EXTRA_ACTIVITY_CHANGED = "activity_changed"

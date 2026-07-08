@@ -161,6 +161,32 @@
     <string name="sos_notif_body_with_circle">From the \"%1$s\" circle.\nTap to open the map and see where the member is.</string>
     <string name="sos_notif_unknown_sender">Circle member</string>
 
+    <string name="settings_driving_reports">Driving reports</string>
+    <string name="settings_driving_reports_subtitle">Trips, distance, top speed</string>
+
+    <!-- Driving reports -->
+    <string name="driving_reports_title">Driving reports</string>
+    <string name="driving_reports_empty_title">No trips yet</string>
+    <string name="driving_reports_empty_hint">Trips over 300 m at driving speed are recorded automatically. Take a short ride and check back.</string>
+    <string name="driving_reports_range_today">Today</string>
+    <string name="driving_reports_range_week">This week</string>
+    <string name="driving_reports_range_month">This month</string>
+    <string name="driving_reports_summary_trips">%1$d trips</string>
+    <string name="driving_reports_summary_distance">%1$s km total</string>
+    <string name="driving_reports_summary_max">Peak %1$d km/h</string>
+    <string name="driving_reports_row_distance">%1$s km</string>
+    <string name="driving_reports_row_max">Max %1$d km/h</string>
+    <string name="driving_reports_row_duration">%1$d min</string>
+
+    <!-- Battery alerts -->
+    <string name="battery_alert_channel">Battery alerts</string>
+    <string name="battery_alert_channel_desc">Notifications when a circle member has low battery</string>
+    <string name="battery_alert_title">%1$s: low battery (%2$d%%)</string>
+    <string name="battery_alert_body">Battery below 20%%. Consider reaching out so they can charge.</string>
+    <string name="battery_alert_unknown_sender">Circle member</string>
+    <string name="settings_battery_alerts">Battery alerts</string>
+    <string name="settings_battery_alerts_subtitle">Notify me when a member drops under 20%%</string>
+
     <!-- Places (geofence) -->
     <string name="places_section_title">Places</string>
     <string name="places_empty_title">No places yet</string>
@@ -280,6 +306,18 @@
     <string name="settings_privacy_subtitle">Pause sharing, export data</string>
     <string name="settings_battery">Battery</string>
     <string name="settings_battery_subtitle">Optimization and location frequency</string>
+    <string name="settings_map_style">Map style</string>
+    <string name="settings_map_style_subtitle">Choose the look of the map</string>
+    <string name="map_style_screen_title">Map style</string>
+    <string name="map_style_screen_intro">Applies to Map, History, and Add place views.</string>
+    <string name="map_style_standard">Standard</string>
+    <string name="map_style_standard_desc">Follows your system light or dark theme</string>
+    <string name="map_style_dark">Dark</string>
+    <string name="map_style_dark_desc">Always dark, easier on eyes at night</string>
+    <string name="map_style_satellite">Satellite</string>
+    <string name="map_style_satellite_desc">Real imagery with street labels</string>
+    <string name="map_style_outdoors">Outdoors</string>
+    <string name="map_style_outdoors_desc">Terrain and trails for hikes and travel</string>
     <string name="settings_about">About</string>
     <string name="settings_about_subtitle">Version, policy, contact</string>
     <string name="settings_diagnostics_debug">Diagnostics (debug)</string>

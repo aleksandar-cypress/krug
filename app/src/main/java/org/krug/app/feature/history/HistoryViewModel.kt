@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.stateIn
 import org.krug.app.core.circle.CircleRepository
 import org.krug.app.core.location.LocationHistoryPoint
 import org.krug.app.core.location.LocationHistoryRepository
+import org.krug.app.core.map.MapStyleOption
 import org.krug.app.core.places.PlaceModel
 import org.krug.app.core.places.PlaceRepository
 import org.krug.app.core.prefs.LocalPrefs
@@ -23,6 +24,7 @@ import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 
 data class HistoryDayRange(val fromMs: Long, val toMs: Long)
@@ -74,6 +76,11 @@ class HistoryViewModel @Inject constructor(
             else placeRepository.observePlaces(activeId)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Trenutno izabran stil mape (Settings → Map style). */
+    val mapStyle: StateFlow<MapStyleOption> = localPrefs.mapStyleKeyFlow
+        .map { MapStyleOption.fromKey(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MapStyleOption.DEFAULT)
 
     /** dayOffset: 0 = danas, -1 = juče, -2 = pretpr., itd. Max 30 dana unazad. */
     fun setDayOffset(offset: Int) {

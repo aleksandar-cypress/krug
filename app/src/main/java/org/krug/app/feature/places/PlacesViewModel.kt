@@ -23,10 +23,12 @@ import org.krug.app.core.directions.GeocodingRepository
 import org.krug.app.core.location.LocationHistoryRepository
 import org.krug.app.core.location.LocationModel
 import org.krug.app.core.location.LocationRepository
+import org.krug.app.core.map.MapStyleOption
 import org.krug.app.core.places.PlaceModel
 import org.krug.app.core.places.PlaceRepository
 import org.krug.app.core.places.PlaceSuggestion
 import org.krug.app.core.places.detectPlaceSuggestions
+import org.krug.app.core.prefs.LocalPrefs
 import org.krug.app.core.user.UserRepository
 import timber.log.Timber
 
@@ -53,7 +55,13 @@ class PlacesViewModel @Inject constructor(
     private val geocodingRepository: GeocodingRepository,
     private val historyRepository: LocationHistoryRepository,
     private val auth: FirebaseAuth,
+    localPrefs: LocalPrefs,
 ) : ViewModel() {
+
+    /** Trenutno izabran stil mape (Settings → Map style). Koristi ga AddPlaceScreen. */
+    val mapStyle: StateFlow<MapStyleOption> = localPrefs.mapStyleKeyFlow
+        .map { MapStyleOption.fromKey(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MapStyleOption.DEFAULT)
 
     /**
      * Search state — distinguisati "u toku", "greska", "prazno", "ima rezultata". Bez ovog:

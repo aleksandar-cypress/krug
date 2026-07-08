@@ -57,6 +57,10 @@ class SettingsRepository @Inject constructor(
         docFor(uid).set(payload, SetOptions.merge()).await()
     }
 
+    suspend fun updateBatteryAlerts(uid: String, enabled: Boolean) {
+        docFor(uid).set(mapOf("batteryAlertsEnabled" to enabled), SetOptions.merge()).await()
+    }
+
     suspend fun updateShareUntil(uid: String, untilMs: Long?) {
         val payload: Map<String, Any> = if (untilMs == null) {
             // Firestore null-safe brisanje polja — set(null) bi bilo tipska greška.
@@ -77,6 +81,7 @@ class SettingsRepository @Inject constructor(
             shareUntilMs = (data["shareUntilMs"] as? Number)?.toLong(),
             placeNotifsEnabled = data["placeNotifsEnabled"] as? Boolean ?: true,
             silentHours = data["silentHours"] as? String,
+            batteryAlertsEnabled = data["batteryAlertsEnabled"] as? Boolean ?: true,
         )
     }
 

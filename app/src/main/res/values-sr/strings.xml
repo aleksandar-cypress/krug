@@ -165,6 +165,32 @@
     <string name="sos_notif_body_with_circle">Iz kruga „%1$s\".\nTapni da otvoriš mapu i vidiš gde je član.</string>
     <string name="sos_notif_unknown_sender">Član kruga</string>
 
+    <string name="settings_driving_reports">Izveštaji o vožnji</string>
+    <string name="settings_driving_reports_subtitle">Vožnje, kilometraža, maks brzina</string>
+
+    <!-- Driving reports -->
+    <string name="driving_reports_title">Izveštaji o vožnji</string>
+    <string name="driving_reports_empty_title">Još nema vožnji</string>
+    <string name="driving_reports_empty_hint">Vožnje duže od 300 m pri normalnoj brzini se automatski beleže. Provozaj se malo pa pogledaj ovde.</string>
+    <string name="driving_reports_range_today">Danas</string>
+    <string name="driving_reports_range_week">Ove nedelje</string>
+    <string name="driving_reports_range_month">Ovog meseca</string>
+    <string name="driving_reports_summary_trips">%1$d vožnji</string>
+    <string name="driving_reports_summary_distance">Ukupno %1$s km</string>
+    <string name="driving_reports_summary_max">Maks %1$d km/h</string>
+    <string name="driving_reports_row_distance">%1$s km</string>
+    <string name="driving_reports_row_max">Maks %1$d km/h</string>
+    <string name="driving_reports_row_duration">%1$d min</string>
+
+    <!-- Battery alerts -->
+    <string name="battery_alert_channel">Upozorenja o bateriji</string>
+    <string name="battery_alert_channel_desc">Obaveštenja kada član kruga ima nisku bateriju</string>
+    <string name="battery_alert_title">%1$s: niska baterija (%2$d%%)</string>
+    <string name="battery_alert_body">Baterija ispod 20%%. Javi im se da napune telefon.</string>
+    <string name="battery_alert_unknown_sender">Član kruga</string>
+    <string name="settings_battery_alerts">Upozorenja o bateriji</string>
+    <string name="settings_battery_alerts_subtitle">Obavesti me kada član padne ispod 20%%</string>
+
     <!-- Places (geofence) -->
     <string name="places_section_title">Mesta</string>
     <string name="places_empty_title">Još nema mesta</string>
@@ -283,6 +309,18 @@
     <string name="settings_privacy_subtitle">Pauziraj deljenje, eksport podataka</string>
     <string name="settings_battery">Baterija</string>
     <string name="settings_battery_subtitle">Optimizacija i frekvencija lokacije</string>
+    <string name="settings_map_style">Stil mape</string>
+    <string name="settings_map_style_subtitle">Izaberi kako mapa izgleda</string>
+    <string name="map_style_screen_title">Stil mape</string>
+    <string name="map_style_screen_intro">Važi za Mapu, Istoriju i dodavanje Mesta.</string>
+    <string name="map_style_standard">Standardna</string>
+    <string name="map_style_standard_desc">Prati svetlu ili tamnu temu sistema</string>
+    <string name="map_style_dark">Tamna</string>
+    <string name="map_style_dark_desc">Uvek tamna, prijatnija za oči noću</string>
+    <string name="map_style_satellite">Satelitska</string>
+    <string name="map_style_satellite_desc">Prava snimka sa nazivima ulica</string>
+    <string name="map_style_outdoors">Priroda</string>
+    <string name="map_style_outdoors_desc">Teren i staze za planinarenje i putovanja</string>
     <string name="settings_about">O aplikaciji</string>
     <string name="settings_about_subtitle">Verzija, pravila, kontakt</string>
     <string name="settings_diagnostics_debug">Dijagnostika (debug)</string>

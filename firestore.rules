@@ -66,6 +66,14 @@ service cloud.firestore {
         allow create: if isSelf(uid);
         allow update, delete: if false;
       }
+
+      // Trips (driving reports) — TripDetector piše finalize-ovane trip-ove, članovi
+      // kruga mogu da čitaju (Driving Reports screen). Immutable posle create-a.
+      match /trips/{tripId} {
+        allow read: if isAuthed();
+        allow create: if isSelf(uid);
+        allow update, delete: if false;
+      }
     }
 
     // circles/{cid}

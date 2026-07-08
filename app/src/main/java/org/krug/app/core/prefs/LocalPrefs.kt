@@ -42,6 +42,21 @@ class LocalPrefs @Inject constructor(
     }
 
     /**
+     * Ključ izabranog map stila (MapStyleOption.name, npr. "STANDARD", "DARK", "SATELLITE",
+     * "OUTDOORS"). Držimo string umesto enum vrednosti zbog toga što `LocalPrefs` ne treba
+     * da zna za Mapbox tipove. Konzumenti pozivaju `MapStyleOption.fromKey(value)` za
+     * mapiranje na URI. Nepoznata vrednost (npr. downgrade, obrisan enum) fallback-uje na
+     * DEFAULT (Standard) bez crash-a.
+     */
+    private val _mapStyleKey = MutableStateFlow(prefs.getString(KEY_MAP_STYLE, null) ?: DEFAULT_MAP_STYLE_KEY)
+    val mapStyleKeyFlow: StateFlow<String> = _mapStyleKey.asStateFlow()
+
+    fun setMapStyleKey(key: String) {
+        prefs.edit(commit = false) { putString(KEY_MAP_STYLE, key) }
+        _mapStyleKey.value = key
+    }
+
+    /**
      * SOS dedup persistence — `LocationTrackingService` koristi ovo umesto in-memory mape
      * da ne re-fire-uje notifikaciju za isti `triggeredAt` posle FGS process restart-a
      * (Android može da nas ubije zbog memorije pa restartuje preko START_STICKY-a, ili
@@ -148,6 +163,35 @@ class LocalPrefs @Inject constructor(
     }
 
     /**
+     * Battery alert dedup — LocationTrackingService okida notifikaciju kad član kruga
+     * padne ispod 20% baterije. Da bismo izbegli spam, čuvamo timestamp poslednjeg
+     * alert-a per uid. Ako je manje od 12h od zadnjeg (BATTERY_ALERT_TTL_MS),
+     * ne re-fire-ujemo. Kad user napuni telefon iznad ~25% (hysteresis), FGS
+     * uklanja entry pa sledeći drop opet trigeruje.
+     *
+     * Format: "uid1:ts1,uid2:ts2,..." (isti pattern kao SOS dedup).
+     */
+    fun loadBatteryAlerted(ttlMs: Long): MutableMap<String, Long> {
+        val raw = prefs.getString(KEY_BATTERY_ALERTED, null).orEmpty()
+        if (raw.isBlank()) return mutableMapOf()
+        val now = System.currentTimeMillis()
+        val parsed = raw.split(',').mapNotNull { entry ->
+            val parts = entry.split(':')
+            if (parts.size != 2) return@mapNotNull null
+            val uid = parts[0]
+            val ts = parts[1].toLongOrNull() ?: return@mapNotNull null
+            if (uid.isBlank() || now - ts > ttlMs) null else uid to ts
+        }.toMap().toMutableMap()
+        if (parsed.size != raw.count { it == ',' } + 1) saveBatteryAlerted(parsed)
+        return parsed
+    }
+
+    fun saveBatteryAlerted(map: Map<String, Long>) {
+        val serialized = map.entries.joinToString(",") { "${it.key}:${it.value}" }
+        prefs.edit(commit = false) { putString(KEY_BATTERY_ALERTED, serialized) }
+    }
+
+    /**
      * GDPR — pozvati nakon delete-account ili reinstall recovery-ja. Briše sve per-account
      * state da novi sign-in ne nasledi stari `activeCircleId` (ne postoji više), `sos_notified`
      * dedup ili `onboardingCompleted` flag (novi nalog treba čist onboarding). `pendingDeleteUid`
@@ -160,6 +204,7 @@ class LocalPrefs @Inject constructor(
             remove(KEY_SOS_NOTIFIED)
             remove(KEY_ACTIVITY_REC_PROMPT_SHOWN)
             remove(KEY_LAST_SEEN_PLACE_EVENT_TS)
+            remove(KEY_BATTERY_ALERTED)
         }
         _activeCircleId.value = null
     }
@@ -174,5 +219,8 @@ class LocalPrefs @Inject constructor(
         const val KEY_LAST_BATTERY_PROMPT_MS = "last_battery_prompt_ms"
         const val KEY_PENDING_INVITE_CODE = "pending_invite_code"
         const val KEY_LAST_SEEN_PLACE_EVENT_TS = "last_seen_place_event_ts"
+        const val KEY_MAP_STYLE = "map_style_key"
+        const val DEFAULT_MAP_STYLE_KEY = "STANDARD"
+        const val KEY_BATTERY_ALERTED = "battery_alerted_ts"
     }
 }

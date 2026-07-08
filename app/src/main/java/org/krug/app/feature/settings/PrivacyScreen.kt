@@ -127,6 +127,13 @@ class PrivacyViewModel @Inject constructor(
             settingsRepository.updateSilentHours(uid, value)
         }
     }
+
+    fun setBatteryAlerts(enabled: Boolean) {
+        val uid = authRepository.currentUser?.uid ?: return
+        viewModelScope.launch {
+            settingsRepository.updateBatteryAlerts(uid, enabled)
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -209,6 +216,31 @@ fun PrivacyScreen(
                 KrugSwitch(
                     checked = state.settings.placeNotifsEnabled,
                     onCheckedChange = viewModel::setPlaceNotifs,
+                )
+            }
+
+            // Battery alerts toggle
+            Spacer(Modifier.size(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.settings_battery_alerts),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        text = stringResource(R.string.settings_battery_alerts_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.size(8.dp))
+                KrugSwitch(
+                    checked = state.settings.batteryAlertsEnabled,
+                    onCheckedChange = viewModel::setBatteryAlerts,
                 )
             }
 

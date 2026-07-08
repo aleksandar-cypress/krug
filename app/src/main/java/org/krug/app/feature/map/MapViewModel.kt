@@ -24,6 +24,7 @@ import org.krug.app.core.auth.AuthRepository
 import org.krug.app.core.circle.CircleRepository
 import org.krug.app.core.location.LocationModel
 import org.krug.app.core.location.LocationRepository
+import org.krug.app.core.map.MapStyleOption
 import org.krug.app.core.places.PlaceEventModel
 import org.krug.app.core.places.PlaceModel
 import org.krug.app.core.places.PlaceRepository
@@ -108,6 +109,11 @@ class MapViewModel @Inject constructor(
                     (circles.firstOrNull { it.id == stored } ?: circles.firstOrNull())?.id
                 }
         }
+
+    /** Trenutno izabran stil mape (Settings → Map style). Observed od MapScreen-a za dinamički style change. */
+    val mapStyle: StateFlow<MapStyleOption> = localPrefs.mapStyleKeyFlow
+        .map { MapStyleOption.fromKey(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MapStyleOption.DEFAULT)
 
     /** Places za trenutno aktivan krug — MapScreen ih rendera kao pinove. */
     val activePlaces: StateFlow<List<PlaceModel>> = effectiveActiveCircleId.flatMapLatest { activeId ->

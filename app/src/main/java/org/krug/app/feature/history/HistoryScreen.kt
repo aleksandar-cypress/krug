@@ -71,6 +71,7 @@ fun HistoryScreen(
     val loaded by viewModel.loaded.collectAsStateWithLifecycle()
     val activePlaces by viewModel.activePlaces.collectAsStateWithLifecycle()
     val range by viewModel.selectedDay.collectAsStateWithLifecycle()
+    val mapStyle by viewModel.mapStyle.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
     var dayOffset by remember { mutableStateOf(0) }
     var mapView by remember { mutableStateOf<MapView?>(null) }
@@ -235,13 +236,24 @@ fun HistoryScreen(
                         MapView(ctx).also { mv ->
                             mapView = mv
                             mv.location.updateSettings { enabled = false }
-                            mv.mapboxMap.loadStyle(Style.STANDARD)
+                            mv.mapboxMap.loadStyle(mapStyle.styleUri)
                             polylineManager = mv.annotations.createPolylineAnnotationManager()
                             pointManager = mv.annotations.createPointAnnotationManager()
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
+                // Reagovati na runtime style change iz Settings-a. HistoryScreen ostaje u
+                // composition dok user ide u Settings → Map style, pa factory ne fajruje
+                // ponovo. Bez ovog LaunchedEffect-a, nova vrednost bila bi vidljiva tek pri
+                // sledećem otvaranju screen-a.
+                var lastLoadedStyle by remember { mutableStateOf<String?>(null) }
+                LaunchedEffect(mapStyle, mapView) {
+                    val mv = mapView ?: return@LaunchedEffect
+                    if (lastLoadedStyle == mapStyle.styleUri) return@LaunchedEffect
+                    lastLoadedStyle = mapStyle.styleUri
+                    mv.mapboxMap.loadStyle(mapStyle.styleUri)
+                }
                 if (!loaded) {
                     androidx.compose.material3.CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center),

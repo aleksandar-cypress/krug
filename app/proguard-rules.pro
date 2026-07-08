@@ -27,6 +27,7 @@
 -keep class org.krug.app.core.settings.UserSettings { *; }
 -keep class org.krug.app.core.places.PlaceModel { *; }
 -keep class org.krug.app.core.places.PlaceEventModel { *; }
+-keep class org.krug.app.core.driving.TripModel { *; }
 
 # Companion objects + default constructor su potrebni Firebase mapper-u.
 -keepclassmembers class org.krug.app.core.user.UserModel { <init>(...); }
@@ -39,6 +40,7 @@
 -keepclassmembers class org.krug.app.core.settings.UserSettings { <init>(...); }
 -keepclassmembers class org.krug.app.core.places.PlaceModel { <init>(...); }
 -keepclassmembers class org.krug.app.core.places.PlaceEventModel { <init>(...); }
+-keepclassmembers class org.krug.app.core.driving.TripModel { <init>(...); }
 
 # Firebase Firestore/RTDB annotation-marked classes — defense-in-depth.
 # Bilo koji data class sa @ServerTimestamp / @DocumentId / @IgnoreExtraProperties fields

@@ -31,4 +31,9 @@ data class UserSettings(
      * Place event-i. `null` = feature isključen. Format: "HH:MM-HH:MM" 24h.
      */
     val silentHours: String? = null,
+    /**
+     * Battery alerts — notif kada baterija člana kruga padne ispod 20% (i nije na
+     * punjaču). Default true. Rate-limit per member ~12h (LocationTrackingService).
+     */
+    val batteryAlertsEnabled: Boolean = true,
 )

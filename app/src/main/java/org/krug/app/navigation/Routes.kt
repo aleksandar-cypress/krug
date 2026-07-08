@@ -27,12 +27,14 @@ import kotlinx.serialization.Serializable
     val prefillName: String? = null,
 )
 @Serializable data class History(val uid: String, val displayName: String)
+@Serializable data class DrivingReports(val uid: String, val displayName: String)
 
 // Settings sub-tree.
 @Serializable object Settings
 @Serializable object Account
 @Serializable object Privacy
 @Serializable object BatteryMode
+@Serializable object MapStyle
 @Serializable object Reliability
 @Serializable object NotificationsSettings
 @Serializable object About

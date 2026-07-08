@@ -2,6 +2,150 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-07-08, 31. sesija — premium 7-pack odluka + custom map styles + battery alerts + driving reports)
+
+Fokus sesije: pricing diskusija za premium tier (€2.99/mo, €19.99/god, Play Billing
+Direct, 7-day trial), odluka o 7-pack feature listi (Places 10, History 30d, Battery
+alerts, Driving reports, Custom map, Android Auto full, Priority support) sa Wear OS
+eksplicitno odbačenim. Play Console setup zapoceo ali blokiran na merchant account
+(user nema podatke danas). Umesto cekanja, implementirana tri feature-a kao FREE (bez
+gate-a) da bi kasnije bili spremni za premium gating: **B (custom map styles)**,
+**A (battery alerts)**, **C (driving reports)**. Firebase Firestore rules deployed
+(dodat trips subcollection). Nista jos nije iza paywall-a — gate se dodaje TEK kad
+Play Billing bude spreman (planirano 1.2.0 posle merchant setup-a).
+
+### A) Premium 7-pack — konacna odluka za 1.2.0
+
+Cene: **mesecno €2.99, godisnje €19.99** (44% popust vs 12×2.99=35.88, jak anchor).
+7-day free trial na oba. Play Billing Direct (ne RevenueCat) — Android-only,
+iOS nije na horizontu.
+
+Paket:
+1. **Places 10x** (free 3) — gate na `FREE_TIER_MAX_PER_CIRCLE`
+2. **History 30 dana** (free 7d) — gate na `HistoryViewModel.setDayOffset` clamp
+3. **Battery alerts** — implementirano ove sesije (svima free trenutno)
+4. **Driving reports** — implementirano ove sesije (svima free trenutno)
+5. **Custom map styles** — implementirano ove sesije (svima free trenutno)
+6. **Android Auto: full crew view + Places POI** — split (free basic je self+SOS,
+   premium je full members + POI). Nije implementirano jos.
+7. **Priority support** — operativno (email <24h)
+
+Nikad iza paywall-a: SOS, real-time lokacija, invite/create circle, enter/exit notif,
+osnovna Auto integracija (Play policy risk).
+
+Odbaceno: **Wear OS companion** (veliki posao, ne isplati se za 1.2.0), volumen
+gate-ovi za krugove/clanove (loše konvertuju), ghost mode (family trust risk).
+
+### B) Custom map styles
+
+Feature koji je user pomeno kao "vidljiv premium signal". Implementacija bez gate-a
+za sada — paywall se dodaje kasnije bez ijedne izmene ovog koda (samo na entry
+point-u u MapStyleScreen-u).
+
+- `core/map/MapStyleOption.kt` — enum sa 4 stila (STANDARD, DARK, SATELLITE,
+  OUTDOORS) svaki sa Mapbox `styleUri`, `labelRes`, `subtitleRes`.
+- `LocalPrefs.mapStyleKeyFlow: StateFlow<String>` + `setMapStyleKey(key)`. Cuvamo
+  string enum ime umesto ordinal-a (stabilno preko upgrade-a i R8 obfuskacije).
+- `feature/settings/MapStyleScreen.kt` + ViewModel — radio list, prati/postavlja
+  pref. Reuse KrugRadioButton iz BatteryModeScreen pattern-a.
+- Route `MapStyle` dodat, `SettingsRootScreen` dobija row u Performanse sekciji
+  (LogoTeal accent, Icons.Outlined.Map).
+- 3 map screen-a imaju runtime style change: `MapScreen` (novi `LaunchedEffect`
+  observe-uje `styleUri` param u `MapboxContainer`, reload-uje style bez recreate-a
+  MapView-a, resetuje `styleLoaded=false` pre reload-a), `HistoryScreen` i
+  `AddPlaceScreen` (isti pattern preko lokalnog `lastLoadedStyle` state-a). Sva 3
+  koriste `MapStyleOption` iz VM-a (`MapViewModel.mapStyle`, `HistoryViewModel.mapStyle`,
+  `PlacesViewModel.mapStyle`).
+- `PlacesViewModel` dobio novi param `localPrefs: LocalPrefs` (za `AddPlaceScreen`).
+
+### C) Battery alerts (<20%)
+
+Feature: notif kad batteryPct clana kruga padne ispod 20% i clan nije na punjacu.
+Rate-limit per member 12h. Hysteresis 25% (iznad se dedup entry brise pa sledeci
+pad opet triger-uje). Charging = skip (user zna, nema smisla).
+
+- `core/battery/BatteryAlertNotifier.kt` — channel `krug_battery_alerts` (DEFAULT
+  importance, ne alarm-level kao SOS), color LogoOrange (0xFFF59E0B), CATEGORY_STATUS.
+- `UserSettings.batteryAlertsEnabled: Boolean = true` + `SettingsRepository.updateBatteryAlerts`
+  + parse.
+- `LocationTrackingService.observeCircleBattery()` — mirror of `observeCircleSos()`:
+  combine per-peer `locationRepository.observe(uid)`, na svaki emit proverava threshold,
+  poziva `notifyLowBattery` uz `fetchDisplayName`. Postuje `batteryAlertsEnabled` +
+  silent hours iz `UserSettings`.
+- `LocalPrefs.loadBatteryAlerted(ttlMs)` + `saveBatteryAlerted(map)` — persistence
+  za dedup preko FGS restart-a. Format "uid1:ts1,uid2:ts2,..." (isti kao SOS).
+  `clearForAccountReset` cisti i ovaj key.
+- Konstante u LocationTrackingService: `PEER_BATTERY_ALERT_THRESHOLD = 20`,
+  `PEER_BATTERY_CLEAR_THRESHOLD = 25`, `BATTERY_ALERT_TTL_MS = 12h`.
+- Toggle u `PrivacyScreen` (posle Place notifikacija, pre Silent hours).
+
+### D) Driving reports
+
+Feature: automatska detekcija voznji preko GPS speed threshold-a, upis u Firestore
+subcollection, UI ekran sa day/week/month agregatima. Trenutno accessible iz Settings-a
+za sopstvene voznje; member-driving-reports ide u sledecu sesiju (E task).
+
+- `core/driving/TripModel.kt` — Firestore POJO sa `startAt`, `endAt`, `durationSec`,
+  `distanceKm`, `maxSpeedKmh`, `avgSpeedKmh`, `start/end lat/lng`, `createdAt`
+  (@ServerTimestamp).
+- `core/driving/TripDetector.kt` — state machine (IDLE → DRIVING → IDLE):
+  - START: 2+ uzastopna fix-a sa `speed >= 7 m/s` (~25 km/h)
+  - END: nema fix-a >= 1.4 m/s (~5 km/h) duze od 3 min (`TRIP_END_QUIET_MS`)
+  - Distance akumulira haversineMeters delta izmedju uzastopnih fixes-a, guard
+    protiv teleport-a (implied speed > 55 m/s = drop).
+  - `flush(uid)` metod za onDestroy — sacuvaj trip u toku pre nego proces umre.
+  - Filter noise: MIN_TRIP_DISTANCE_KM = 0.3, MIN_TRIP_DURATION_SEC = 60.
+- `core/driving/TripRepository.kt` — Firestore CRUD (`users/{uid}/trips/{tripId}`).
+  Query DESC po startAt, limit 100.
+- `LocationTrackingService` — @Inject tripDetector, poziva `onFix(uid, lat, lng,
+  speed, now)` PRE `shouldPublish` gate-a (detekcija radi na SVAKI fix). `flush(uid)`
+  se poziva u `onDestroy` unutar runCatching.
+- Firestore rules: dodat `match /trips/{tripId}` sa istim pattern-om kao locationHistory
+  (read: authed, create: self, update/delete: false). **Deployed** kroz
+  `firebase deploy --only firestore:rules`.
+- ProGuard: `-keep class org.krug.app.core.driving.TripModel { *; }` +
+  `-keepclassmembers ... TripModel { <init>(...); }` (defense-in-depth iako
+  `@ServerTimestamp` catch-all vec pokriva).
+- `feature/driving/DrivingReportsViewModel.kt` — `DrivingRange` enum
+  (TODAY/WEEK/MONTH), `rangeBounds` racunanje sa week start = Monday (locale-independent).
+  `List<TripModel>.summarize()` ext racuna tripCount + totalKm + maxKmh.
+- `feature/driving/DrivingReportsScreen.kt` — FilterChip range selector, summary
+  Card (primaryContainer), trip row Card sa datum + start-end vreme + distance +
+  max speed + duration. Empty state za prazan range.
+- Route `DrivingReports(uid, displayName)` + `KrugNavHost` wired. Settings row
+  "Izveštaji o vožnji" (LogoTeal, Icons.Outlined.Speed) → self driving reports
+  (uid iz FirebaseAuth u nav lambda).
+
+### E) Deploy + build verification
+
+- Firestore rules deployed OK (2026-07-08). Trip write-ovi ce raditi u produkciji.
+- Sav debug Kotlin build prolazi (`./gradlew :app:compileDebugKotlin`). Jedina
+  warning je vec-postojeci "delicate API" u HistoryScreen.kt:199 (nije vezana).
+- Nije jos pravljen release AAB — sledeca sesija.
+
+### F) Preostalo za sledecu sesiju
+
+1. **E task**: dodati "Vožnje" dugme u `MemberDetailSheet` pored History-ja da
+   se otvori DrivingReports za tudjeg clana (opening real premium use case:
+   roditelj vs tinejdžer).
+2. **D task**: Android Auto premium split — `KrugCarAppService` treba proširenje
+   sa (a) svi clanovi kruga na Auto mapi (ne samo self), (b) Places kao POI kategorija,
+   (c) distance-to-member widget. Free = self + SOS only.
+3. **Merchant account setup** kad user dobije bank/tax podatke → Play Console
+   subscription products (`krug_premium_monthly` €2.99, `krug_premium_yearly` €19.99).
+4. **Field test 3 nova feature-a**: pusti FGS, prošetaj/provozaj — proveri:
+   - Battery alert notif se okine kad peer padne <20% (test na drugom uredjaju
+     sa ADB `adb shell dumpsys battery set level 15`).
+   - Trip detection: provozaj se 5+ min, otvori Settings → Izveštaji o vožnji,
+     proveri trip u listi.
+   - Map style: promeni u Settings, proveri da MapScreen/HistoryScreen/AddPlaceScreen
+     odmah reload-uju bez app restart-a.
+5. **Paywall + Play Billing implementacija** (posle merchant setup-a): BillingClient,
+   PaywallScreen, Cloud Function `validatePurchase`, RTDN handler, prvi feature gate
+   (Places > 3).
+
+---
+
 ## Gde smo stali (2026-07-08, trideseta sesija — 6-tacka feedback + phantom EXIT fix + icon fix + premium temelji + 1.1.5 release)
 
 Fokus sesije: user je poslao 6-tacka feedback iz stvarnog testiranja sa Jelenom

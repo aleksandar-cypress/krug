@@ -73,6 +73,7 @@ fun AddPlaceScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val searchState by viewModel.searchState.collectAsStateWithLifecycle()
+    val mapStyle by viewModel.mapStyle.collectAsStateWithLifecycle()
     // Prefill iz Route (Place Suggestion click) — ime + fokus map-e na predloženu lokaciju
     // umesto current location.
     var name by remember { mutableStateOf(prefillName.orEmpty()) }
@@ -290,7 +291,7 @@ fun AddPlaceScreen(
                                     .build(),
                             )
                             mv.location.updateSettings { enabled = false }
-                            mv.mapboxMap.loadStyle(Style.STANDARD)
+                            mv.mapboxMap.loadStyle(mapStyle.styleUri)
                             // Prati kameru — overlay krug se skaluje na svaki move/zoom.
                             mv.mapboxMap.subscribeCameraChanged {
                                 val cs = mv.mapboxMap.cameraState
@@ -301,6 +302,15 @@ fun AddPlaceScreen(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
+                // Reagovati na runtime style change iz Settings-a — AddPlaceScreen ostaje
+                // u composition dok user ide u Settings pa factory ne fajruje ponovo.
+                var lastLoadedStyle by remember { mutableStateOf<String?>(null) }
+                LaunchedEffect(mapStyle, mapViewRef.map) {
+                    val mv = mapViewRef.map ?: return@LaunchedEffect
+                    if (lastLoadedStyle == mapStyle.styleUri) return@LaunchedEffect
+                    lastLoadedStyle = mapStyle.styleUri
+                    mv.mapboxMap.loadStyle(mapStyle.styleUri)
+                }
                 // Overlay krug centriran na crosshair-u, skaluje se sa radius-om.
                 val pixelRadius = remember(radius, cameraLat, cameraZoom) {
                     val metersPerPixelWorld = 156543.03392 *

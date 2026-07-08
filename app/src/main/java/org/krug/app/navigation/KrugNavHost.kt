@@ -18,6 +18,7 @@ import org.krug.app.feature.circle.CircleListScreen
 import org.krug.app.feature.circle.CreateCircleScreen
 import org.krug.app.feature.circle.EnterCodeScreen
 import org.krug.app.feature.circle.ShowInviteScreen
+import org.krug.app.feature.driving.DrivingReportsScreen
 import org.krug.app.feature.history.HistoryScreen
 import org.krug.app.feature.map.MapScreen
 import org.krug.app.feature.places.AddPlaceScreen
@@ -27,6 +28,7 @@ import org.krug.app.feature.settings.AboutScreen
 import org.krug.app.feature.settings.AccountScreen
 import org.krug.app.feature.settings.BatteryModeScreen
 import org.krug.app.feature.settings.DiagnosticsScreen
+import org.krug.app.feature.settings.MapStyleScreen
 import org.krug.app.feature.settings.PrivacyScreen
 import org.krug.app.feature.settings.ReliabilityScreen
 import org.krug.app.feature.settings.SettingsRootScreen
@@ -148,6 +150,13 @@ fun KrugNavHost() {
                 onAccount = { nav.navigate(Account) },
                 onPrivacy = { nav.navigate(Privacy) },
                 onBattery = { nav.navigate(BatteryMode) },
+                onMapStyle = { nav.navigate(MapStyle) },
+                onDrivingReports = {
+                    val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+                    if (!uid.isNullOrBlank()) {
+                        nav.navigate(DrivingReports(uid = uid, displayName = ""))
+                    }
+                },
                 onReliability = { nav.navigate(Reliability) },
                 onAbout = { nav.navigate(About) },
                 onDiagnostics = { nav.navigate(Diagnostics) },
@@ -172,6 +181,9 @@ fun KrugNavHost() {
         }
         composable<BatteryMode> {
             BatteryModeScreen(onBack = { nav.popBackStack() })
+        }
+        composable<MapStyle> {
+            MapStyleScreen(onBack = { nav.popBackStack() })
         }
         composable<About> {
             AboutScreen(onBack = { nav.popBackStack() })
@@ -250,6 +262,9 @@ fun KrugNavHost() {
         }
         composable<History> {
             HistoryScreen(onBack = { nav.popBackStack() })
+        }
+        composable<DrivingReports> {
+            DrivingReportsScreen(onBack = { nav.popBackStack() })
         }
     }
 }

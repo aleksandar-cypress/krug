@@ -20,6 +20,8 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.HealthAndSafety
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
@@ -90,6 +92,8 @@ fun SettingsRootScreen(
     onAccount: () -> Unit,
     onPrivacy: () -> Unit,
     onBattery: () -> Unit,
+    onMapStyle: () -> Unit,
+    onDrivingReports: () -> Unit,
     onReliability: () -> Unit,
     onAbout: () -> Unit,
     onDiagnostics: () -> Unit = {},
@@ -170,6 +174,20 @@ fun SettingsRootScreen(
                             icon = Icons.Outlined.BatteryFull,
                             accentColor = LogoTeal,
                             onClick = onBattery,
+                        ),
+                        SettingsItem(
+                            title = stringResource(R.string.settings_map_style),
+                            subtitle = stringResource(R.string.settings_map_style_subtitle),
+                            icon = Icons.Outlined.Map,
+                            accentColor = LogoTeal,
+                            onClick = onMapStyle,
+                        ),
+                        SettingsItem(
+                            title = stringResource(R.string.settings_driving_reports),
+                            subtitle = stringResource(R.string.settings_driving_reports_subtitle),
+                            icon = Icons.Outlined.Speed,
+                            accentColor = LogoTeal,
+                            onClick = onDrivingReports,
                         ),
                     ),
                 ),

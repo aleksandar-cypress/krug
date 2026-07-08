@@ -266,6 +266,7 @@ fun MapScreen(
     val activePlaces by viewModel.activePlaces.collectAsStateWithLifecycle()
     val eventsByPlace by viewModel.eventsByPlace.collectAsStateWithLifecycle()
     val autoStatusByUid by viewModel.autoStatusByUid.collectAsStateWithLifecycle()
+    val mapStyle by viewModel.mapStyle.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val view = LocalView.current
     val haptic: () -> Unit = remember(view) {
@@ -771,7 +772,12 @@ fun MapScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        MapboxContainer(members = state.members, photoCache = photoCache, holder = mapViewState)
+        MapboxContainer(
+            members = state.members,
+            photoCache = photoCache,
+            holder = mapViewState,
+            styleUri = mapStyle.styleUri,
+        )
 
         Column(
             modifier = Modifier
@@ -1696,12 +1702,36 @@ private fun MapboxContainer(
     members: List<MemberWithLocation>,
     photoCache: Map<String, Bitmap>,
     holder: MapViewHolder,
+    styleUri: String,
 ) {
     val context = LocalContext.current
     // Pre-resolve strings here (Composable scope) — AndroidView update lambda nije
     // @Composable pa ne može direktno da poziva stringResource() iz petlje.
     val labelYou = stringResource(R.string.member_label_you)
     val labelMember = stringResource(R.string.member_label_member)
+
+    // Kad se style pref promeni (Settings → Map style), reload style na postojeći MapView.
+    // MapView nije disposed kad user ide u Settings pa faktori ne fajruje ponovo. Bez
+    // ovog LaunchedEffect-a, novi izbor bi bio primenjen tek pri sledećem cold start-u.
+    androidx.compose.runtime.LaunchedEffect(styleUri) {
+        val mv = holder.mapView ?: return@LaunchedEffect
+        if (holder.currentStyleUri == styleUri) return@LaunchedEffect
+        holder.currentStyleUri = styleUri
+        holder.styleLoaded = false
+        mv.location.updateSettings {
+            enabled = false
+            pulsingEnabled = false
+        }
+        mv.location.enabled = false
+        mv.mapboxMap.loadStyle(styleUri) {
+            mv.location.updateSettings {
+                enabled = false
+                pulsingEnabled = false
+            }
+            mv.location.enabled = false
+            holder.styleLoaded = true
+        }
+    }
 
     androidx.compose.ui.viewinterop.AndroidView(
         modifier = Modifier.fillMaxSize(),
@@ -1783,10 +1813,13 @@ private fun MapboxContainer(
                     pulsingEnabled = false
                 }
                 mv.location.enabled = false
-                // Mapbox Standard sam adaptira light/dark prema system theme-u uređaja.
-                // Ne forsiramo lightPreset — neka korisnik kroz system settings kontroliše.
-                mv.mapboxMap.loadStyle(Style.STANDARD) {
-                    // Onstyle-loaded callback — re-aplikujemo disable jer Standard style
+                // Style URI dolazi iz Settings (Map style) preko MapViewModel-a.
+                // STANDARD adaptira system theme-u; DARK je forsirano tamna; SATELLITE i
+                // OUTDOORS su alternative za korisnika. Ne forsiramo lightPreset — neka
+                // korisnik kroz system settings kontroliše ako je STANDARD.
+                holder.currentStyleUri = styleUri
+                mv.mapboxMap.loadStyle(styleUri) {
+                    // Onstyle-loaded callback — re-aplikujemo disable jer style
                     // može da pokuša da re-enable-uje location komponentu kada se load-uje.
                     mv.location.updateSettings {
                         enabled = false
@@ -1938,6 +1971,8 @@ private class MapViewHolder {
     var didFlyToSelf: Boolean = false
     /** True nakon prvog `loadStyle` callback-a — gate za camera op-ove iz LaunchedEffect-a. */
     var styleLoaded: Boolean = false
+    /** Trenutno load-ovan style URI. Koristi ga LaunchedEffect(mapStyle) da preskoči redundant reload. */
+    var currentStyleUri: String? = null
     // Annotation → list of member uids u tom pin-u. Solo pin = [uid]. Cluster (2+) =
     // all uids. Bez ovog, cluster klik bi opet otvarao samo primary člana bez ikakvog
     // pristupa drugim članovima cluster-a.
