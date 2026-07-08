@@ -163,6 +163,7 @@
 
     <string name="settings_driving_reports">Driving reports</string>
     <string name="settings_driving_reports_subtitle">Trips, distance, top speed</string>
+    <string name="member_driving_cta">Trips</string>
 
     <!-- Driving reports -->
     <string name="driving_reports_title">Driving reports</string>

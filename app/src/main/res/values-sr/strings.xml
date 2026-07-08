@@ -167,6 +167,7 @@
 
     <string name="settings_driving_reports">Izveštaji o vožnji</string>
     <string name="settings_driving_reports_subtitle">Vožnje, kilometraža, maks brzina</string>
+    <string name="member_driving_cta">Vožnje</string>
 
     <!-- Driving reports -->
     <string name="driving_reports_title">Izveštaji o vožnji</string>

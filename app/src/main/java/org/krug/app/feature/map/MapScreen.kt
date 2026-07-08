@@ -260,6 +260,7 @@ fun MapScreen(
     onJoinByCode: () -> Unit = {},
     onOpenPlacesForCircle: (circleId: String) -> Unit = {},
     onOpenHistory: (uid: String, displayName: String) -> Unit = { _, _ -> },
+    onOpenDriving: (uid: String, displayName: String) -> Unit = { _, _ -> },
     viewModel: MapViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -988,6 +989,10 @@ fun MapScreen(
                     onOpenHistory = {
                         detailUid = null
                         onOpenHistory(detailMember.uid, detailMember.displayName)
+                    },
+                    onOpenDriving = {
+                        detailUid = null
+                        onOpenDriving(detailMember.uid, detailMember.displayName)
                     },
                 )
             }
@@ -2523,6 +2528,7 @@ private fun MemberDetailSheet(
     onOpenInMaps: () -> Unit,
     onRefresh: () -> Unit,
     onOpenHistory: (() -> Unit)?,
+    onOpenDriving: (() -> Unit)?,
 ) {
     var refreshTriggered by remember { mutableStateOf(false) }
     LaunchedEffect(refreshTriggered) {
@@ -2919,6 +2925,28 @@ private fun MemberDetailSheet(
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = stringResource(R.string.action_open_in_google_maps),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            // Driving reports — full-width secondary button ispod istorije. Gate ce
+            // ovo kasnije uslovljavati na `premiumChecker.isPremiumNow`. Za sada svima.
+            if (onOpenDriving != null) {
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onOpenDriving,
+                    shape = buttonShape,
+                    modifier = Modifier.fillMaxWidth().height(buttonHeight),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Speed,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(R.string.member_driving_cta),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

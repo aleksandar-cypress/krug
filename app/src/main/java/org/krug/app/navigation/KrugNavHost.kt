@@ -142,6 +142,7 @@ fun KrugNavHost() {
                 onJoinByCode = { nav.navigate(EnterCode()) },
                 onOpenPlacesForCircle = { circleId -> nav.navigate(Places(circleId = circleId)) },
                 onOpenHistory = { uid, name -> nav.navigate(History(uid = uid, displayName = name)) },
+                onOpenDriving = { uid, name -> nav.navigate(DrivingReports(uid = uid, displayName = name)) },
             )
         }
         composable<Settings> {
