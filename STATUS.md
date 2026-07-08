@@ -2,6 +2,143 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-07-08, trideseta sesija — 6-tacka feedback + phantom EXIT fix + icon fix + premium temelji + 1.1.5 release)
+
+Fokus sesije: user je poslao 6-tacka feedback iz stvarnog testiranja sa Jelenom
+(replay notif pri restartu, nestabilan sort, PlaceRow UX, phantom EXIT bug,
+premium placeholder, radijus label). Fix plan → svih 6 implementirano → battery
+optimizacija phantom EXIT-a → Xiaomi/Auto ikone fix → premium temelji (UserModel
++ PremiumChecker + firestore rules) → build 1.1.5 AAB. Firebase Firestore rules
+deploy-ovane. Fizicki verifikovano na S24 Ultra kroz ADB screenshot pipeline.
+
+### A) 6-tacka feedback iz testiranja sa Jelenom
+
+**1. Phantom EXIT** (P0 ozbiljan): Jelena je dobila lazan notif "user je izasao
+iz babine lokacije" u 21:28h dok je user bio kod kuce ceo dan. Play Services
+posle Doze wake-up-a firira spurious EXIT sa fresh accuracy/timestamp — postojeci
+filteri 1-3 (`STARTUP_GRACE`, `BATCH_RECONCILIATION`, `ACCURACY+AGE`) ga ne hvataju.
+
+Fix: `GeofenceBroadcastReceiver` novi Filter 4 (GPS VERIFY). Pre nego sto upise
+event, uzme nezavisan location fix i uporedi sa center place-a:
+- EXIT prihvatamo samo ako je `distance > radius + 50m` (jasno van zone).
+- ENTER prihvatamo samo ako je `distance <= radius + 50m` (jasno unutra ili blizu).
+- Threshold `PHANTOM_THRESHOLD_M = 50` — tolerancija za GPS jitter na granici.
+
+Battery optimizacija (dvo-stepeni pristup):
+- Jeftin path: `event.triggeringLocation` ako je accuracy < 50m i age < 30s.
+  Pokriva 80-90% real transitions (user fizicki prelazi granicu → Play ima svez fix).
+- Skup path (fallback): `getCurrentLocation(HIGH_ACCURACY)` sa 15s timeout. Aktivira
+  se kad je triggeringLocation odsutan/neprecizan/star — tacno tada su phantom-i
+  najcesci (post-Doze reconciliation).
+
+**2. Replay notif pri restartu** (P1): user ubije app, podigne — dobija notif
+"Jelena arrived at Banjica" iako je Jelena tu ceo dan. In-memory
+`placesListenerStartedAt` i `notifiedPlaceEventIds` se brisu pri kill.
+
+Fix: PERSISTED per-krug high-watermark u `LocalPrefs.loadLastSeenPlaceEventTs/
+saveLastSeenPlaceEventTs`. Format "cid1:ts1,cid2:ts2,..." (isti kao SOS dedup).
+Watermark se podize i za muted/silent-hours event-e (event je "vidjen" iako ne
+notifikujemo). Novi krug bez entry-ja fallback na session `placesListenerStartedAt`.
+
+**3. Nestabilan sort clanova**: MembersSheet clanovi skacu sa dna → vrh kad neko
+publish-uje fresh location. Fix: `MapScreen.kt:2251` sort promenjen sa `updatedAt
+desc` na `displayName asc + uid asc` (tie-break). Svezinu prikazujemo kao subtitle
+u MemberRow-u, ne kao sort key. 6+ clanova stoji stabilno.
+
+**4. PlaceRow "100m" bez konteksta**: sada `stringResource(places_radius_label,
+radius)` → "Radijus: 100 m" / "Radius: 100 m" (label je vec postojao u res-u).
+
+**5. Ko je kreirao mesto**: novi `PlacesViewModel.memberNamesByUid: StateFlow<Map<
+String, String>>` (uid → displayName). `PlaceRow` prima `creatorName`, prikazuje
+"Kreirao <ime>" subtitle. String `places_row_creator` dodat u values/ i values-sr/.
+
+**6. UI bez View History dugmeta** (buduci premium gate): user pitao "kako ce
+izgledati kad se history sakrije?". Fix: `MemberDetailSheet.onOpenHistory` je
+sada nullable. Kad je null, Directions se promise u full-width primary Button.
+Trenutno je non-null za sve (nema stvarnog premium gate-a jos), ali layout je
+spreman.
+
+### B) Icon fix (Xiaomi + Android Auto + Samsung notif badge)
+
+Verifikovano na S24 Ultra: swipe-down notif panel je pokazivao Krug icon sa
+zasecenim glavama na sve 4 strane (pink levo, blue gore, teal desno, orange dole).
+Isto se desavalo na Xiaomi launcher-u i Android Auto-u.
+
+Root uzrok: `ic_krug_logo.xml` viewport (911x909) sa negative translate
+(-44.8, -47.77) izbacuje ekstreme glavica NA ivice viewport-a (x=-1, x=912,
+y=2, y=906). Bilo koji OEM mask sa agresivnijim circular crop-om odseca glavice.
+Samsung launcher squircle je najblazi pa "prolazi" ali One UI notif badge (koji
+takodje koristi launcher icon) primenjuje agressivniji circular mask.
+
+Fix: `ic_launcher_foreground.xml` i `ic_launcher_monochrome.xml` prepisani sa
+istim proporcijama kao `ic_notification_large.xml`: viewport 1800x1800, group
+translate 398, figure na ~41% radiusa od centra. Sigurno unutar bilo koje maske.
+
+`ic_krug_logo.xml` OSTAJE netaknut jer se koristi u UI (KrugLogo.kt, MapScreen,
+PlaceEventNotifier) kao full-bleed brand accent.
+
+Trade-off: launcher icon je ~5-6dp manje nego pre. User verifikovao kroz ADB
+screenshot komparaciju (debug build sa fix-om vs. production 1.1.4) i prihvatio
+"cist look, sve 4 glave vidljive".
+
+### C) Premium temelji (nema billing jos, tlo za v1.2+)
+
+Diskusija: sve premium feature-i (Places, geofence, history 30d, driving reports,
+FCM push, Blaze plan) su vec IMPLEMENTIRANI i besplatni. Sto nedostaje za pravu
+tier segmentaciju: Play Billing SDK, receipt validation, paywall UI, premium flag
+u user record-u, feature gating logika. To je 1-2 nedelje rada.
+
+User izabrao "temelji za 1.1.5" umesto full premium implementacije. Sto je urađeno:
+
+- `UserModel.isPremium: Boolean = false` + `premiumUntil: Date? = null`. `@ServerTimestamp`
+  NE na `premiumUntil` (business logic, ne server clock).
+- `PremiumChecker` singleton (`user/PremiumChecker.kt`) — `isPremiumFlow:
+  StateFlow<Boolean>` (jedan Firestore listener, deli preko StateFlow-a) i sync
+  `isPremiumNow`. Listener follows auth state change kroz `_uidFlow` MutableStateFlow.
+- `UserModel.isEntitledToPremium(now)` extension: kombinuje flag + expiry
+  (`premiumUntil > now` ili null za lifetime = true).
+- `firestore.rules`: novi helper funkcije `isNotChangingPremium()` i
+  `isCreatingNonPremium()`. Klijent NE sme da self-update `isPremium`/`premiumUntil`.
+  Cloud Function preko admin SDK bypass-uje. Deploy-ovano preko `firebase deploy
+  --only firestore:rules`.
+
+Test: admin toggle `isPremium: true` u Firestore konzoli za tvoj user record.
+Verifikovano na S24 Ultra debug build-om: app startuje bez crash-a, deserialization
+novih polja prolazi kroz R8, `PremiumChecker.isPremiumFlow` emit-uje true.
+
+**Sledeci koraci za premium** (van 1.1.5 scope-a):
+- RevenueCat SDK integracija (jeftinije/brze od custom Cloud Function + Play
+  Developer API validation) — trade-off 1% revenue share posle prvog $2.5k/mesec.
+- Paywall UI (skrol kroz benefite, price selector, "Free trial 7 days" CTA).
+- Feature gating: `if (premiumChecker.isPremiumNow) { ... } else { showPaywall() }`
+  na Place add (>3 places), history >7d, unlimited krugovi, unlimited clanovi.
+- Cloud Function `onPurchaseValidated` koji upisuje `isPremium: true` i
+  `premiumUntil: expiryDate` posle receipt validation-a.
+
+### D) 1.1.5 release build
+
+- versionCode 9 → 10, versionName 1.1.4 → 1.1.5.
+- Release build prosao sa R8 + Crashlytics mapping upload:
+  - `app/build/outputs/bundle/release/app-release.aab` (37MB) — za Play Console
+  - `app/build/outputs/apk/release/app-release.apk` (70MB) — za direktan install
+- Firestore rules vec deployed.
+- Cloud Functions nisu menjane u ovom batchu.
+
+### E) Preostalo za sledecu sesiju
+
+1. Play Console upload 1.1.5 AAB → Internal testing rollout (kad user odluci).
+2. Field test tacke 6 na fizickim uredjajima (GPS + Play Services). Prati
+   Crashlytics/logs sa "skip phantom" grep-om — ako je previse restriktivan
+   (real EXIT baca kao phantom u zgradi sa losim GPS-om), tuning
+   `PHANTOM_THRESHOLD_M` (trenutno 50).
+3. Prvi stvarni premium gate (npr. Places > 3 zahteva premium) — kad user
+   odluci da krene sa v1.2 premium implementacijom.
+4. FCM push end-to-end verifikacija sa 1.1.5 (Jelena update → Refresh → Cloud
+   Function log → target publish fresh fix).
+5. Ostalih 16 tester-a opt-in accept (Play Console management).
+
+---
+
 ## Gde smo stali (2026-07-07, dvadeset deveta sesija — 10-tacka feedback + Play Store journey + FCM push infrastructure)
 
 Fokus sesije: user je jutros poslao 10 konkretnih problema (recent activity vreme,
