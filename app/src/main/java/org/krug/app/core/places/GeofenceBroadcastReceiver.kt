@@ -1,10 +1,18 @@
 package org.krug.app.core.places
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.location.Location
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingEvent
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.AndroidEntryPoint
@@ -14,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 
 /**
@@ -46,6 +55,39 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
          */
         private const val DEDUP_WINDOW_MS = 5L * 60_000L
         private val lastEventTimes = mutableMapOf<String, Long>()
+
+        /**
+         * Timeout za fresh GPS fix pri verifikaciji. BroadcastReceiver.goAsync() daje
+         * oko 30s do system kill-a, ostavljamo margine za Firestore fetch (place info +
+         * logEvent write). 15s je uobičajen fused HIGH_ACCURACY warm-fix; ako uređaj
+         * nema recent GPS, može trajati duže i mi ćemo fallback-ovati na standardnu
+         * validaciju (bez GPS verify), tj. propustiti event kao pre.
+         */
+        private const val GPS_VERIFY_TIMEOUT_MS = 15_000L
+
+        /**
+         * Tolerancija oko granice geofence-a pri verifikaciji. Play Services može
+         * fire-ovati EXIT dok je user 30-80m unutar zone (GPS jitter), ili ENTER
+         * pre nego što stvarno pređe granicu. Zato prihvatamo event samo ako je
+         * fresh GPS potvrdi da je user JASNO s druge strane (radius +/- 50m).
+         *  - EXIT prihvatamo ako je distance > radius + 50m
+         *  - ENTER prihvatamo ako je distance <= radius + 50m (dovoljno blizu / unutra)
+         */
+        private const val PHANTOM_THRESHOLD_M = 50
+
+        /**
+         * "Jeftin verify" kvalifikacija — ako `event.triggeringLocation` ispunjava
+         * ova dva uslova, koristimo ga direktno umesto poziva `getCurrentLocation`.
+         * Time izbegavamo dodatnih 1-15s HIGH_ACCURACY GPS-a po transition-u
+         * (baterija). Kad user fizički prelazi granicu, triggeringLocation je
+         * tipično <20m accuracy i <5s star, pa jeftin path pokriva 80-90% slučajeva.
+         *
+         * Fallback na fresh fix se koristi kad je triggeringLocation odsutan,
+         * neprecizan (npr. Play je fire-ovala EXIT baziran na WiFi/cell netovima),
+         * ili star (post-Doze reconciliation).
+         */
+        private const val TRIGGERING_LOC_MAX_ACCURACY_M = 50f
+        private const val TRIGGERING_LOC_MAX_AGE_MS = 30_000L
     }
 
     override fun onReceive(context: Context, intent: Intent?) {
@@ -129,9 +171,84 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
         scope.launch {
             try {
                 val userName = fetchUserName(uid)
+                // FILTER 4 (GPS VERIFY): pre nego što upišemo event, verifikuj distancu
+                // do centra place-a. Ako fizičko stanje ne odgovara tipu event-a → phantom, skip.
+                //
+                // Real-world scenario (Jul 2026): Jelena je dobila notif da je user "izašao iz
+                // babine lokacije" u 21:28h iako je user bio kod kuće sve vreme. Play Services
+                // je poslao spurious EXIT sa fresh accuracy/timestamp posle Doze wake-up-a.
+                // Postojeci filteri 1-3 ne hvataju to jer signal izgleda validan. GPS verify
+                // je jedini pouzdan način: uporedi lokaciju sa center-om place-a i threshold-om.
+                //
+                // Dva-stepeni pristup (baterija):
+                //  A) Jeftin path: koristi `event.triggeringLocation` ako je accuracy < 50m
+                //     i age < 30s. Play Services ga već ima u ruci, ne pravimo novi GPS poziv.
+                //     Pokriva 80-90% slučajeva kad user fizički prelazi granicu.
+                //  B) Skup path (fallback): `getCurrentLocation(HIGH_ACCURACY)` sa 15s timeout.
+                //     Aktivira se kad je triggeringLocation odsutan/neprecizan (WiFi-only fix,
+                //     wake-from-Doze reconciliation, itd.). Tada baš tu i treba pouzdan fresh
+                //     fix — phantom-i najčešće dolaze upravo iz te kategorije.
+                //
+                // Ako oba puta faila (timeout, permission) degradiramo na stanje pre ovog
+                // fiksa (upisujemo event bez verifikacije). Bolje malo phantom event-a nego
+                // totalno gubljenje real event-a.
+                val triggeringLoc = event.triggeringLocation
+                val triggeringAgeMs = if (triggeringLoc != null) {
+                    System.currentTimeMillis() - triggeringLoc.time
+                } else {
+                    Long.MAX_VALUE
+                }
+                val verifyLocation: Location? = if (
+                    triggeringLoc != null &&
+                    triggeringLoc.accuracy < TRIGGERING_LOC_MAX_ACCURACY_M &&
+                    triggeringAgeMs < TRIGGERING_LOC_MAX_AGE_MS
+                ) {
+                    Timber.d(
+                        "GeofenceReceiver: verify via triggeringLocation (acc=%.1fm age=%dms) — cheap path",
+                        triggeringLoc.accuracy, triggeringAgeMs,
+                    )
+                    triggeringLoc
+                } else {
+                    Timber.d(
+                        "GeofenceReceiver: triggeringLocation not suitable (acc=%s age=%s), fetching fresh fix",
+                        triggeringLoc?.accuracy?.toString() ?: "null",
+                        if (triggeringLoc != null) "${triggeringAgeMs}ms" else "n/a",
+                    )
+                    tryGetFreshLocation(context)
+                }
+                if (verifyLocation == null) {
+                    Timber.w("GeofenceReceiver: no location for verify, proceeding without")
+                }
                 triggered.forEach { fence ->
                     val (circleId, placeId) = parseRequestId(fence.requestId) ?: return@forEach
-                    // Dedup: preskoči duplicate event unutar 60s (isti place, isti transition).
+                    val placeInfo = fetchPlaceInfo(circleId, placeId)
+                    // GPS verifikacija (Filter 4). Preskoči samo ako imamo i fresh fix i place info;
+                    // inače propuštamo event (fallback na stariji stack filtera).
+                    if (verifyLocation != null && placeInfo != null) {
+                        val distance = distanceMeters(
+                            verifyLocation.latitude, verifyLocation.longitude,
+                            placeInfo.lat, placeInfo.lng,
+                        )
+                        val thresholdIn = placeInfo.radius + PHANTOM_THRESHOLD_M
+                        when (type) {
+                            PlaceEventModel.TYPE_EXIT -> if (distance <= thresholdIn) {
+                                Timber.w(
+                                    "GeofenceReceiver: skip phantom EXIT place=%s dist=%.1fm radius=%d (user still inside)",
+                                    placeInfo.name, distance, placeInfo.radius,
+                                )
+                                return@forEach
+                            }
+                            PlaceEventModel.TYPE_ENTER -> if (distance > thresholdIn) {
+                                Timber.w(
+                                    "GeofenceReceiver: skip phantom ENTER place=%s dist=%.1fm radius=%d (user still outside)",
+                                    placeInfo.name, distance, placeInfo.radius,
+                                )
+                                return@forEach
+                            }
+                        }
+                    }
+                    // Dedup POSLE verify-a: da phantom event ne zauzme dedup slot i time
+                    // blokira legitiman event koji stigne par minuta kasnije.
                     val key = "$placeId:$type"
                     val now = System.currentTimeMillis()
                     val last = synchronized(lastEventTimes) { lastEventTimes[key] } ?: 0L
@@ -140,7 +257,7 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                         return@forEach
                     }
                     synchronized(lastEventTimes) { lastEventTimes[key] = now }
-                    val placeName = fetchPlaceName(circleId, placeId) ?: placeId
+                    val placeName = placeInfo?.name ?: fetchPlaceName(circleId, placeId) ?: placeId
                     placeRepository.logEvent(
                         circleId = circleId,
                         placeId = placeId,
@@ -155,6 +272,55 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
             } finally {
                 pendingResult.finish()
             }
+        }
+    }
+
+    private data class PlaceInfo(
+        val name: String,
+        val lat: Double,
+        val lng: Double,
+        val radius: Int,
+    )
+
+    private suspend fun fetchPlaceInfo(circleId: String, placeId: String): PlaceInfo? {
+        return runCatching {
+            val doc = firestore.collection("circles").document(circleId)
+                .collection("places").document(placeId).get().await()
+            val name = doc.getString("name") ?: return@runCatching null
+            val lat = doc.getDouble("lat") ?: return@runCatching null
+            val lng = doc.getDouble("lng") ?: return@runCatching null
+            val radius = (doc.getLong("radius") ?: 100L).toInt()
+            PlaceInfo(name = name, lat = lat, lng = lng, radius = radius)
+        }.getOrNull()
+    }
+
+    private fun distanceMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Float {
+        val out = FloatArray(1)
+        Location.distanceBetween(lat1, lng1, lat2, lng2, out)
+        return out[0]
+    }
+
+    private suspend fun tryGetFreshLocation(context: Context): Location? {
+        val hasFine = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasFine) {
+            Timber.w("GeofenceReceiver: no fine location permission, skip GPS verify")
+            return null
+        }
+        val client = LocationServices.getFusedLocationProviderClient(context)
+        val cts = CancellationTokenSource()
+        return try {
+            withTimeoutOrNull(GPS_VERIFY_TIMEOUT_MS) {
+                @SuppressLint("MissingPermission")
+                val task = client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
+                task.await()
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "GeofenceReceiver: getCurrentLocation failed")
+            null
+        } finally {
+            cts.cancel()
         }
     }
 

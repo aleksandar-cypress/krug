@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.krug.app.core.circle.CircleRepository
@@ -163,6 +164,22 @@ class PlacesViewModel @Inject constructor(
     val recentEvents: StateFlow<List<org.krug.app.core.places.PlaceEventModel>> =
         placeRepository.observeRecentEvents(circleId, limit = 20)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Mapa uid → displayName za sve članove tekućeg kruga. Koristi se u UI-ju za
+     * prikazivanje ko je kreirao place (`place.createdBy` je userId). Emit-uje se
+     * čim se lista članova ili user record neki od njih promeni.
+     */
+    val memberNamesByUid: StateFlow<Map<String, String>> =
+        circleRepository.observeMembersUids(circleId).flatMapLatest { uids ->
+            if (uids.isEmpty()) flowOf(emptyMap())
+            else combine(
+                uids.map { uid ->
+                    userRepository.observeUser(uid)
+                        .map { user -> uid to (user?.displayName.orEmpty()) }
+                },
+            ) { arr -> arr.toList().toMap() }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     /**
      * Trenutno u mestu — mapa placeId → lista imena članova koji su unutar radius-a.

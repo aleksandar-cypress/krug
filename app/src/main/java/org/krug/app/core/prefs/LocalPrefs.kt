@@ -120,6 +120,34 @@ class LocalPrefs @Inject constructor(
         }
 
     /**
+     * Poslednji viđeni timestamp `placeEvent`-a per krug. LocationTrackingService čita ovo
+     * pri startup-u umesto `System.currentTimeMillis()` fallback-a i ignoriše event-e
+     * čiji je timestamp <= sačuvane vrednosti. Rešava replay bug: user ubije app dok je
+     * Jelena u nekom Place-u; kad user restartuje, in-memory `placesListenerStartedAt`
+     * bio bi trenutni, ali ako Jelenin klijent u međuvremenu upiše nov event (spurious
+     * Play Services reconciliation), taj event bi propao kroz filter jer je timestamp
+     * mlađi od restart-a. Persist-ujemo max viđeni ts po krugu da se guardujemo od svega.
+     *
+     * Format: "cid1:ts1,cid2:ts2,..." (isti pattern kao SOS dedup).
+     */
+    fun loadLastSeenPlaceEventTs(): MutableMap<String, Long> {
+        val raw = prefs.getString(KEY_LAST_SEEN_PLACE_EVENT_TS, null).orEmpty()
+        if (raw.isBlank()) return mutableMapOf()
+        return raw.split(',').mapNotNull { entry ->
+            val parts = entry.split(':')
+            if (parts.size != 2) return@mapNotNull null
+            val cid = parts[0]
+            val ts = parts[1].toLongOrNull() ?: return@mapNotNull null
+            if (cid.isBlank()) null else cid to ts
+        }.toMap().toMutableMap()
+    }
+
+    fun saveLastSeenPlaceEventTs(map: Map<String, Long>) {
+        val serialized = map.entries.joinToString(",") { "${it.key}:${it.value}" }
+        prefs.edit(commit = false) { putString(KEY_LAST_SEEN_PLACE_EVENT_TS, serialized) }
+    }
+
+    /**
      * GDPR — pozvati nakon delete-account ili reinstall recovery-ja. Briše sve per-account
      * state da novi sign-in ne nasledi stari `activeCircleId` (ne postoji više), `sos_notified`
      * dedup ili `onboardingCompleted` flag (novi nalog treba čist onboarding). `pendingDeleteUid`
@@ -131,6 +159,7 @@ class LocalPrefs @Inject constructor(
             remove(KEY_ACTIVE_CIRCLE)
             remove(KEY_SOS_NOTIFIED)
             remove(KEY_ACTIVITY_REC_PROMPT_SHOWN)
+            remove(KEY_LAST_SEEN_PLACE_EVENT_TS)
         }
         _activeCircleId.value = null
     }
@@ -144,5 +173,6 @@ class LocalPrefs @Inject constructor(
         const val KEY_LAST_SEEN_WHATS_NEW = "last_seen_whats_new_version"
         const val KEY_LAST_BATTERY_PROMPT_MS = "last_battery_prompt_ms"
         const val KEY_PENDING_INVITE_CODE = "pending_invite_code"
+        const val KEY_LAST_SEEN_PLACE_EVENT_TS = "last_seen_place_event_ts"
     }
 }

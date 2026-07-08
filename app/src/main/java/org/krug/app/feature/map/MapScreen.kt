@@ -2245,14 +2245,21 @@ private fun MembersSheet(
     autoStatusByUid: Map<String, String> = emptyMap(),
     onMemberClick: (String) -> Unit,
 ) {
-    // Sort: self prvi, pa SOS, pa active (recent updatedAt), pa long-offline ghost.
+    // Sort: self prvi, pa SOS, pa active clanovi po imenu, pa long-offline na kraju.
     // Bez ovog redosled je nepredvidiv (Firestore snapshot order) — user mora da
     // skroluje da bi našao sebe ili člana u nevolji.
+    //
+    // Zašto NE sortiramo po `updatedAt` u aktivnoj grupi: svaki fresh location publish
+    // menja updatedAt, i lista skače (član sa novim fix-om preleti na vrh). Kod 6+ članova
+    // to je vizuelni chaos. Umesto toga sortiramo po displayName (stabilan između update-a),
+    // a "svežinu" pokazujemo kao subtitle u MemberRow-u (npr. "aktivan pre 2 min").
+    // Long-offline (24h+) ide na dno posebno, da ne zauzima prostor pored aktivnih.
     val sortedMembers = members.sortedWith(
         compareByDescending<MemberWithLocation> { it.isSelf }
             .thenByDescending { it.sos != null }
             .thenBy { it.isLongOffline() }
-            .thenByDescending { it.location?.updatedAt ?: 0L },
+            .thenBy { it.displayName.lowercase() }
+            .thenBy { it.uid },
     )
     Column(
         modifier = Modifier
@@ -2480,7 +2487,7 @@ private fun MemberDetailSheet(
     autoStatus: String?,
     onOpenInMaps: () -> Unit,
     onRefresh: () -> Unit,
-    onOpenHistory: () -> Unit,
+    onOpenHistory: (() -> Unit)?,
 ) {
     var refreshTriggered by remember { mutableStateOf(false) }
     LaunchedEffect(refreshTriggered) {
@@ -2810,45 +2817,73 @@ private fun MemberDetailSheet(
         // Row: [Icon-only directions LogoTeal] [View history LogoBlue full remaining].
         // Row fillMaxWidth + weight na View history — bez ovog Row ne zauzima ceo prostor
         // (visual mismatch sa Refresh iznad).
+        //
+        // Kad `onOpenHistory` bude null (buducci premium gate, free-tier user), History
+        // dugme se sakriva a Directions se promise u full-width primary Button — layout
+        // ostaje "punjen" i ne izgleda kao da smo zaboravili akciju.
         if (member.location != null) {
             if (showRefresh) Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                androidx.compose.material3.FilledIconButton(
+            if (onOpenHistory != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    androidx.compose.material3.FilledIconButton(
+                        onClick = onOpenInMaps,
+                        shape = buttonShape,
+                        colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
+                            containerColor = org.krug.app.ui.theme.LogoTeal,
+                            contentColor = Color.White,
+                        ),
+                        modifier = Modifier.size(width = 64.dp, height = buttonHeight),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Directions,
+                            contentDescription = stringResource(R.string.action_open_in_google_maps),
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                    androidx.compose.material3.Button(
+                        onClick = onOpenHistory,
+                        shape = buttonShape,
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = org.krug.app.ui.theme.LogoBlue,
+                            contentColor = Color.White,
+                        ),
+                        modifier = Modifier.weight(1f).height(buttonHeight),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.AccessTime,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.history_cta),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            } else {
+                androidx.compose.material3.Button(
                     onClick = onOpenInMaps,
                     shape = buttonShape,
-                    colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                         containerColor = org.krug.app.ui.theme.LogoTeal,
                         contentColor = Color.White,
                     ),
-                    modifier = Modifier.size(width = 64.dp, height = buttonHeight),
+                    modifier = Modifier.fillMaxWidth().height(buttonHeight),
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Directions,
-                        contentDescription = stringResource(R.string.action_open_in_google_maps),
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-                androidx.compose.material3.Button(
-                    onClick = onOpenHistory,
-                    shape = buttonShape,
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                        containerColor = org.krug.app.ui.theme.LogoBlue,
-                        contentColor = Color.White,
-                    ),
-                    modifier = Modifier.weight(1f).height(buttonHeight),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.AccessTime,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(20.dp),
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = stringResource(R.string.history_cta),
+                        text = stringResource(R.string.action_open_in_google_maps),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

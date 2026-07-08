@@ -176,6 +176,7 @@
     <string name="places_name_label">Ime</string>
     <string name="places_name_hint">Kuća, Škola, Posao…</string>
     <string name="places_radius_label">Radijus: %1$d m</string>
+    <string name="places_row_creator">Kreirao %1$s</string>
     <string name="places_use_current_location">Koristi trenutnu lokaciju</string>
     <string name="places_tap_map_hint">Tapni na mapu da postaviš lokaciju</string>
     <string name="places_save">Sačuvaj</string>

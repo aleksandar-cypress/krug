@@ -21,9 +21,34 @@ service cloud.firestore {
     // Profile podaci (displayName, email, photoUrl, fcmToken) — čitljivi svim authenticated
     // korisnicima jer klijent učitava profile za sve članove krugova bez denormalizacije.
     // TODO: kad budemo imali Cloud Functions, denormalizuj listu "peers" i strogo ograniči read.
+    //
+    // Premium entitlement (isPremium, premiumUntil): klijent NE sme da self-update.
+    // Vrednosti pišu SAMO Cloud Function-i preko admin SDK (koji bypass-uje rules).
+    // Ovo su najbitniji dohodovni flag-ovi, self-update bi svako mogao da uključi
+    // premium bez plaćanja. Za create: mora biti false/null (novi user nije premium
+    // pri sign-in-u). Za update: dozvoljene su sve izmene osim promene ta dva polja.
+    function isNotChangingPremium() {
+      return (
+        !('isPremium' in request.resource.data) ||
+        request.resource.data.isPremium == resource.data.get('isPremium', false)
+      ) && (
+        !('premiumUntil' in request.resource.data) ||
+        request.resource.data.premiumUntil == resource.data.get('premiumUntil', null)
+      );
+    }
+    function isCreatingNonPremium() {
+      return (
+        !('isPremium' in request.resource.data) ||
+        request.resource.data.isPremium == false
+      ) && (
+        !('premiumUntil' in request.resource.data) ||
+        request.resource.data.premiumUntil == null
+      );
+    }
     match /users/{uid} {
       allow read: if isAuthed();
-      allow create, update: if isSelf(uid);
+      allow create: if isSelf(uid) && isCreatingNonPremium();
+      allow update: if isSelf(uid) && isNotChangingPremium();
       allow delete: if false;
 
       // Settings — strogo lično.

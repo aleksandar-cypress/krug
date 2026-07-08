@@ -172,6 +172,7 @@
     <string name="places_name_label">Name</string>
     <string name="places_name_hint">Home, School, Work…</string>
     <string name="places_radius_label">Radius: %1$d m</string>
+    <string name="places_row_creator">Created by %1$s</string>
     <string name="places_use_current_location">Use current location</string>
     <string name="places_tap_map_hint">Tap the map to set location</string>
     <string name="places_save">Save</string>

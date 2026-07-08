@@ -636,7 +636,14 @@ class LocationTrackingService : Service() {
         }
     }
 
-    /** Timestamp start-a listener-a. Event-e starije od ovoga ignorišemo (replay guard). */
+    /**
+     * Persistovan per-krug high-watermark za `placeEvents`. Event čiji je timestamp
+     * <= lastSeenTsByCircle[cid] se ignoriše (replay guard koji preživljava app kill).
+     * Fallback za novi krug (nema entry) je `placesListenerStartedAt` iz istog session-a,
+     * pa novi krug ne dobija spam iz prošlosti pri prvom listen-u.
+     */
+    private val lastSeenTsByCircle = java.util.Collections.synchronizedMap(HashMap<String, Long>())
+    /** Fallback timestamp za krugove koji još nemaju persistovan lastSeen. */
     @Volatile private var placesListenerStartedAt: Long = 0L
     private val notifiedPlaceEventIds = java.util.Collections.synchronizedSet(HashSet<String>())
     /** Snapshot muted placeId-jeva — populate iz places tracker block-a. */
@@ -650,6 +657,12 @@ class LocationTrackingService : Service() {
     private fun observeCirclePlaces() {
         val selfUid = firebaseAuth.currentUser?.uid ?: return
         placesListenerStartedAt = System.currentTimeMillis()
+        // Reload persist-ovanog per-krug lastSeen ts u memory. Novi krug bez entry-ja
+        // koristi placesListenerStartedAt fallback (ne dobija replay iz prošlosti).
+        synchronized(lastSeenTsByCircle) {
+            lastSeenTsByCircle.clear()
+            lastSeenTsByCircle.putAll(localPrefs.loadLastSeenPlaceEventTs())
+        }
         // 1) Prati sve places i re-registruj geofence-e kad se lista promeni.
         scope.launch {
             circleRepository.observeMyCircles(selfUid)
@@ -697,19 +710,41 @@ class LocationTrackingService : Service() {
                     ) { arrays -> arrays.toList().flatten() }
                 }
                 .collectLatest { pairs ->
+                    var persistDirty = false
                     pairs.forEach { (cid, evt) ->
                         if (evt.userId == selfUid) return@forEach
                         if (evt.id in notifiedPlaceEventIds) return@forEach
                         val ts = evt.timestamp?.time ?: 0L
-                        if (ts < placesListenerStartedAt) {
+                        // Per-krug high-watermark: koristi persist-ovanu vrednost ako
+                        // postoji, u suprotnom current-session fallback (placesListenerStartedAt).
+                        val watermark = synchronized(lastSeenTsByCircle) {
+                            lastSeenTsByCircle[cid]
+                        } ?: placesListenerStartedAt
+                        if (ts <= watermark) {
                             notifiedPlaceEventIds.add(evt.id)
                             return@forEach
                         }
                         notifiedPlaceEventIds.add(evt.id)
+                        // Podigni watermark odmah — čak i ako ne notifikujemo (silent hours,
+                        // muted place), event je "viđen" pa ne treba da se replay-uje posle
+                        // restart-a. Persist-ujemo u batch-u na kraju collect-a.
+                        synchronized(lastSeenTsByCircle) {
+                            val prev = lastSeenTsByCircle[cid] ?: 0L
+                            if (ts > prev) {
+                                lastSeenTsByCircle[cid] = ts
+                                persistDirty = true
+                            }
+                        }
                         if (!currentSettings.placeNotifsEnabled) return@forEach
                         if (isInSilentHours(currentSettings.silentHours)) return@forEach
                         if (evt.placeId in mutedPlaceIds) return@forEach
                         placeEventNotifier.notifyEvent(evt, circleId = cid)
+                    }
+                    if (persistDirty) {
+                        val snapshot = synchronized(lastSeenTsByCircle) {
+                            HashMap(lastSeenTsByCircle)
+                        }
+                        localPrefs.saveLastSeenPlaceEventTs(snapshot)
                     }
                 }
         }

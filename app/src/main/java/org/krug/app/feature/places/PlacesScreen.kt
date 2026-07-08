@@ -68,6 +68,7 @@ fun PlacesScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val recentEvents by viewModel.recentEvents.collectAsStateWithLifecycle()
     val presenceByPlace by viewModel.presenceByPlace.collectAsStateWithLifecycle()
+    val memberNamesByUid by viewModel.memberNamesByUid.collectAsStateWithLifecycle()
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(state.loaded) {
         // Lazy trigger — čekaj da places lista bude loaded (za filter već-postojećih),
@@ -204,6 +205,7 @@ fun PlacesScreen(
                         PlaceRow(
                             place = place,
                             presence = presenceByPlace[place.id].orEmpty(),
+                            creatorName = memberNamesByUid[place.createdBy].orEmpty(),
                             onClick = {
                                 org.krug.app.core.places.PlaceFocusBus.request(
                                     lat = place.lat, lng = place.lng,
@@ -437,6 +439,7 @@ private fun EmptyState(onAddPlace: () -> Unit) {
 private fun PlaceRow(
     place: PlaceModel,
     presence: List<String>,
+    creatorName: String,
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -465,10 +468,17 @@ private fun PlaceRow(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    "${place.radius} m",
+                    stringResource(R.string.places_radius_label, place.radius),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (creatorName.isNotBlank()) {
+                    Text(
+                        stringResource(R.string.places_row_creator, creatorName),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (presence.isNotEmpty()) {
                     Spacer(Modifier.size(4.dp))
                     Text(
