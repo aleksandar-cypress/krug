@@ -2,6 +2,84 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-07-09, kraj dana + 1.2.2 — ETA polish, notif diagnostic, self layout 3+3)
+
+**1.2.2 AAB je build-ovan i signed** (`app/build/outputs/bundle/release/app-release.aab`, versionCode 13). Aleksandar uploaduje na Play Console → Internal testing → testira → Promote to Production.
+
+Ovaj build je nadgradnja preko 1.2.1 hotfix-a (koji je već u internal testing-u ali još nije promotovan u produkciju). Preporuka: promotovati direktno 1.2.2 u produkciju umesto 1.2.1, jer sadrži oba (R8 keep rules + UX polish).
+
+### Šta je novo u 1.2.2 (od 1.2.1)
+
+**Copy polish (ETA → jasnije):**
+- User feedback: „ETA je skraćenica koju svi ne razumeju"
+- Channel: „Deljenje ETA" → **„Deljenje vremena dolaska"**
+- Notif body: „ETA X do Y" → **„Stiže za X do Y"** (SR) / „Arriving in X at Y" (EN)
+- Button: „Podeli ETA" → **„Podeli vreme dolaska"** / „Share arrival"
+- Confirm CTA: skraćen na **„Podeli"** (bio „Podeli ETA")
+
+**ETA UX popravke (Jana test feedback):**
+- **Banner za tuđe share-ove** — kad neko drugi iz kruga podeli ETA, sada vidiš banner iznad mape: „Aleksandar · 15 min · Kragujevac". Pre je bio samo pin bez konteksta.
+- Banner za tuđi share **nema Cancel dugme** (ne možeš da otkažeš tuđe)
+- Banner primary text uključuje ime pošiljaoca („Aleksandar · 15 min"), za self ostaje samo „15 min"
+- **Share arrival dugme disable-uje se kad je share aktivan** — sa labelom „Deljenje aktivno". Sprečava dupliranje doc-a. Cancel je u banner-u iznad mape (single point of action).
+- **ETA input polje jasno vidljivo** — dodat label „Adresa ili mesto" + placeholder + leading Navigation ikonica + eksplicitne `OutlinedTextFieldDefaults.colors(outline, primary)`. Pre je bilo bela na beloj dok se ne fokusira.
+
+**MemberDetailSheet self layout 3+3:**
+- **Red 1 (data akcije, sve outlined):** `[🕐 Istorija]` `[🚗 Vožnje]` `[✓ Prijavi]`
+- **Red 2 (live akcije):** `[Osveži]` filled primary + `[🧭 Podeli]` outlined + `[→]` Directions ikonica LogoTeal
+- Grupisano po nameri: gore „pogledaj podatke", dole „radi sada + navigacija"
+- Kratke varijante stringova: `history_cta_short`, `member_refresh_self_short`, `eta_share_title_short`
+- `contentPadding` smanjen na 8dp horizontal da text fitne u 1/3 širine
+
+**Self stat chips single row:**
+- Battery + Speed + Last seen sada su **u JEDNOM redu** (weight 1 svakome)
+- Pre: Battery+Speed u prvom redu, Last seen sam u drugom (izgledalo nesimetrično)
+- Others ostaju 2×2 (Battery+Distance / Speed+LastSeen)
+
+**Notification diagnostic:**
+- `EtaNotifier.notifyStarted/notifyArrived` sada eksplicitno proverava `NotificationManagerCompat.areNotificationsEnabled()` i loguje `Timber.w` ako je off
+- Pre je bio silent `runCatching` swallow — nije se videlo zašto notif ne stiže
+- `LocationTrackingService.observeCircleEta` ima `Timber.d/i` na svakom koraku da vidimo u logcat-u da li se poziv desio
+- Za buduće debug: `adb logcat -s Krug` treba da pokaže tok emitovanja i notif dispatch-a
+
+### Poznato ograničenje 1.2.2
+
+**Notif ne stiže Jani ako nije dala POST_NOTIFICATIONS permission.** Testirano danas: Jana obrisala storage, ponovo instalirala, ali izgleda nije prošla kroz permission prompt kako treba (Family Link možda uticao). Pin na mapi je radio, notif nije.
+
+Dijagnoza (iz adb dumpsys package):
+```
+android.permission.POST_NOTIFICATIONS
+   # (nema "granted=true" — dozvola nije data)
+```
+
+**Za budući release** (posle odmora): dodati **in-app banner na mapi** „Isključena su ti obaveštenja, uključi da bi primala važna upozorenja" sa dugmetom koje odvodi u Android Settings za app. Klasičan pattern u messaging app-ovima.
+
+### Preostaje Aleksandaru posle odmora
+
+1. **Play Console 1.2.2 upload i promote to Production** (preskočiti 1.2.1 promote)
+2. **Real-device crash detection test** — 4g threshold u autu
+3. **Multi-device test** — Jelenin telefon + isti Google
+4. **ETA share live update na terenu** — 5min voznja, banner treba da se update-uje na 60s
+5. **In-app notif-disabled banner** (novi feature za 1.3.0)
+6. **Screen time report u child modu** (postoji interes, ~2-3 dana rada kad se vrati)
+
+### Full commit chain 2026-07-09
+
+- `558d1f4` — 32. sesija: 4 nova feature-a (speeding/checkin/ETA/crash) + phantom fix
+- `6e16a3a` — multi-device + whats-new + road distance + button parovi
+- `535d551` — em-dash cleanup + copy polish + landing 1.2.0
+- `8b4abc6` — landing pricing fix (crash/speeding u Premium)
+- `f0eb27a` — History playback: skip static period
+- `b8bae8f` — Deep UI polish: banneri + corner radiuses + onboarding glitch fix
+- `ea3aae3` — STATUS.md wrap-up (1.2.0 AAB spreman)
+- `e35dd48` — **1.2.1 hotfix: R8 keep rules za nove Firebase POJO klase**
+- `42c7010` — STATUS.md hotfix incident dokumentovan
+- `7db4ed4` — **1.2.2: ETA polish + tuđi share banner + self layout 3+3**
+
+Sve pushed u origin/main.
+
+---
+
 ## Gde smo stali (2026-07-09, kraj dana + hotfix — 1.2.1 u internal testing, čeka production promote)
 
 **INCIDENT: 1.2.0 release je crash-ovao pri launch-u.** Debug APK koji smo ceo dan testirali na S24 preko `adb install` **NE prolazi kroz R8/ProGuard** — potpuno drugi code path od release-a. R8 obfuskuje/renaming, debug ne. Firebase reflection radi na debug-u savršeno, na release-u pao je čim je naišao na obfuskirane POJO klase.
