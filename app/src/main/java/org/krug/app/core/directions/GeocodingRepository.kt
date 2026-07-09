@@ -94,4 +94,32 @@ class GeocodingRepository @Inject constructor() {
         }.onFailure { Timber.w(it, "Geocoding search failed for %s", query) }
         result.getOrDefault(SearchResult.Error)
     }
+
+    /**
+     * Reverse geocoding — vraća human-readable oznaku za koordinate. Koristi se za
+     * check-in „place label" (npr. „Bulevar kralja Aleksandra 15, Beograd"). Ako
+     * geocoding faila, vraća prazan string (caller pokazuje generički fallback).
+     */
+    suspend fun reverse(lat: Double, lng: Double): String = withContext(Dispatchers.IO) {
+        val token = BuildConfig.MAPBOX_PUBLIC_TOKEN
+        if (token.isBlank()) return@withContext ""
+        val url = "https://api.mapbox.com/geocoding/v5/mapbox.places/" +
+            "$lng,$lat.json?access_token=$token&limit=1&language=sr,en"
+        runCatching {
+            val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                connectTimeout = 6000
+                readTimeout = 6000
+                requestMethod = "GET"
+            }
+            try {
+                if (conn.responseCode != 200) return@runCatching ""
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                val features = Json.parseToJsonElement(body).jsonObject["features"]?.jsonArray
+                features?.firstOrNull()?.jsonObject?.get("place_name")
+                    ?.jsonPrimitive?.content.orEmpty()
+            } finally {
+                conn.disconnect()
+            }
+        }.getOrDefault("")
+    }
 }

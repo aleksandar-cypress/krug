@@ -134,6 +134,27 @@ class PrivacyViewModel @Inject constructor(
             settingsRepository.updateBatteryAlerts(uid, enabled)
         }
     }
+
+    fun setSpeedingAlerts(enabled: Boolean) {
+        val uid = authRepository.currentUser?.uid ?: return
+        viewModelScope.launch {
+            settingsRepository.updateSpeedingAlerts(uid, enabled)
+        }
+    }
+
+    fun setSpeedingThreshold(kmh: Int) {
+        val uid = authRepository.currentUser?.uid ?: return
+        viewModelScope.launch {
+            settingsRepository.updateSpeedingThreshold(uid, kmh)
+        }
+    }
+
+    fun setCrashDetection(enabled: Boolean) {
+        val uid = authRepository.currentUser?.uid ?: return
+        viewModelScope.launch {
+            settingsRepository.updateCrashDetection(uid, enabled)
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -155,6 +176,9 @@ fun PrivacyScreen(
                 ChildModeBanner()
                 Spacer(Modifier.size(4.dp))
             }
+
+            // SEKCIJA 1: Deljenje
+            SectionHeader(text = stringResource(R.string.privacy_section_sharing))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -191,9 +215,8 @@ fun PrivacyScreen(
                 )
             }
 
-            Spacer(Modifier.size(24.dp))
-            androidx.compose.material3.HorizontalDivider()
-            Spacer(Modifier.size(16.dp))
+            // SEKCIJA 2: Obaveštenja
+            SectionHeader(text = stringResource(R.string.privacy_section_notifications))
 
             // Place notifikacije toggle
             Row(
@@ -291,8 +314,104 @@ fun PrivacyScreen(
                 }
             }
 
+            // SEKCIJA 3: Vožnja i sigurnost
+            SectionHeader(text = stringResource(R.string.privacy_section_driving_safety))
+
+            // Speeding alerts toggle + threshold picker
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.settings_speeding_alerts),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        text = stringResource(R.string.settings_speeding_alerts_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.size(8.dp))
+                KrugSwitch(
+                    checked = state.settings.speedingAlertsEnabled,
+                    onCheckedChange = viewModel::setSpeedingAlerts,
+                )
+            }
+            if (state.settings.speedingAlertsEnabled) {
+                Spacer(Modifier.size(6.dp))
+                Text(
+                    text = stringResource(R.string.settings_speeding_threshold),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.size(6.dp))
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val presets = listOf(80, 100, 120, 140)
+                    presets.forEach { kmh ->
+                        FilterChip(
+                            selected = state.settings.speedingThresholdKmh == kmh,
+                            onClick = { viewModel.setSpeedingThreshold(kmh) },
+                            label = {
+                                Text(stringResource(R.string.settings_speeding_threshold_value, kmh))
+                            },
+                        )
+                    }
+                }
+            }
+
+            // Crash detection toggle
+            Spacer(Modifier.size(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.settings_crash_detection),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        text = stringResource(R.string.settings_crash_detection_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.size(8.dp))
+                KrugSwitch(
+                    checked = state.settings.crashDetectionEnabled,
+                    onCheckedChange = viewModel::setCrashDetection,
+                )
+            }
         }
     }
+}
+
+/**
+ * Sekcijski header sa uppercase label-om, tanak razmak iznad i tanka linija ispod.
+ * Grupiše 8+ toggle-a u vizuelno razumljive celine (Deljenje / Obaveštenja / Vožnja).
+ */
+@Composable
+private fun SectionHeader(text: String) {
+    Spacer(Modifier.size(16.dp))
+    Text(
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelMedium.copy(
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
+        ),
+        color = MaterialTheme.colorScheme.primary,
+    )
+    Spacer(Modifier.size(4.dp))
+    androidx.compose.material3.HorizontalDivider()
+    Spacer(Modifier.size(4.dp))
 }
 
 @OptIn(ExperimentalLayoutApi::class)

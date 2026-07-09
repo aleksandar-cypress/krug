@@ -77,6 +77,70 @@ object MapMarkers {
     }
 
     /**
+     * ETA destination marker — vizuelno distinktan od Place pinova (teardrop) i member
+     * pinova. Zaobljeni kvadrat sa LogoBlue fill-om i belom „→" strelicom. Kad se
+     * pojavi na mapi, korisnik odmah zna „ovo je nečija destinacija", ne postojeći
+     * place ili trenutna lokacija.
+     */
+    fun destinationMarker(context: Context): Bitmap {
+        val key = "eta-dest-v1"
+        cache[key]?.let { return it }
+        val density = context.resources.displayMetrics.density
+        val sizeDp = 34f
+        val sizePx = (sizeDp * density).toInt()
+        val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val cx = sizePx / 2f
+        val padding = 3f * density
+        val rect = RectF(padding, padding, sizePx - padding, sizePx - padding)
+        val cornerRadius = 8f * density
+
+        // Shadow ispod kvadrata za dubinu.
+        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(70, 0, 0, 0)
+            maskFilter = BlurMaskFilter(3f * density, BlurMaskFilter.Blur.NORMAL)
+        }
+        val shadowRect = RectF(rect).apply { offset(0f, 2f * density) }
+        canvas.drawRoundRect(shadowRect, cornerRadius, cornerRadius, shadowPaint)
+
+        // Beli border ring — kontrast preko mape.
+        val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        canvas.drawRoundRect(rect, cornerRadius, cornerRadius, ringPaint)
+
+        // LogoBlue fill — brand color, ne konflikuje sa Place kategorijama.
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = "#3A86C8".toColorInt()
+        }
+        val innerPadding = 2.5f * density
+        val innerRect = RectF(
+            rect.left + innerPadding, rect.top + innerPadding,
+            rect.right - innerPadding, rect.bottom - innerPadding,
+        )
+        canvas.drawRoundRect(innerRect, cornerRadius - 2f * density, cornerRadius - 2f * density, fillPaint)
+
+        // Bela strelica → u sredini.
+        val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f * density
+            strokeCap = Cap.ROUND
+        }
+        val armLen = 6f * density
+        val arrowY = cx
+        val arrowStartX = cx - armLen
+        val arrowEndX = cx + armLen
+        // Horizontalna linija →
+        canvas.drawLine(arrowStartX, arrowY, arrowEndX, arrowY, arrowPaint)
+        // Vrh strelice (dva kraka)
+        val headLen = 4f * density
+        canvas.drawLine(arrowEndX, arrowY, arrowEndX - headLen, arrowY - headLen, arrowPaint)
+        canvas.drawLine(arrowEndX, arrowY, arrowEndX - headLen, arrowY + headLen, arrowPaint)
+
+        cache[key] = bmp
+        return bmp
+    }
+
+    /**
      * Prosta krug marker sa belom ivicom — koristi se za start/current position u
      * HistoryScreen tragu. `size` je diameter u dp.
      */

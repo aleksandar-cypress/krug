@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.BatterySaver
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.AccessTime
@@ -278,6 +280,29 @@ fun MapScreen(
     var detailUid by remember { mutableStateOf<String?>(null) }
     var detailPlaceId by remember { mutableStateOf<String?>(null) }
     var placePendingDelete by remember { mutableStateOf<org.krug.app.core.places.PlaceModel?>(null) }
+    var showCheckInConfirm by remember { mutableStateOf(false) }
+    var showEtaPicker by remember { mutableStateOf(false) }
+    // One-shot event collector — Toast + haptic za check-in ishod. Haptic razlikuje
+    // uspeh (confirm — lagan pozitivan) od neuspeha (reject — dvostruk pulse) tako da
+    // user oseti rezultat čak i ako mu je zvuk isključen ili Toast promakao.
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { evt ->
+            when (evt) {
+                MapEvent.CheckInSent -> {
+                    view.confirmHaptic()
+                    android.widget.Toast.makeText(
+                        context, R.string.checkin_toast_sent, android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }
+                MapEvent.CheckInFailed -> {
+                    view.rejectHaptic()
+                    android.widget.Toast.makeText(
+                        context, R.string.checkin_toast_failed, android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
+        }
+    }
 
     // Whats-new modal: prikazuje se jednom po version-code bump-u.
     var showWhatsNew by remember { mutableStateOf(false) }
@@ -610,6 +635,41 @@ fun MapScreen(
         }
     }
 
+    // ETA destination pin-ovi — svoj + tuđi (state.myEtaShare + state.otherEtaShares).
+    // Re-render se okida kad se lista promeni ili ETA update-uje. Pin izgleda kao OTHER
+    // Place marker sa labelom „→ {label} ({eta}min)" — dovoljno distinktan a ne treba nov asset.
+    LaunchedEffect(state.myEtaShare, state.otherEtaShares, mapViewState) {
+        var attempts = 0
+        while (mapViewState.etaDestManager == null && attempts < 100) {
+            kotlinx.coroutines.delay(50)
+            attempts++
+        }
+        val em = mapViewState.etaDestManager ?: return@LaunchedEffect
+        em.deleteAll()
+        val shares = listOfNotNull(state.myEtaShare) + state.otherEtaShares
+        shares.forEach { share ->
+            if (share.arrivedAt != null) return@forEach
+            val label = share.destinationLabel.ifBlank { "→" }
+            val displayLabel = if (share.userName.isNotBlank()) {
+                "→ ${share.userName}: $label (${share.etaMinutes}m)"
+            } else {
+                "→ $label (${share.etaMinutes}m)"
+            }
+            em.create(
+                PointAnnotationOptions()
+                    .withPoint(Point.fromLngLat(share.destinationLng, share.destinationLat))
+                    .withIconImage(MapMarkers.destinationMarker(context))
+                    .withIconOffset(listOf(0.0, -21.0))
+                    .withTextField(displayLabel)
+                    .withTextOffset(listOf(0.0, 0.6))
+                    .withTextSize(11.0)
+                    .withTextColor("#1F2937")
+                    .withTextHaloColor("#FFFFFF")
+                    .withTextHaloWidth(1.5),
+            )
+        }
+    }
+
     DisposableEffect(mapViewState) {
         onDispose {
             // 1) Skloni click listener (drži referencu na onPinClick lambda → MapScreen scope).
@@ -620,6 +680,7 @@ fun MapScreen(
                 mapViewState.annotationManager?.deleteAll()
                 mapViewState.placeManager?.deleteAll()
                 mapViewState.placeRadiusManager?.deleteAll()
+                mapViewState.etaDestManager?.deleteAll()
                 mapViewState.circleManager?.deleteAll()
             }
             mapViewState.annotationToUid.clear()
@@ -631,6 +692,7 @@ fun MapScreen(
             mapViewState.annotationManager = null
             mapViewState.placeManager = null
             mapViewState.placeRadiusManager = null
+            mapViewState.etaDestManager = null
             mapViewState.circleManager = null
         }
     }
@@ -864,6 +926,14 @@ fun MapScreen(
                     )
                 }
             }
+            // ETA share banner — trajno vidljiv dok user aktivno deli ETA. Ispod SOS
+            // banner-a (SOS je uvek najviši prioritet).
+            state.myEtaShare?.let { share ->
+                EtaShareBanner(
+                    share = share,
+                    onCancel = { viewModel.cancelEtaShare() },
+                )
+            }
         }
 
         SosFab(
@@ -994,8 +1064,56 @@ fun MapScreen(
                         detailUid = null
                         onOpenDriving(detailMember.uid, detailMember.displayName)
                     },
+                    onCheckIn = if (detailMember.isSelf) {
+                        {
+                            haptic()
+                            showCheckInConfirm = true
+                        }
+                    } else null,
+                    onShareEta = if (detailMember.isSelf) {
+                        {
+                            haptic()
+                            detailUid = null
+                            showEtaPicker = true
+                        }
+                    } else null,
                 )
             }
+        }
+        if (showCheckInConfirm) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showCheckInConfirm = false },
+                title = { Text(stringResource(R.string.checkin_confirm_title)) },
+                text = { Text(stringResource(R.string.checkin_confirm_body)) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = {
+                            showCheckInConfirm = false
+                            detailUid = null
+                            viewModel.sendCheckIn()
+                        },
+                    ) {
+                        Text(stringResource(R.string.checkin_confirm_cta))
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = { showCheckInConfirm = false },
+                    ) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
+                },
+            )
+        }
+        if (showEtaPicker) {
+            EtaDestinationPicker(
+                onDismiss = { showEtaPicker = false },
+                onSelect = { lat, lng, label ->
+                    showEtaPicker = false
+                    viewModel.startEtaShare(lat, lng, label)
+                },
+                onSearch = { query -> viewModel.searchDestinations(query) },
+            )
         }
 
         val detailPlace = detailPlaceId?.let { id -> activePlaces.firstOrNull { it.id == id } }
@@ -1761,6 +1879,9 @@ private fun MapboxContainer(
                         }
                     },
                 )
+                // ETA destination pin manager — iznad places, ispod member pin-ova
+                // (kreiran ovim redom, Mapbox render-uje po insertion order-u).
+                holder.etaDestManager = mv.annotations.createPointAnnotationManager()
                 val manager = mv.annotations.createPointAnnotationManager()
                 holder.annotationManager = manager
                 manager.addClickListener(
@@ -1972,6 +2093,12 @@ private class MapViewHolder {
     var annotationManager: PointAnnotationManager? = null
     var placeManager: PointAnnotationManager? = null
     var placeRadiusManager: PolygonAnnotationManager? = null
+    /**
+     * Destination pin-ovi za sve aktivne ETA share-ove (svoj + tuđi). Poseban manager
+     * (ne reuse placeManager) da lifecycle bude nezavisan — ETA se osvežava svakih 60s,
+     * dok su places statični dok user ne edituje.
+     */
+    var etaDestManager: PointAnnotationManager? = null
     var circleManager: CircleAnnotationManager? = null
     var didFlyToSelf: Boolean = false
     /** True nakon prvog `loadStyle` callback-a — gate za camera op-ove iz LaunchedEffect-a. */
@@ -2529,6 +2656,8 @@ private fun MemberDetailSheet(
     onRefresh: () -> Unit,
     onOpenHistory: (() -> Unit)?,
     onOpenDriving: (() -> Unit)?,
+    onCheckIn: (() -> Unit)? = null,
+    onShareEta: (() -> Unit)? = null,
 ) {
     var refreshTriggered by remember { mutableStateOf(false) }
     LaunchedEffect(refreshTriggered) {
@@ -2853,6 +2982,41 @@ private fun MemberDetailSheet(
                         if (refreshTriggered) stringResource(R.string.member_refresh_other_sent) else stringResource(R.string.member_refresh_other)
                     },
                 )
+            }
+        }
+        // Safe check-in — samo za self member. „Stigao/la sam" broadcast krug-u sa
+        // trenutnom lokacijom + reverse-geocoded label-om. Otvara confirm dijalog pre
+        // slanja (protiv accidental tap-a).
+        if (member.isSelf && onCheckIn != null) {
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.OutlinedButton(
+                onClick = onCheckIn,
+                shape = buttonShape,
+                modifier = Modifier.fillMaxWidth().height(buttonHeight),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(text = stringResource(R.string.checkin_button_label))
+            }
+        }
+        if (member.isSelf && onShareEta != null) {
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.OutlinedButton(
+                onClick = onShareEta,
+                shape = buttonShape,
+                modifier = Modifier.fillMaxWidth().height(buttonHeight),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Navigation,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(text = stringResource(R.string.eta_share_title))
             }
         }
         // Row: [Icon-only directions LogoTeal] [View history LogoBlue full remaining].
@@ -3415,4 +3579,166 @@ private fun computeMissingPermissions(context: android.content.Context): List<St
         missing += context.getString(R.string.permission_missing_notifications)
     }
     return missing
+}
+
+@Composable
+private fun EtaDestinationPicker(
+    onDismiss: () -> Unit,
+    onSelect: (lat: Double, lng: Double, label: String) -> Unit,
+    onSearch: suspend (String) -> List<org.krug.app.core.directions.GeocodingRepository.Suggestion>,
+) {
+    var query by remember { mutableStateOf("") }
+    var suggestions by remember {
+        mutableStateOf<List<org.krug.app.core.directions.GeocodingRepository.Suggestion>>(emptyList())
+    }
+    // Debounce search — čeka 300ms posle poslednje izmene pre nego što udari mrežu.
+    LaunchedEffect(query) {
+        if (query.trim().length < 3) {
+            suggestions = emptyList()
+            return@LaunchedEffect
+        }
+        kotlinx.coroutines.delay(300)
+        suggestions = onSearch(query)
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.eta_share_title)) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(R.string.eta_share_pick_destination),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
+                if (suggestions.isNotEmpty()) {
+                    Column(modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                        suggestions.forEach { sug ->
+                            androidx.compose.material3.TextButton(
+                                onClick = { onSelect(sug.lat, sug.lng, sug.placeName.ifBlank { sug.displayName }) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = sug.displayName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    if (sug.placeName.isNotBlank() && sug.placeName != sug.displayName) {
+                                        Text(
+                                            text = sug.placeName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
+}
+
+/**
+ * Trajni banner na vrhu mape dok user aktivno deli ETA. Prikazuje remaining ETA + destination
+ * label, sa dugmetom „Prekini". Kad share pređe u arrivedAt, banner se automatski skriva
+ * (myEtaShare postane null posle repository cleanup-a ili user prekine).
+ */
+@Composable
+private fun EtaShareBanner(
+    share: org.krug.app.core.eta.EtaShareModel,
+    onCancel: () -> Unit,
+) {
+    val arrived = share.arrivedAt != null
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (arrived) MaterialTheme.colorScheme.tertiaryContainer
+        else MaterialTheme.colorScheme.primaryContainer,
+        shadowElevation = 4.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Icon u round backgroundu — primary/tertiary color depending on state.
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (arrived) MaterialTheme.colorScheme.tertiary
+                        else MaterialTheme.colorScheme.primary,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (arrived) Icons.Filled.CheckCircle else Icons.Filled.Navigation,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                // Primary line — ETA time (or "Stigao/la") u velikom fontu.
+                Text(
+                    text = if (arrived) stringResource(R.string.eta_share_arrived)
+                    else "${share.etaMinutes} min",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (arrived) MaterialTheme.colorScheme.onTertiaryContainer
+                    else MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1,
+                )
+                // Secondary line — destinacija + remaining km.
+                val label = share.destinationLabel.ifBlank { "—" }
+                val kmText = if (share.remainingKm > 0.1 && !arrived) {
+                    " • %.1f km".format(share.remainingKm)
+                } else ""
+                Text(
+                    text = label + kmText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (arrived) MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.75f)
+                    else MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (!arrived) {
+                Spacer(Modifier.width(8.dp))
+                androidx.compose.material3.TextButton(
+                    onClick = onCancel,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 12.dp, vertical = 8.dp,
+                    ),
+                ) {
+                    Text(
+                        text = stringResource(R.string.eta_share_cancel),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    )
+                }
+            }
+        }
+    }
 }

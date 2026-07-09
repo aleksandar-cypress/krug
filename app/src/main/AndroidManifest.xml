@@ -114,6 +114,16 @@
             android:name=".core.places.GeofenceBroadcastReceiver"
             android:exported="false" />
 
+        <!-- Crash detection action buttons — receiver za notif „Dobro sam" / „Pošalji odmah". -->
+        <receiver
+            android:name=".core.crash.CrashActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.krug.app.CRASH_CANCEL" />
+                <action android:name="org.krug.app.CRASH_SEND_NOW" />
+            </intent-filter>
+        </receiver>
+
         <!-- Android Auto — CarAppService (Navigation template). Auto host bind-uje kad
              telefon konektuje sa autom preko USB/wireless. exported=true jer Auto host
              (odvojen proces) treba da bind-uje.

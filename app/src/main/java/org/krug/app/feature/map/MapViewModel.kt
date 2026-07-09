@@ -21,7 +21,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.krug.app.core.auth.AuthRepository
+import org.krug.app.core.checkin.CheckInRepository
 import org.krug.app.core.circle.CircleRepository
+import org.krug.app.core.directions.DirectionsRepository
+import org.krug.app.core.directions.GeocodingRepository
+import org.krug.app.core.eta.EtaRepository
 import org.krug.app.core.location.LocationModel
 import org.krug.app.core.location.LocationRepository
 import org.krug.app.core.map.MapStyleOption
@@ -36,6 +40,16 @@ import org.krug.app.core.util.DeviceNames
 import org.krug.app.core.util.NetworkMonitor
 import org.krug.app.core.util.PowerSaveMonitor
 import timber.log.Timber
+
+/**
+ * One-shot UI signali iz MapViewModel-a. Compose collector-i ih hvataju kroz LaunchedEffect
+ * i pretvaraju u Toast/Snackbar. Ako screen nije aktivan, event se dropuje (SharedFlow
+ * replay=0) — check-in feedback nije relevantan ako je user već izašao iz mape.
+ */
+sealed class MapEvent {
+    object CheckInSent : MapEvent()
+    object CheckInFailed : MapEvent()
+}
 
 data class MemberWithLocation(
     val uid: String,
@@ -75,6 +89,16 @@ data class MapUiState(
      * lokacija ide ređim intervalom dok je Saver on.
      */
     val isPowerSaveMode: Boolean = false,
+    /**
+     * Sopstveni aktivan ETA share (prva ne-null vrednost iz svih krugova). Null = nema
+     * aktivnog share-a. UI koristi za banner „Deliš ETA: 15 min do Y".
+     */
+    val myEtaShare: org.krug.app.core.eta.EtaShareModel? = null,
+    /**
+     * Aktivni ETA share-ovi ostalih članova aktivnog kruga (self isključen). UI ih render-uje
+     * kao destination pin-ove na mapi — svaki član kruga vidi gde ostali idu.
+     */
+    val otherEtaShares: List<org.krug.app.core.eta.EtaShareModel> = emptyList(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -89,8 +113,23 @@ class MapViewModel @Inject constructor(
     private val networkMonitor: NetworkMonitor,
     private val powerSaveMonitor: PowerSaveMonitor,
     private val placeRepository: PlaceRepository,
+    private val checkInRepository: CheckInRepository,
+    private val geocodingRepository: GeocodingRepository,
+    private val directionsRepository: DirectionsRepository,
+    private val etaRepository: EtaRepository,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
+
+    /**
+     * One-shot UI event bus. `emit` iz VM-a, `collect` u Composable-u kroz LaunchedEffect
+     * (SharedFlow drop-uje event kad nema active collector-a — savršeno za toast poruke
+     * koje su relevantne samo ako je user na screen-u u trenutku emit-a).
+     */
+    private val _events = kotlinx.coroutines.flow.MutableSharedFlow<MapEvent>(
+        replay = 0,
+        extraBufferCapacity = 4,
+    )
+    val events: kotlinx.coroutines.flow.SharedFlow<MapEvent> = _events
 
     /**
      * Efektivan aktivan circleId sa fallback logikom — MORA da bude konzistentno sa
@@ -235,6 +274,120 @@ class MapViewModel @Inject constructor(
             ?: DeviceNames.friendly(fromDoc.deviceModel).takeIf { it.isNotBlank() }
     }
 
+    /**
+     * Safe check-in — pošalje „Stigao/la sam" u sve krugove usera. Reverse-geocode
+     * radi opcionalno sa 4s timeout-om — ako faila, event ide bez `placeLabel` i
+     * observers vide generički „Bezbedno" tekst. Emit-uje MapEvent.CheckInSent /
+     * CheckInFailed za toast prikaz.
+     */
+    fun sendCheckIn() {
+        val uid = authRepository.currentUser?.uid ?: return
+        val snapshot = uiState.value
+        val loc = snapshot.selfLocation
+        if (loc == null) {
+            viewModelScope.launch { _events.emit(MapEvent.CheckInFailed) }
+            return
+        }
+        val circleIds = snapshot.myCircles.map { it.id }
+        if (circleIds.isEmpty()) {
+            viewModelScope.launch { _events.emit(MapEvent.CheckInFailed) }
+            return
+        }
+        viewModelScope.launch {
+            val senderName = resolveSenderName(uid, snapshot).orEmpty()
+            val label = withTimeoutOrNull(4_000L) {
+                geocodingRepository.reverse(loc.lat, loc.lng)
+            }.orEmpty()
+            val result = runCatching {
+                checkInRepository.logCheckIn(
+                    circleIds = circleIds,
+                    userId = uid,
+                    userName = senderName,
+                    lat = loc.lat,
+                    lng = loc.lng,
+                    placeLabel = label,
+                )
+            }
+            if (result.isSuccess) {
+                _events.emit(MapEvent.CheckInSent)
+            } else {
+                Timber.w(result.exceptionOrNull(), "Check-in send failed")
+                _events.emit(MapEvent.CheckInFailed)
+            }
+        }
+    }
+
+    /**
+     * Pokreće ETA share prema odabranoj destinaciji. Radi initial directions fetch (za
+     * seed etaMinutes/remainingKm) — ako faila, koristi haversine estimate. Live update
+     * dalje ide iz LocationTrackingService-a.
+     */
+    fun startEtaShare(destLat: Double, destLng: Double, destLabel: String) {
+        val uid = authRepository.currentUser?.uid ?: return
+        val snapshot = uiState.value
+        val loc = snapshot.selfLocation ?: return
+        val circleIds = snapshot.myCircles.map { it.id }
+        if (circleIds.isEmpty()) return
+        viewModelScope.launch {
+            val senderName = resolveSenderName(uid, snapshot).orEmpty()
+            val route = withTimeoutOrNull(6_000L) {
+                directionsRepository.driveEta(loc.lat, loc.lng, destLat, destLng)
+            }
+            val (etaMin, remKm) = if (route != null) {
+                (route.durationSec / 60.0).toInt().coerceAtLeast(1) to (route.distanceMeters / 1000.0)
+            } else {
+                val km = haversineKmSimple(loc.lat, loc.lng, destLat, destLng)
+                ((km / 40.0) * 60.0).toInt().coerceAtLeast(1) to km
+            }
+            runCatching {
+                etaRepository.startShare(
+                    circleIds = circleIds,
+                    userId = uid,
+                    userName = senderName,
+                    destinationLat = destLat, destinationLng = destLng,
+                    destinationLabel = destLabel,
+                    currentLat = loc.lat, currentLng = loc.lng,
+                    initialEtaMinutes = etaMin,
+                    initialRemainingKm = remKm,
+                )
+            }.onFailure { Timber.w(it, "startEtaShare failed") }
+        }
+    }
+
+    fun cancelEtaShare() {
+        val uid = authRepository.currentUser?.uid ?: return
+        val circleIds = uiState.value.myCircles.map { it.id }
+        if (circleIds.isEmpty()) return
+        viewModelScope.launch {
+            runCatching { etaRepository.cancelShare(circleIds, uid) }
+                .onFailure { Timber.w(it, "cancelEtaShare failed") }
+        }
+    }
+
+    /**
+     * Search destinacije za ETA share dialog. Wrapper preko GeocodingRepository koji
+     * dodaje self proximity boost (Beograd rezultati iznad global-a). Vraća listu za
+     * autocomplete UI.
+     */
+    suspend fun searchDestinations(query: String): List<GeocodingRepository.Suggestion> {
+        val self = uiState.value.selfLocation
+        val result = geocodingRepository.search(
+            query = query,
+            proximityLat = self?.lat,
+            proximityLng = self?.lng,
+        )
+        return when (result) {
+            is GeocodingRepository.SearchResult.Success -> result.suggestions
+            else -> emptyList()
+        }
+    }
+
+    private fun haversineKmSimple(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+        val out = FloatArray(1)
+        android.location.Location.distanceBetween(lat1, lng1, lat2, lng2, out)
+        return out[0].toDouble() / 1000.0
+    }
+
     fun clearSos() {
         val uid = authRepository.currentUser?.uid ?: return
         Timber.i("SOS cleared uid=%s", uid)
@@ -342,10 +495,16 @@ class MapViewModel @Inject constructor(
             else (active.memberIds.toSet() + selfUid).toList()
             val childMapFlow = if (active == null) flowOf(emptyMap())
             else circleRepository.observeMembersChildMap(active.id)
+            val myEtaFlow = if (active == null) flowOf(null as org.krug.app.core.eta.EtaShareModel?)
+            else etaRepository.observeMyShare(active.id, selfUid)
+            val allEtaFlow = if (active == null) flowOf(emptyList<org.krug.app.core.eta.EtaShareModel>())
+            else etaRepository.observeActiveShares(active.id)
             combine(
                 combine(uids.map { memberFlow(it, selfUid) }) { it.toList() },
                 childMapFlow,
-            ) { arr, childMap ->
+                myEtaFlow,
+                allEtaFlow,
+            ) { arr, childMap, myEta, allEta ->
                 val now = System.currentTimeMillis()
                 val activeId = active?.id
                 // Defensive UI filter — SOS stariji od TTL ili koji nije za aktivni krug
@@ -378,6 +537,8 @@ class MapViewModel @Inject constructor(
                     activeCircleId = active?.id,
                     circlesLoaded = true,
                     circlesError = error != null && circles.isEmpty(),
+                    myEtaShare = myEta,
+                    otherEtaShares = allEta.filter { it.userId != selfUid },
                 )
             }
         }

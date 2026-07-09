@@ -150,6 +150,49 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      // circles/{cid}/speedingEvents/{eid}
+      // Speeding alert-i. Klijent piše sopstveni event (userId == caller) kad
+      // prekorači svoj `speedingThresholdKmh`. Isti write/read model kao placeEvents.
+      // TTL: 24h (podesiti u Firebase Console).
+      match /speedingEvents/{eid} {
+        allow read: if isAuthed()
+          && request.auth.uid in circleData(cid).memberIds;
+        allow create: if isAuthed()
+          && request.auth.uid in circleData(cid).memberIds
+          && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      // circles/{cid}/checkIns/{eid}
+      // Safe check-in event-i ("Stigao/la sam"). Klijent piše sopstveni event.
+      // TTL: 24h (podesiti u Firebase Console).
+      match /checkIns/{eid} {
+        allow read: if isAuthed()
+          && request.auth.uid in circleData(cid).memberIds;
+        allow create: if isAuthed()
+          && request.auth.uid in circleData(cid).memberIds
+          && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      // circles/{cid}/etaShares/{shareId}
+      // ETA sharing — user pokreće share sa destinacijom, live update-uje se
+      // dok se kreće. shareId = userId (jedan aktivan share po user-u po krugu).
+      // Update dozvoljen (za live ETA refresh), delete dozvoljen (cancel share).
+      match /etaShares/{shareId} {
+        allow read: if isAuthed()
+          && request.auth.uid in circleData(cid).memberIds;
+        allow create: if isAuthed()
+          && request.auth.uid in circleData(cid).memberIds
+          && request.resource.data.userId == request.auth.uid
+          && shareId == request.auth.uid;
+        allow update: if isAuthed()
+          && shareId == request.auth.uid
+          && request.resource.data.userId == request.auth.uid;
+        allow delete: if isAuthed()
+          && shareId == request.auth.uid;
+      }
+
       // circles/{cid}/members/{memberUid}
       match /members/{memberUid} {
         allow read: if isAuthed();

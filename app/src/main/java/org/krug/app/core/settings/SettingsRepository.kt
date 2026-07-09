@@ -61,6 +61,18 @@ class SettingsRepository @Inject constructor(
         docFor(uid).set(mapOf("batteryAlertsEnabled" to enabled), SetOptions.merge()).await()
     }
 
+    suspend fun updateSpeedingAlerts(uid: String, enabled: Boolean) {
+        docFor(uid).set(mapOf("speedingAlertsEnabled" to enabled), SetOptions.merge()).await()
+    }
+
+    suspend fun updateSpeedingThreshold(uid: String, kmh: Int) {
+        docFor(uid).set(mapOf("speedingThresholdKmh" to kmh), SetOptions.merge()).await()
+    }
+
+    suspend fun updateCrashDetection(uid: String, enabled: Boolean) {
+        docFor(uid).set(mapOf("crashDetectionEnabled" to enabled), SetOptions.merge()).await()
+    }
+
     suspend fun updateShareUntil(uid: String, untilMs: Long?) {
         val payload: Map<String, Any> = if (untilMs == null) {
             // Firestore null-safe brisanje polja — set(null) bi bilo tipska greška.
@@ -82,6 +94,9 @@ class SettingsRepository @Inject constructor(
             placeNotifsEnabled = data["placeNotifsEnabled"] as? Boolean ?: true,
             silentHours = data["silentHours"] as? String,
             batteryAlertsEnabled = data["batteryAlertsEnabled"] as? Boolean ?: true,
+            speedingAlertsEnabled = data["speedingAlertsEnabled"] as? Boolean ?: false,
+            speedingThresholdKmh = (data["speedingThresholdKmh"] as? Number)?.toInt() ?: 120,
+            crashDetectionEnabled = data["crashDetectionEnabled"] as? Boolean ?: false,
         )
     }
 

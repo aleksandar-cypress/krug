@@ -2,6 +2,110 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-07-09, 32. sesija — 1.2.0 batch: 4 nova feature-a + cleanup)
+
+Sažetak, kompaktno: subtitle fix + phantom double-arrived fix + 4 nova feature-a (Speeding alerts, Safe check-ins, ETA sharing, Crash detection) + ETA doc leak fix + speeding accuracy filter + ETA destination pin. Version bump 1.1.5 → 1.2.0 (versionCode 10 → 11). Firestore rules deployed (dodate kolekcije `speedingEvents`, `checkIns`, `etaShares`).
+
+### A) Subtitle fix + phantom double-arrived (sesija početak)
+
+**Subtitle „export data" mrtav string** — `settings_privacy_subtitle` obećavao „eksport podataka" ali `PrivacyScreen` nema export UI. Grep za `export`/`Export` po Kotlinu = 0 hitova. Fix: „Pauziraj deljenje, obaveštenja, tihi sati" (SR) / „Pause sharing, notifications, quiet hours" (EN).
+
+**Phantom double-arrived** — user prijavio duple ENTER notif-e ~2h razmakom dok je bio kod kuće. Root cause: GPS drift van radius+50m → phantom EXIT prošao distance filter → sledeći ENTER validan. Fix u `GeofenceBroadcastReceiver.kt`:
+- Bump `PHANTOM_THRESHOLD_M` 50 → 100m (EXIT priznat samo ako > radius+100m)
+- Novi `lastTransitionTypeByPlace` guard — blokira ENTER→ENTER (ili EXIT→EXIT) za isti place bez suprotnog event-a između (semantički čuvar nadgradnja iznad distance filter-a)
+
+### B) Speeding alerts
+
+`core/speeding/`:
+- `SpeedingEventModel` — Firestore POJO (userId, userName, maxSpeedKmh, thresholdKmh, durationSec, lat, lng, timestamp).
+- `SpeedingRepository.logEvent(circleIds, ...)` — piše u sve krugove korisnika. `observeRecentEvents(cid)` za peer listen.
+- `SpeedingDetector` state machine — `NotSpeeding` → `Speeding` kad speed >= threshold; emit posle `MIN_DURATION_MS=5s` neprekidno iznad. Dedup 10min per user. Filter accuracy > 50m (sanity check, dodat u polish fazi).
+- `SpeedingAlertNotifier` — channel `krug_speeding_alerts`, DEFAULT importance, color 0xFFEF4444.
+
+`UserSettings`: `speedingAlertsEnabled=false` (default off — publish o sebi je opt-in), `speedingThresholdKmh=120`. Update funkcije u `SettingsRepository`.
+
+`LocationTrackingService` integracija: `speedingDetector.onFix(...)` u `locationCallback` uz `tripDetector`. `observeCircleSpeeding()` observer analog placeEvents flow-a. `observeSelfName()` puni `selfDisplayName` cache za event payload.
+
+`PrivacyScreen`: toggle + threshold picker FilterChip (80/100/120/140).
+
+Firestore rules: `circles/{cid}/speedingEvents/{eid}` — read/create isti kao placeEvents (userId == caller).
+
+### C) Safe check-ins
+
+`core/checkin/`:
+- `CheckInEventModel` — userId, userName, lat, lng, placeLabel (reverse-geocoded), timestamp.
+- `CheckInRepository.logCheckIn(circleIds, ...)` + observe. Broadcast u sve krugove.
+- `CheckInNotifier` — channel `krug_checkins`, DEFAULT importance, color 0xFF10B981.
+
+`GeocodingRepository.reverse(lat, lng)` — dodat za check-in place label (Mapbox reverse geocoding).
+
+`MapViewModel.sendCheckIn()` — resolve senderName, reverse-geocode sa 4s timeout, `logCheckIn`. Emit `MapEvent.CheckInSent`/`CheckInFailed` preko `SharedFlow<MapEvent>` za toast u UI.
+
+UI:
+- `MemberDetailSheet` prima `onCheckIn: (() -> Unit)?` — dugme (Icons.Filled.CheckCircle) samo za self.
+- Confirm dialog pre slanja („Poslati potvrdu? Krug će dobiti kratku poruku...").
+- `MapScreen.LaunchedEffect` collects `viewModel.events` za Toast.
+
+Firestore rules: `circles/{cid}/checkIns/{eid}` — isti model kao placeEvents.
+
+### D) ETA sharing
+
+`core/eta/`:
+- `EtaShareModel` — destinationLat/Lng/Label, etaMinutes, remainingKm, currentLat/Lng, startedAt, updatedAt, arrivedAt. DocId = userId (jedan aktivan share po user-u po krugu).
+- `EtaRepository`: `startShare`, `updateShare`, `markArrived`, `cancelShare`, `observeActiveShares`, `observeMyShare`.
+- `EtaNotifier` — dva event-a: `notifyStarted` (kad neko iz kruga pokrene share), `notifyArrived` (kad user pređe arrival radius). Channel `krug_eta_shares`, DEFAULT importance, color 0xFF3B82F6. Arrived cancel-uje started notif iz notif tray-a.
+
+`core/directions/DirectionsRepository.driveEta(originLat, originLng, destLat, destLng)` — Mapbox Directions API klijent. Vraća `Route(durationSec, distanceMeters)`. Rate: ~3000 req/mesec za 100 usera × 30min shares × 60s update — daleko od 100k tier limit-a.
+
+`LocationTrackingService`:
+- `observeSelfEtaShare()` puni `activeEtaShare` cache (Volatile) — brz distance check bez Firestore reads.
+- `maybeUpdateEtaShare(uid, curLat, curLng)` u locationCallback-u:
+  - Ako distanca < `ETA_ARRIVAL_RADIUS_M=100m` → `markArrived` + scheduled `cancelShare` posle `ETA_ARRIVED_CLEANUP_DELAY_MS=15min` (polish fix, sprečava doc leak bez TTL policy).
+  - Inače throttle `ETA_UPDATE_INTERVAL_MS=60s`: fetch route → update etaMinutes + remainingKm. Fallback haversine / 40 km/h ako Directions fail.
+- `observeCircleEta()` observer emit-uje started/arrived notif sa dedup preko `notifiedEtaStarted`/`notifiedEtaArrived`.
+
+`MapViewModel`:
+- `startEtaShare(destLat, destLng, destLabel)` — initial directions fetch (6s timeout) + `EtaRepository.startShare`.
+- `cancelEtaShare()`, `searchDestinations(query)` (wrapper preko GeocodingRepository.search sa proximity boost).
+- `MapUiState.myEtaShare` + `otherEtaShares` — observeMyShare + observeActiveShares combine.
+
+UI:
+- `MemberDetailSheet` prima `onShareEta` — dugme (Icons.Filled.Navigation) samo za self.
+- `EtaDestinationPicker` dialog — search field sa 300ms debounce, autocomplete list preko `searchDestinations`.
+- `EtaShareBanner` na vrhu mape ispod SOS banner-a — pokazuje remaining ETA + destination + cancel dugme.
+- ETA destination pin na mapi (polish) — `mapViewState.etaDestManager` renderuje pin za svaki aktivan share (svoj + tuđi) sa labelom „→ {name}: {label} ({eta}m)".
+
+Firestore rules: `circles/{cid}/etaShares/{shareId}` — read za članove, create/update/delete samo self (shareId == request.auth.uid).
+
+### E) Crash detection
+
+`core/crash/`:
+- `CrashDetector: SensorEventListener` — `TYPE_LINEAR_ACCELERATION` (gravity filtrirana). Threshold `CRASH_G_THRESHOLD_MS2=40 m/s² (~4g)`. Kontekst filter: user mora biti u vožnji u zadnjih `DRIVE_CONTEXT_WINDOW_MS=30s` (speed >= `DRIVE_CONTEXT_MIN_MPS=3 m/s`). Rate-limit `TRIGGER_COOLDOWN_MS=2min` između trigger-a. `onDrivingSpeed(speed, nowMs)` iz LocationTrackingService-a puni `lastDriveMs`.
+- `CrashAlertNotifier` — channel `krug_crash_alerts`, HIGH importance (probija DND), CATEGORY_ALARM, ongoing (ne dismiss-uje se). Action buttons: „Dobro sam" + „Pošalji odmah".
+- `CrashActionReceiver: BroadcastReceiver` (AndroidEntryPoint) — hvata `ACTION_CRASH_CANCEL` / `ACTION_CRASH_SEND_NOW`, emit-uje na `CrashActionBus` (Singleton `MutableSharedFlow<CrashAction>`).
+
+`LocationTrackingService`:
+- `observeSettings` poziva `syncCrashDetectorState()` na svaku promenu settings-a — start/stop CrashDetector idempotentno.
+- `onCrashDetected()` scheduluje 10s countdown (`CRASH_COUNTDOWN_SEC`), na svakoj sekundi update notif remaining. Posle expiry `triggerCrashSos()` (reuse `SosRepository.trigger` sa message=„Automatic crash alert").
+- `observeCrashActions()` collect-uje bus — Cancel = otkaži job + cancel notif; SendNow = otkaži job + `triggerCrashSos` odmah.
+- `onDestroy`: unregister sensor listener + cancel countdown job.
+
+`UserSettings.crashDetectionEnabled=false` (default off — sensor drain + false-positive risk).
+
+`PrivacyScreen`: toggle ispod speeding threshold.
+
+`AndroidManifest.xml`: registered `CrashActionReceiver` sa intent-filter za dva action-a.
+
+### F) Firestore rules deploy
+
+`firebase deploy --only firestore:rules` na `krug-86527` — nove kolekcije žive u produkciji.
+
+**Ostalo za tebe (Firebase Console):** TTL policies za `speedingEvents.timestamp`, `checkIns.timestamp`, `etaShares.updatedAt` sa 24h expiry. Bez ovog, kolekcije poslovaju bezgranično (etaShares ima code-side cleanup 15min posle arrivedAt, ali cancelled i old start docs bi ostali).
+
+**Ostalo za realno testing (uređaj):** Crash detection threshold — 4g je pogodak, real-device test u autu je nezaobilazan pre release-a. ETA share live update — hodaj/vozi 5min, gledaj da li banner update-uje na 60s.
+
+---
+
 ## Gde smo stali (2026-07-08, 31. sesija — premium 7-pack odluka + custom map styles + battery alerts + driving reports)
 
 Fokus sesije: pricing diskusija za premium tier (€2.99/mo, €19.99/god, Play Billing

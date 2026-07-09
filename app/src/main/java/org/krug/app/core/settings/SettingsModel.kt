@@ -36,4 +36,23 @@ data class UserSettings(
      * punjaču). Default true. Rate-limit per member ~12h (LocationTrackingService).
      */
     val batteryAlertsEnabled: Boolean = true,
+    /**
+     * Speeding alerts — user-ov opt-in da se emituju event-i kruzima kad on prekorači
+     * `speedingThresholdKmh`. Default false (user mora eksplicitno da uključi jer je ovo
+     * "publish o meni" ne "receive od drugih"). Prijem tuđih speeding event-a je uvek
+     * pokazan (nema separate receive toggle) — poštuje samo silent hours.
+     */
+    val speedingAlertsEnabled: Boolean = false,
+    /**
+     * Prag brzine iznad kog se emituje speeding event (na sopstvenim fix-ima). Default
+     * 120 km/h — tipično highway ograničenje +10. Detektuje se posle 5s neprekidno
+     * iznad ovog praga.
+     */
+    val speedingThresholdKmh: Int = 120,
+    /**
+     * Crash detection — akcelerometar-based sumnja na sudar. Kad detektor okine,
+     * pokazuje se countdown notifikacija; ako user ne otkaže u 10s, auto SOS ide krugu.
+     * Default false zbog false-positive rizika i baterijskog utroška sensor-a.
+     */
+    val crashDetectionEnabled: Boolean = false,
 )

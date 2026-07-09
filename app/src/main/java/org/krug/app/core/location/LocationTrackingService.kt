@@ -78,6 +78,68 @@ class LocationTrackingService : Service() {
     @Inject lateinit var placeEventNotifier: org.krug.app.core.places.PlaceEventNotifier
     @Inject lateinit var geofenceManager: org.krug.app.core.places.GeofenceManager
     @Inject lateinit var locationHistoryRepository: LocationHistoryRepository
+    @Inject lateinit var speedingDetector: org.krug.app.core.speeding.SpeedingDetector
+    @Inject lateinit var speedingRepository: org.krug.app.core.speeding.SpeedingRepository
+    @Inject lateinit var speedingAlertNotifier: org.krug.app.core.speeding.SpeedingAlertNotifier
+    @Inject lateinit var checkInRepository: org.krug.app.core.checkin.CheckInRepository
+    @Inject lateinit var checkInNotifier: org.krug.app.core.checkin.CheckInNotifier
+    @Inject lateinit var etaRepository: org.krug.app.core.eta.EtaRepository
+    @Inject lateinit var etaNotifier: org.krug.app.core.eta.EtaNotifier
+    @Inject lateinit var directionsRepository: org.krug.app.core.directions.DirectionsRepository
+    @Inject lateinit var crashDetector: org.krug.app.core.crash.CrashDetector
+    @Inject lateinit var crashAlertNotifier: org.krug.app.core.crash.CrashAlertNotifier
+    @Inject lateinit var crashActionBus: org.krug.app.core.crash.CrashActionBus
+
+    /**
+     * Cache displayName-a self korisnika — puni observeSelfName() na startu FGS-a i
+     * osvežava se dok god UserRepository emit-uje. Koristi se za speeding event-e
+     * (SpeedingDetector emit-uje sa userName-om u payload-u da observers ne bi morali
+     * dodatan fetch). Prazan string je fine fallback (Notifier ima „unknown_sender").
+     */
+    @Volatile private var selfDisplayName: String = ""
+
+    /**
+     * In-memory watermark speeding event ID-jeva koje smo već notifikovali (per-process,
+     * kao lastNotifiedPlaceEventIds). Sprečava re-notif na svaki snapshot listener update.
+     */
+    private val notifiedSpeedingEventIds = java.util.Collections.newSetFromMap(
+        java.util.concurrent.ConcurrentHashMap<String, Boolean>(),
+    )
+
+    /** Analogno notifiedSpeedingEventIds — sprečava re-notif check-in event-a. */
+    private val notifiedCheckInEventIds = java.util.Collections.newSetFromMap(
+        java.util.concurrent.ConcurrentHashMap<String, Boolean>(),
+    )
+
+    /** Per-share dedup za „started" i „arrived" notif-e — key = shareId, ne user id. */
+    private val notifiedEtaStarted = java.util.Collections.newSetFromMap(
+        java.util.concurrent.ConcurrentHashMap<String, Boolean>(),
+    )
+    private val notifiedEtaArrived = java.util.Collections.newSetFromMap(
+        java.util.concurrent.ConcurrentHashMap<String, Boolean>(),
+    )
+
+    /**
+     * Timestamp poslednjeg ETA update-a za sopstveni share. Throttle-uje directions API
+     * pozive (ne recompute na svaki fix; jedan svakih ETA_UPDATE_INTERVAL_MS).
+     */
+    @Volatile private var lastEtaUpdateAtMs: Long = 0L
+
+    /**
+     * Ako je user u aktivnom ETA share modu — cache-ovan snapshot destination-a da bismo
+     * mogli da radimo brz distance-to-destination check bez novog Firestore read-a.
+     * Null = nema aktivnog share-a. Osvežava se preko observeSelfEtaShare().
+     */
+    @Volatile private var activeEtaShare: org.krug.app.core.eta.EtaShareModel? = null
+
+    /**
+     * Aktivan crash-countdown job — schedule-uje SOS trigger 10s posle detekcije.
+     * Cancelled kad user tap-uje „Dobro sam" ili kad forsira „Pošalji odmah".
+     */
+    @Volatile private var crashCountdownJob: kotlinx.coroutines.Job? = null
+
+    /** Flag „crash detektor je pokrenut" — sprečava double-start pri settings toggle-u. */
+    @Volatile private var crashDetectorStarted: Boolean = false
 
     /**
      * Per-uid map: poslednji `triggeredAt` koji je već notifikovan korisnika.
@@ -172,6 +234,26 @@ class LocationTrackingService : Service() {
                 speedMps = loc.speed,
                 nowMs = System.currentTimeMillis(),
             )
+            // Speeding detektor — filtrira sam po enabled flag-u, ne pozivamo uslovno
+            // (state machine treba svaku brzinu da bi znao kad user padne ispod threshold-a).
+            speedingDetector.onFix(
+                uid = uid,
+                userName = selfDisplayName,
+                lat = loc.latitude,
+                lng = loc.longitude,
+                speedMps = loc.speed,
+                accuracyM = loc.accuracy,
+                nowMs = System.currentTimeMillis(),
+                thresholdKmh = currentSettings.speedingThresholdKmh,
+                enabled = currentSettings.speedingAlertsEnabled,
+            )
+            // ETA share update — throttled interno u maybeUpdateEtaShare-u; ne-op ako nema aktivnog share-a.
+            maybeUpdateEtaShare(uid = uid, curLat = loc.latitude, curLng = loc.longitude)
+            // Crash detektor — hrani brzinom da zna „user je bio u vožnji" kontekst.
+            // No-op ako detektor nije startovan (crashDetectorStarted flag u syncCrashDetectorState).
+            if (crashDetectorStarted) {
+                crashDetector.onDrivingSpeed(loc.speed, System.currentTimeMillis())
+            }
             if (!shouldPublish(loc)) {
                 Timber.d("Skip publish: movement < ${SIGNIFICANT_MOVEMENT_M}m + recent publish")
                 return
@@ -388,12 +470,76 @@ class LocationTrackingService : Service() {
             presenceCleanup = locationRepository.bindOnlinePresence(uid)
         }
         observeSettings()
+        observeSelfName()
         observeRefreshRequests()
         observeCircleSos()
         observeCirclePlaces()
         observeCircleBattery()
+        observeCircleSpeeding()
+        observeCircleCheckIns()
+        observeCircleEta()
+        observeSelfEtaShare()
+        observeCrashActions()
         registerActivityRecognition()
         startHeartbeatLoop()
+    }
+
+    /**
+     * Punjenje `selfDisplayName` cache-a. UserRepository emit-uje displayName preko
+     * Firestore listener-a — pratimo dokle god je FGS živ. Bez ovog, SpeedingDetector.emit
+     * ne bi imao userName za payload i observers bi videli prazno ime (fallback na
+     * „Circle member" u notif copy).
+     */
+    private fun observeSelfName() {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        scope.launch {
+            userRepository.observeUser(uid).filterNotNull().collectLatest { u ->
+                val resolved = u.displayName.takeIf { it.isNotBlank() }
+                    ?: u.email.substringBefore('@').takeIf { it.isNotBlank() }
+                    ?: org.krug.app.core.util.DeviceNames.friendly(u.deviceModel)
+                        .takeIf { it.isNotBlank() }
+                    ?: ""
+                selfDisplayName = resolved
+            }
+        }
+    }
+
+    /**
+     * Prati speeding event-e svih krugova, dispatch-uje notif kao za placeEvents.
+     * Isti filter stack: sopstveni event skip, notif-toggle, silent hours, per-event
+     * dedup preko `notifiedSpeedingEventIds`. NEMA per-place mute (govore o brzini
+     * konkretnog usera, ne o lokaciji).
+     */
+    private fun observeCircleSpeeding() {
+        val selfUid = firebaseAuth.currentUser?.uid ?: return
+        scope.launch {
+            circleRepository.observeMyCircles(selfUid)
+                .flatMapLatest { circles ->
+                    val circleIds = circles.map { it.id }
+                    if (circleIds.isEmpty()) {
+                        flowOf(emptyList<org.krug.app.core.speeding.SpeedingEventModel>())
+                    } else {
+                        combine(
+                            circleIds.map { cid -> speedingRepository.observeRecentEvents(cid) },
+                        ) { arrays -> arrays.toList().flatten() }
+                    }
+                }
+                .collectLatest { events ->
+                    val cutoff = System.currentTimeMillis() - SPEEDING_EVENT_MAX_AGE_MS
+                    events.forEach { evt ->
+                        if (evt.userId == selfUid) return@forEach
+                        if (evt.id in notifiedSpeedingEventIds) return@forEach
+                        val ts = evt.timestamp?.time ?: 0L
+                        if (ts < cutoff) {
+                            notifiedSpeedingEventIds.add(evt.id)
+                            return@forEach
+                        }
+                        notifiedSpeedingEventIds.add(evt.id)
+                        if (isInSilentHours(currentSettings.silentHours)) return@forEach
+                        speedingAlertNotifier.notifySpeeding(evt)
+                    }
+                }
+        }
     }
 
     /**
@@ -623,7 +769,95 @@ class LocationTrackingService : Service() {
             settingsRepository.observe(uid).collectLatest { settings ->
                 currentSettings = settings
                 reconfigureIfNeeded()
+                // Crash detector se pokreće/gasi na promenu settings-a. Bez pokretanja u
+                // ovom pathu, dodavanje toggle-a u runtime ne bi imalo efekta dok FGS ne
+                // resttart-uje.
+                syncCrashDetectorState()
             }
+        }
+    }
+
+    /** Idempotentno: pokreni detektor ako je flag true a nije running; stopiraj ako je flag false a running. */
+    private fun syncCrashDetectorState() {
+        if (currentSettings.crashDetectionEnabled) {
+            if (!crashDetectorStarted) {
+                crashDetector.start { onCrashDetected() }
+                crashDetectorStarted = true
+            }
+        } else {
+            if (crashDetectorStarted) {
+                crashDetector.stop()
+                crashDetectorStarted = false
+                // Otkaži tekući countdown ako user gasi toggle usred njega.
+                crashCountdownJob?.cancel()
+                crashCountdownJob = null
+                crashAlertNotifier.cancel()
+            }
+        }
+    }
+
+    /**
+     * Countdown flow — okinuto iz CrashDetector-a. Zakazuje SOS trigger za CRASH_COUNTDOWN_SEC
+     * sekundi u budućnosti, update-uje notif svake sekunde da user vidi countdown.
+     * Otkaz preko CrashActionBus-a (observeCrashActions).
+     */
+    private fun onCrashDetected() {
+        // Ako je već aktivan countdown u toku, ignore double-fire (rate-limit je i u detektoru).
+        if (crashCountdownJob?.isActive == true) return
+        crashCountdownJob = scope.launch {
+            for (remaining in CRASH_COUNTDOWN_SEC downTo 1) {
+                crashAlertNotifier.postCountdown(remaining)
+                kotlinx.coroutines.delay(1_000L)
+            }
+            triggerCrashSos()
+            crashAlertNotifier.cancel()
+        }
+    }
+
+    private fun observeCrashActions() {
+        scope.launch {
+            crashActionBus.actions.collect { action ->
+                when (action) {
+                    org.krug.app.core.crash.CrashAction.Cancel -> {
+                        crashCountdownJob?.cancel()
+                        crashCountdownJob = null
+                        crashAlertNotifier.cancel()
+                        Timber.i("Crash SOS cancelled by user")
+                    }
+                    org.krug.app.core.crash.CrashAction.SendNow -> {
+                        crashCountdownJob?.cancel()
+                        crashCountdownJob = null
+                        crashAlertNotifier.cancel()
+                        triggerCrashSos()
+                        Timber.i("Crash SOS forced immediate by user")
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Trigger SOS iz crash detekcije. Reuse-uje SosRepository sa jasnim tagom u message-u
+     * da observers znaju da je auto-detected (razlikuje od ručnog SOS-a).
+     */
+    private fun triggerCrashSos() {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        val activeCircle = runCatching {
+            kotlinx.coroutines.runBlocking {
+                circleRepository.observeMyCircles(uid).first().firstOrNull()
+            }
+        }.getOrNull()
+        scope.launch {
+            runCatching {
+                sosRepository.trigger(
+                    uid = uid,
+                    lat = 0.0, lng = 0.0,
+                    circleId = activeCircle?.id,
+                    senderName = selfDisplayName,
+                    circleName = activeCircle?.name,
+                    message = "Automatic crash alert",
+                )
+            }.onFailure { Timber.w(it, "Crash SOS trigger failed") }
         }
     }
 
@@ -785,6 +1019,180 @@ class LocationTrackingService : Service() {
      *
      * Poštuje `UserSettings.batteryAlertsEnabled` i silent hours (isti kao Place event-i).
      */
+    /**
+     * Prati sopstveni ETA share iz svih krugova — trenutno pretpostavljamo da user ima
+     * najviše jedan aktivan share u bilo kom krugu. Uzimamo prvi non-null. Cache-uje se u
+     * `activeEtaShare` za brzu proveru u locationCallback-u.
+     */
+    private fun observeSelfEtaShare() {
+        val selfUid = firebaseAuth.currentUser?.uid ?: return
+        scope.launch {
+            circleRepository.observeMyCircles(selfUid)
+                .flatMapLatest { circles ->
+                    val circleIds = circles.map { it.id }
+                    if (circleIds.isEmpty()) {
+                        flowOf(null as org.krug.app.core.eta.EtaShareModel?)
+                    } else {
+                        combine(
+                            circleIds.map { cid -> etaRepository.observeMyShare(cid, selfUid) },
+                        ) { arrays -> arrays.firstNotNullOfOrNull { it } }
+                    }
+                }
+                .collectLatest { share ->
+                    activeEtaShare = share
+                }
+        }
+    }
+
+    /**
+     * Prati tuđe ETA share-ove iz svih krugova. Emit-uje started/arrived notif-e sa
+     * dedup-om preko notifiedEtaStarted / notifiedEtaArrived skupova.
+     */
+    private fun observeCircleEta() {
+        val selfUid = firebaseAuth.currentUser?.uid ?: return
+        scope.launch {
+            circleRepository.observeMyCircles(selfUid)
+                .flatMapLatest { circles ->
+                    val circleIds = circles.map { it.id }
+                    if (circleIds.isEmpty()) {
+                        flowOf(emptyList<org.krug.app.core.eta.EtaShareModel>())
+                    } else {
+                        combine(
+                            circleIds.map { cid -> etaRepository.observeActiveShares(cid) },
+                        ) { arrays -> arrays.toList().flatten() }
+                    }
+                }
+                .collectLatest { shares ->
+                    shares.forEach { share ->
+                        if (share.userId == selfUid) return@forEach
+                        val hasArrived = share.arrivedAt != null
+                        if (hasArrived) {
+                            if (share.id !in notifiedEtaArrived) {
+                                notifiedEtaArrived.add(share.id)
+                                if (!isInSilentHours(currentSettings.silentHours)) {
+                                    etaNotifier.notifyArrived(share)
+                                }
+                            }
+                        } else {
+                            if (share.id !in notifiedEtaStarted) {
+                                notifiedEtaStarted.add(share.id)
+                                if (!isInSilentHours(currentSettings.silentHours)) {
+                                    etaNotifier.notifyStarted(share)
+                                }
+                            }
+                        }
+                    }
+                }
+        }
+    }
+
+    /**
+     * Live ETA update pipeline — poziva se iz locationCallback-a kad postoji aktivan
+     * sopstveni share. Throttle na 60s (ETA_UPDATE_INTERVAL_MS), directions request u
+     * IO scope-u da ne blokira location publish tok. Kad je remaining < arrivalRadiusM,
+     * marks arrived.
+     */
+    private fun maybeUpdateEtaShare(uid: String, curLat: Double, curLng: Double) {
+        val share = activeEtaShare ?: return
+        val now = System.currentTimeMillis()
+        // Ako je već arrivedAt označen, ne diramo — dozvoli TTL/cancel put da uradi cleanup.
+        if (share.arrivedAt != null) return
+        val distToDest = distanceMeters(curLat, curLng, share.destinationLat, share.destinationLng)
+        // Arrival check — nezavisan od throttle-a (užurbani prilaz destinaciji ne treba čekati).
+        if (distToDest <= ETA_ARRIVAL_RADIUS_M) {
+            scope.launch {
+                val circleIds = runCatching {
+                    circleRepository.observeMyCircles(uid).first().map { it.id }
+                }.getOrDefault(emptyList())
+                if (circleIds.isNotEmpty()) {
+                    etaRepository.markArrived(circleIds, uid)
+                    // Scheduled cleanup — bez TTL-a na etaShares (Console-side), doc bi ostao
+                    // zauvek posle arrival-a. Delay 15min: dovoljno da observers vide „stigao/la"
+                    // banner i notif, a onda auto-cleanup. Ako user pokrene novi share pre isteka,
+                    // startShare prepisuje doc (docId=uid), pa cancel neće obrisati taj novi.
+                    // Zato pre delete-a proveravamo activeEtaShare snapshot.
+                    scope.launch {
+                        kotlinx.coroutines.delay(ETA_ARRIVED_CLEANUP_DELAY_MS)
+                        val current = activeEtaShare
+                        // Ako je user u međuvremenu pokrenuo novi share, arrivedAt će biti null →
+                        // ne diramo. Ako je isti share (arrivedAt != null), brišemo.
+                        if (current?.arrivedAt != null) {
+                            etaRepository.cancelShare(circleIds, uid)
+                        }
+                    }
+                }
+            }
+            return
+        }
+        if (now - lastEtaUpdateAtMs < ETA_UPDATE_INTERVAL_MS) return
+        lastEtaUpdateAtMs = now
+        scope.launch {
+            val route = directionsRepository.driveEta(
+                originLat = curLat, originLng = curLng,
+                destLat = share.destinationLat, destLng = share.destinationLng,
+            )
+            val (etaMin, remKm) = if (route != null) {
+                val min = (route.durationSec / 60.0).toInt().coerceAtLeast(1)
+                val km = route.distanceMeters / 1000.0
+                min to km
+            } else {
+                // Fallback: haversine / 40 km/h.
+                val km = distToDest / 1000.0
+                val min = ((km / 40.0) * 60.0).toInt().coerceAtLeast(1)
+                min to km
+            }
+            val circleIds = runCatching {
+                circleRepository.observeMyCircles(uid).first().map { it.id }
+            }.getOrDefault(emptyList())
+            if (circleIds.isNotEmpty()) {
+                etaRepository.updateShare(
+                    circleIds = circleIds,
+                    userId = uid,
+                    currentLat = curLat, currentLng = curLng,
+                    etaMinutes = etaMin, remainingKm = remKm,
+                )
+            }
+        }
+    }
+
+    private fun distanceMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+        val out = FloatArray(1)
+        android.location.Location.distanceBetween(lat1, lng1, lat2, lng2, out)
+        return out[0].toDouble()
+    }
+
+    private fun observeCircleCheckIns() {
+        val selfUid = firebaseAuth.currentUser?.uid ?: return
+        scope.launch {
+            circleRepository.observeMyCircles(selfUid)
+                .flatMapLatest { circles ->
+                    val circleIds = circles.map { it.id }
+                    if (circleIds.isEmpty()) {
+                        flowOf(emptyList<org.krug.app.core.checkin.CheckInEventModel>())
+                    } else {
+                        combine(
+                            circleIds.map { cid -> checkInRepository.observeRecentEvents(cid) },
+                        ) { arrays -> arrays.toList().flatten() }
+                    }
+                }
+                .collectLatest { events ->
+                    val cutoff = System.currentTimeMillis() - CHECKIN_EVENT_MAX_AGE_MS
+                    events.forEach { evt ->
+                        if (evt.userId == selfUid) return@forEach
+                        if (evt.id in notifiedCheckInEventIds) return@forEach
+                        val ts = evt.timestamp?.time ?: 0L
+                        if (ts < cutoff) {
+                            notifiedCheckInEventIds.add(evt.id)
+                            return@forEach
+                        }
+                        notifiedCheckInEventIds.add(evt.id)
+                        if (isInSilentHours(currentSettings.silentHours)) return@forEach
+                        checkInNotifier.notifyCheckIn(evt)
+                    }
+                }
+        }
+    }
+
     private fun observeCircleBattery() {
         val selfUid = firebaseAuth.currentUser?.uid ?: return
         scope.launch {
@@ -1008,6 +1416,14 @@ class LocationTrackingService : Service() {
         // fused klijent.
         boostExpiryJob?.cancel()
         boostExpiryJob = null
+        // Crash detector unregister — SensorEventListener nije životni ciklus service-a,
+        // moramo ručno da unregister-ujemo da SensorManager ne drži referencu na dead FGS.
+        if (crashDetectorStarted) {
+            crashDetector.stop()
+            crashDetectorStarted = false
+        }
+        crashCountdownJob?.cancel()
+        crashCountdownJob = null
         // Presence cleanup pre scope.cancel — otkači RTDB listener + eksplicitno online=false,
         // pa peer-i odmah vide "offline" umesto da čekaju RTDB server-side disconnect timeout.
         presenceCleanup?.run()
@@ -1127,6 +1543,36 @@ class LocationTrackingService : Service() {
         const val PEER_BATTERY_CLEAR_THRESHOLD = 25
         /** Rate-limit za battery alert notif per peer — 12h. */
         const val BATTERY_ALERT_TTL_MS = 12 * 3600 * 1000L
+
+        /**
+         * Speeding event max age — event stariji od ovog se ne notif-uje (samo se markira
+         * kao „viđen" u notifiedSpeedingEventIds). 30min pokriva realne kašnjenja kruga u
+         * offline modu; stariji su verovatno replay pri startupu.
+         */
+        const val SPEEDING_EVENT_MAX_AGE_MS = 30 * 60_000L
+
+        /**
+         * Check-in event max age — check-in-i su „ovog trenutka" signali, stariji od 15min
+         * verovatno replay pri startupu. Ovo je kraće od speeding jer check-in je više
+         * time-sensitive („javio se ovo veče" nema smisla ujutro).
+         */
+        const val CHECKIN_EVENT_MAX_AGE_MS = 15 * 60_000L
+
+        /** ETA update refresh cadence — nema koristi od češćeg recompute-a (traffic se ne menja sekundno). */
+        const val ETA_UPDATE_INTERVAL_MS = 60_000L
+
+        /** User je „stigao" kad je unutar ovog radijusa destinacije. Usklađeno sa Place min radius. */
+        const val ETA_ARRIVAL_RADIUS_M = 100.0
+
+        /**
+         * Koliko dugo etaShare doc ostaje u Firestore-u posle arrivedAt marker-a pre nego
+         * što ga LocationTrackingService obriše. 15min = dovoljno da observers vide notif
+         * + banner na mapi, ali ne toliko da doc smeta forever.
+         */
+        const val ETA_ARRIVED_CLEANUP_DELAY_MS = 15 * 60_000L
+
+        /** Crash countdown pre auto-SOS-a — 10s daje user-u vreme da otkaže false-positive. */
+        const val CRASH_COUNTDOWN_SEC = 10
         private const val EXTRA_FORCE_REFRESH = "force_refresh"
         private const val EXTRA_SOS_BOOST = "sos_boost"
         const val EXTRA_ACTIVITY_CHANGED = "activity_changed"

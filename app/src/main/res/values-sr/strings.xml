@@ -192,6 +192,59 @@
     <string name="settings_battery_alerts">Upozorenja o bateriji</string>
     <string name="settings_battery_alerts_subtitle">Obavesti me kada član padne ispod 20%%</string>
 
+    <!-- Privacy screen sections -->
+    <string name="privacy_section_sharing">Deljenje</string>
+    <string name="privacy_section_notifications">Obaveštenja</string>
+    <string name="privacy_section_driving_safety">Vožnja i sigurnost</string>
+
+    <!-- Speeding alerts -->
+    <string name="speeding_alert_channel">Upozorenja o brzini</string>
+    <string name="speeding_alert_channel_desc">Obaveštenja kada član kruga prekorači svoj prag brzine</string>
+    <string name="speeding_alert_title">%1$s vozi %2$d km/h</string>
+    <string name="speeding_alert_body">Iznad podešenog praga od %1$d km/h.</string>
+    <string name="speeding_alert_unknown_sender">Član kruga</string>
+    <string name="settings_speeding_alerts">Upozorenja o brzini</string>
+    <string name="settings_speeding_alerts_subtitle">Obavesti krug kada pređem prag</string>
+    <string name="settings_speeding_threshold">Prag za upozorenje</string>
+    <string name="settings_speeding_threshold_value">%1$d km/h</string>
+
+    <!-- Safe check-ins -->
+    <string name="checkin_channel">Prijavljivanje</string>
+    <string name="checkin_channel_desc">Obaveštenja kada se član kruga javi da je bezbedan</string>
+    <string name="checkin_notif_title">%1$s se javio/la</string>
+    <string name="checkin_notif_body_with_place">Bezbedno na lokaciji: %1$s</string>
+    <string name="checkin_notif_body_no_place">Bezbedno</string>
+    <string name="checkin_button_label">Stigao/la sam</string>
+    <string name="checkin_button_short">Prijavi</string>
+    <string name="checkin_confirm_title">Poslati potvrdu?</string>
+    <string name="checkin_confirm_body">Krug će dobiti kratku poruku „Stigao/la sam" sa tvojom trenutnom lokacijom.</string>
+    <string name="checkin_confirm_cta">Pošalji</string>
+    <string name="checkin_toast_sent">Prijava poslata</string>
+    <string name="checkin_toast_failed">Prijava neuspešna. Pokušaj opet.</string>
+
+    <!-- ETA sharing -->
+    <string name="eta_channel">Deljenje ETA</string>
+    <string name="eta_channel_desc">Obaveštenja kada član kruga podeli ETA ili je stigao</string>
+    <string name="eta_notif_started_title">%1$s je na putu</string>
+    <string name="eta_notif_started_body">ETA %1$s do %2$s</string>
+    <string name="eta_notif_arrived_title">%1$s je stigao/la</string>
+    <string name="eta_notif_arrived_body">Na lokaciji: %1$s</string>
+    <string name="eta_share_title">Podeli ETA</string>
+    <string name="eta_share_pick_destination">Dodirni mapu i odaberi odredište</string>
+    <string name="eta_share_confirm">Podeli ETA</string>
+    <string name="eta_share_cancel">Prekini deljenje</string>
+    <string name="eta_share_active">ETA %1$s do %2$s</string>
+    <string name="eta_share_active_no_name">ETA %1$s</string>
+    <string name="eta_share_arrived">Stigao/la</string>
+
+    <!-- Crash detection -->
+    <string name="crash_countdown_title">Detektovan pad</string>
+    <string name="crash_countdown_body">Šaljem SOS za %1$d s. Dodirni ako si dobro.</string>
+    <string name="crash_countdown_cancel">Dobro sam</string>
+    <string name="crash_countdown_send_now">Pošalji odmah</string>
+    <string name="settings_crash_detection">Detekcija pada</string>
+    <string name="settings_crash_detection_subtitle">Automatski javi krug kad se posumnja na pad</string>
+
     <!-- Places (geofence) -->
     <string name="places_section_title">Mesta</string>
     <string name="places_empty_title">Još nema mesta</string>
@@ -307,7 +360,7 @@
     <string name="settings_account">Nalog</string>
     <string name="settings_account_subtitle">Ime, fotografija, brisanje naloga</string>
     <string name="settings_privacy">Privatnost</string>
-    <string name="settings_privacy_subtitle">Pauziraj deljenje, eksport podataka</string>
+    <string name="settings_privacy_subtitle">Pauziraj deljenje, obaveštenja, tihi sati</string>
     <string name="settings_battery">Baterija</string>
     <string name="settings_battery_subtitle">Optimizacija i frekvencija lokacije</string>
     <string name="settings_map_style">Stil mape</string>

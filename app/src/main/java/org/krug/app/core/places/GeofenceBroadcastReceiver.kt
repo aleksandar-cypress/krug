@@ -69,11 +69,30 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
          * Tolerancija oko granice geofence-a pri verifikaciji. Play Services može
          * fire-ovati EXIT dok je user 30-80m unutar zone (GPS jitter), ili ENTER
          * pre nego što stvarno pređe granicu. Zato prihvatamo event samo ako je
-         * fresh GPS potvrdi da je user JASNO s druge strane (radius +/- 50m).
-         *  - EXIT prihvatamo ako je distance > radius + 50m
-         *  - ENTER prihvatamo ako je distance <= radius + 50m (dovoljno blizu / unutra)
+         * fresh GPS potvrdi da je user JASNO s druge strane (radius +/- 100m).
+         *  - EXIT prihvatamo ako je distance > radius + 100m
+         *  - ENTER prihvatamo ako je distance <= radius + 100m (dovoljno blizu / unutra)
+         *
+         * Bump 50→100 (Jul 2026): user prijavljuje duple ENTER notif-e sa 1-2h razmakom
+         * dok je fizički bio kod kuće. Root cause: phantom EXIT je prošao verify jer je
+         * GPS drift bio dovoljan (ili verify fallback vratio null i propustio event bez
+         * distance provere). 100m prag traži drift ≥ radius+100m da bi se EXIT priznao —
+         * realno samo pri fizičkom izlasku iz zone. Dodatno je uveden semantički guard
+         * (lastTransitionTypeByPlace) koji blokira ENTER→ENTER bez EXIT-a između.
          */
-        private const val PHANTOM_THRESHOLD_M = 50
+        private const val PHANTOM_THRESHOLD_M = 100
+
+        /**
+         * In-memory per-place last-transition-type guard. Semantički filter: ne dozvoli
+         * dva uzastopna ENTER-a (ili EXIT-a) za isti placeId bez event-a suprotnog tipa
+         * između. Nadgradnja iznad distance filter-a — čak i ako phantom EXIT nekako
+         * prođe distance provjeru, ovaj čuvar spreči da drugi ENTER stigne kao notif.
+         *
+         * State je in-memory (kao lastEventTimes) — process death ga briše, pa prvi
+         * ENTER posle restart-a uvek prolazi. To je prihvatljivo: prava svrha je
+         * suzbijanje bliskih duplikata unutar iste sesije.
+         */
+        private val lastTransitionTypeByPlace = mutableMapOf<String, String>()
 
         /**
          * "Jeftin verify" kvalifikacija — ako `event.triggeringLocation` ispunjava
@@ -256,7 +275,22 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                         Timber.d("GeofenceReceiver: dedup skip $key (last ${now - last}ms ago)")
                         return@forEach
                     }
+                    // Semantički guard: ne dopusti ENTER→ENTER (ili EXIT→EXIT) za isti place
+                    // bez suprotnog event-a između. Hvata slučaj kad phantom EXIT ipak prođe
+                    // distance filter (GPS drift preko radius+100m par minuta), pa sledeći
+                    // ENTER nema fizičku osnovu.
+                    val prevType = synchronized(lastTransitionTypeByPlace) {
+                        lastTransitionTypeByPlace[placeId]
+                    }
+                    if (prevType == type) {
+                        Timber.w(
+                            "GeofenceReceiver: skip repeated %s for place=%s (no intervening opposite transition)",
+                            type, placeInfo?.name ?: placeId,
+                        )
+                        return@forEach
+                    }
                     synchronized(lastEventTimes) { lastEventTimes[key] = now }
+                    synchronized(lastTransitionTypeByPlace) { lastTransitionTypeByPlace[placeId] = type }
                     val placeName = placeInfo?.name ?: fetchPlaceName(circleId, placeId) ?: placeId
                     placeRepository.logEvent(
                         circleId = circleId,

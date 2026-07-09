@@ -188,6 +188,59 @@
     <string name="settings_battery_alerts">Battery alerts</string>
     <string name="settings_battery_alerts_subtitle">Notify me when a member drops under 20%%</string>
 
+    <!-- Privacy screen sections -->
+    <string name="privacy_section_sharing">Sharing</string>
+    <string name="privacy_section_notifications">Notifications</string>
+    <string name="privacy_section_driving_safety">Driving &amp; safety</string>
+
+    <!-- Speeding alerts -->
+    <string name="speeding_alert_channel">Speeding alerts</string>
+    <string name="speeding_alert_channel_desc">Notifications when a circle member exceeds their speed limit</string>
+    <string name="speeding_alert_title">%1$s hit %2$d km/h</string>
+    <string name="speeding_alert_body">Above their %1$d km/h alert threshold.</string>
+    <string name="speeding_alert_unknown_sender">Circle member</string>
+    <string name="settings_speeding_alerts">Speeding alerts</string>
+    <string name="settings_speeding_alerts_subtitle">Tell my circle when I exceed the threshold</string>
+    <string name="settings_speeding_threshold">Alert threshold</string>
+    <string name="settings_speeding_threshold_value">%1$d km/h</string>
+
+    <!-- Safe check-ins -->
+    <string name="checkin_channel">Check-ins</string>
+    <string name="checkin_channel_desc">Notifications when a circle member checks in as safe</string>
+    <string name="checkin_notif_title">%1$s checked in</string>
+    <string name="checkin_notif_body_with_place">Safe at %1$s</string>
+    <string name="checkin_notif_body_no_place">Safe</string>
+    <string name="checkin_button_label">I\'m here</string>
+    <string name="checkin_button_short">Check in</string>
+    <string name="checkin_confirm_title">Check in as safe?</string>
+    <string name="checkin_confirm_body">Your circle will get a quick \"I\'m here\" notification with your current location.</string>
+    <string name="checkin_confirm_cta">Send check-in</string>
+    <string name="checkin_toast_sent">Check-in sent</string>
+    <string name="checkin_toast_failed">Check-in failed. Try again.</string>
+
+    <!-- ETA sharing -->
+    <string name="eta_channel">ETA shares</string>
+    <string name="eta_channel_desc">Notifications when a circle member starts or updates an ETA share</string>
+    <string name="eta_notif_started_title">%1$s is on the way</string>
+    <string name="eta_notif_started_body">ETA %1$s to %2$s</string>
+    <string name="eta_notif_arrived_title">%1$s has arrived</string>
+    <string name="eta_notif_arrived_body">At %1$s</string>
+    <string name="eta_share_title">Share ETA</string>
+    <string name="eta_share_pick_destination">Tap the map to pick a destination</string>
+    <string name="eta_share_confirm">Share ETA</string>
+    <string name="eta_share_cancel">Stop sharing</string>
+    <string name="eta_share_active">ETA %1$s to %2$s</string>
+    <string name="eta_share_active_no_name">ETA %1$s</string>
+    <string name="eta_share_arrived">Arrived</string>
+
+    <!-- Crash detection -->
+    <string name="crash_countdown_title">Crash detected</string>
+    <string name="crash_countdown_body">Sending SOS in %1$d s. Tap if you\'re OK.</string>
+    <string name="crash_countdown_cancel">I\'m OK</string>
+    <string name="crash_countdown_send_now">Send now</string>
+    <string name="settings_crash_detection">Crash detection</string>
+    <string name="settings_crash_detection_subtitle">Auto-alert circle after a suspected crash</string>
+
     <!-- Places (geofence) -->
     <string name="places_section_title">Places</string>
     <string name="places_empty_title">No places yet</string>
@@ -304,7 +357,7 @@
     <string name="settings_account">Account</string>
     <string name="settings_account_subtitle">Name, photo, delete account</string>
     <string name="settings_privacy">Privacy</string>
-    <string name="settings_privacy_subtitle">Pause sharing, export data</string>
+    <string name="settings_privacy_subtitle">Pause sharing, notifications, quiet hours</string>
     <string name="settings_battery">Battery</string>
     <string name="settings_battery_subtitle">Optimization and location frequency</string>
     <string name="settings_map_style">Map style</string>
