@@ -2,11 +2,38 @@
 
 Snimljeno na kraju sesije.
 
-## Gde smo stali (2026-07-09, 32.5. sesija — multi-device + polish + copy cleanup pred odmor)
+## Gde smo stali (2026-07-09, kraj dana — 1.2.0 AAB spreman, ide na Play Store, ja idem na odmor)
 
-Ova sesija je bila continuation prethodne (32.) — sve što je 32. dodala je pushed u commit `558d1f4`. Ova sesija je dodala infrastrukturu multi-device usera, brendiran What's new dialog za 1.2.0, road distance u MemberDetailSheet-u umesto vazdušne linije, i seriju UI polish + copy cleanup fixes. Pushed u `6e16a3a` + follow-up commits.
+Kraj dugačkog produktivnog dana. **1.2.0 AAB je build-ovan i signed** (`app/build/outputs/bundle/release/app-release.aab`, 37MB). Aleksandar uploaduje na Play Console kada bude imao vremena. Landing update-ovan i push-ovan na cPanel već.
 
-**Idem na odmor sledeći dan.** Naredna sesija: real-device testing (crash detection threshold u autu je jedina stvar koju iz Claude-a ne mogu da verifikujem) i Play Store 1.2.0 upload. Sve što je code-side je gotovo, deploy-ovano, testirano na S24.
+**Full commit chain danas (od jutra do sad):**
+- `a62b5f3` (pre današnje sesije) — 31. sesija member driving reports
+- `558d1f4` — 32. sesija: 4 nova feature-a (speeding/checkin/ETA/crash) + phantom fix
+- `6e16a3a` — multi-device + whats-new + road distance + button parovi
+- `535d551` — em-dash cleanup + copy polish + landing 1.2.0
+- `8b4abc6` — landing pricing fix (crash/speeding u Premium)
+- `f0eb27a` — History playback: skip static period
+- `b8bae8f` — Deep UI polish: banneri + corner radiuses + onboarding glitch fix
+
+Sve pushed u origin/main. Firebase rules + Cloud Function + TTL policies live.
+
+**Preostaje samo Aleksandar-side:**
+1. **Play Console 1.2.0 upload** — `app-release.aab` gotov, treba upload + release notes + rollout
+2. **Real-device crash detection test** — 4g threshold u autu, spusti telefon slobodno par puta, gledaj false-positive rate
+3. **Multi-device test** — instalira 1.2.0 na Jelenin telefon, obe se logujemo istim Google-om, prati se da su jedan član u krugu + oba dobijaju push
+4. **ETA share live update na terenu** — hodaš/voziš 5min, banner update-uje ETA na svakih 60s
+
+**Šta je sve u 1.2.0 (za release notes):**
+- Safe check-ins ("Stigao/la sam" dugme)
+- ETA sharing sa live update-om
+- Speeding alerts (opt-in, per-user threshold)
+- Crash detection (opt-in, 10s countdown)
+- Multi-device support (Google-signed user na više uređaja)
+- Phantom double-arrived fix (Places notifikacije)
+- History playback preskače statični period
+- MemberDetailSheet: road distance (Mapbox Directions) umesto vazdušne linije
+- Novi UI: kompaktna dugmad u parovima, konzistentni banner-i, brendiran ETA banner
+- What's new dialog automatski se pokazuje pri prvom otvaranju posle update-a
 
 ### A) Multi-device support
 
@@ -113,7 +140,83 @@ Diskusija o auth security-ju. Utvrđeno:
 
 Odluka: **ostajemo Google-only** za sada. Ako izbačaj isključenih usera postane realan problem posle 1.2.0 releasea, opcija je Phone/SMS OTP (SIM-bound, ne otvara spam surface, ~$0.03/SMS cost).
 
-### G) Widget experiment (uklonjen)
+### G-2) Deep UI polish (kraj dana)
+
+**MemberDetailSheet banneri (SOS / LongOffline / Offline / Private):**
+- Shape 12dp → **16dp** (usklađeno sa ETA banner-om)
+- Padding: 14dp → **16dp**
+- Icon size: **22dp** standardizovan
+- Icon-to-text gap: **12dp** konzistentno
+- **LongOffline banner sad ima ikonu (CloudOff)** — pre bio samo tekst
+- **Private banner koristi VisibilityOff ikonu** (semantički tačnije)
+- **Offline: PrivateGray → LogoOrange tint** (topliji ton „tranzientno" umesto „mrtvo")
+- LongOffline: alpha 0.12 → 0.16 (jači signal, akcija potrebna)
+
+**Corner radius skala usaglašena:**
+- StatChip: 14dp → **12dp**
+- BatteryBadge: 10dp → **12dp**
+- **Rezultat: 12dp inline chips, 16dp full-width surfaces, 24dp pill buttons**
+
+**MemberDetailSheet dugmad reorganizovana u parove (umesto stack-a):**
+- OTHER (2 reda): [Refresh][Directions ikonica] / [History][Trips]
+- SELF (3 reda): [Refresh][Check-in] / [Share ETA][History] / [Trips][Directions ikonica]
+- Sve „vodi na sledeći ekran" dugmad su **Outlined** (History, Trips) — samo Refresh je filled primary. Directions filled LogoTeal jer je external launch.
+
+**Onboarding animacija glitch fix:**
+- **Uzrok**: `var visible + LaunchedEffect(Unit) { visible = true }` je pravio blank frame između prvog composition-a (visible=false, sve invisible) i state flip-a. User je video „zastane pa se pojavi".
+- **Fix 1**: `MutableTransitionState(false).apply { targetState = true }` — AnimatedVisibility odmah zna da treba da animira iz hidden ka visible, nema extra recompose gap-a.
+- **Fix 2**: Hero ikona samo **fadeIn** (uklonjen scaleIn). scaleIn + pulse scale su se množile na istom Box-u pa je bio mali „bounce" na kraju scaleIn-a kad pulse preuzima. Sa samo fadeIn, ikona se glatko pojavljuje sa pulse-om koji drži „breathe" efekat.
+- Primenjeno na: `PageScaffold.kt` (permission pages) + `InfoPages.kt` (intro screen).
+
+### G-3) History playback fix
+
+Problem: FGS piše lokaciju svakih ~15min čak i dok je user na kuci. Ako je prvi zapis 06:00 a stvarno kretanje počinje u 18:00, klik na Play show-uje 12h statičnog perioda pre nego što se išta desi vizuelno.
+
+Fix u `HistoryScreen.kt`:
+- Nova `findFirstMovementMs(points, minStepMeters=100.0)` helper — vraća timestamp prve tačke koja je >100m udaljena od prethodne (stvarno kretanje, ne GPS jitter/publish while static)
+- `effectiveFromMs` sad = `maxOf(prvi realan point, firstMovement - 1h)`
+- Ako user nije mrdao (svi points klasterisani), fallback na prvi zapis
+- Buffer 1h pre kretanja daje kontekst „gde je bio pre nego što je krenuo"
+
+### G-4) Landing 1.2.0 (pricing corrected)
+
+`docs/index.html` update-ovan:
+- **Nova "Novo u v1.2" sekcija** sa 4 kartice (check-in, ETA, speeding, crash)
+- CSS grid-4 layout + mobile collapse
+- **Pricing sekcija** sa konkretnim cenama: €2.99/mo, €19.99/god, 7-day trial
+- **Free tier** proširen sa: check-ins, ETA, putna distanca
+- **Premium tier** = 9-pack: **crash detection, speeding alerts**, Places 10x, History 30d, Battery alerts, Driving reports, Custom map, Auto full, Priority support
+- Napomena: crash detection + speeding alerts su premešteni iz Free u Premium jer su „wow" feature-i koji prodaju paywall. U app-u su i dalje dostupne kao Free preview do implementacije Play Billing gate-a (pattern iz 31. sesije: battery/driving reports/custom map).
+- FAQ „Hoće li Krug ostati besplatan?" ažuriran
+- Header „Verzija 1" → „Verzija 1.2. Sigurnost besplatno"
+- **Em-dash čist** — nema više „—" u user-facing text-u
+
+### G-5) Copy polish (em-dash cleanup)
+
+Memory constraint: „no em-dash in user-facing text". Uklonjeni:
+
+1. **DrivingReportsScreen title** — bio „Izveštaj o vožnji — Jelena", sada „Izveštaj o vožnji za Jelena" (EN: „Driving reports for Jelena"). Novi string `driving_reports_title_for`.
+2. **ETA banner destination fallback** — pre placeholder „—" kad je label prazan, sad `eta_share_dest_unknown` = „destinaciju" / „destination".
+3. **ETA notifikacije** — split u dva string-a: `eta_notif_started_body` (sa dest) + `eta_notif_started_body_no_dest` (bez), isto za arrived.
+
+**SR copy fine-tuning:**
+- `checkin_channel`: „Prijavljivanje" → „Provere sigurnosti"
+- `checkin_notif_body_with_place`: „Bezbedno na lokaciji: X" → „Sa lokacije: X"
+- `checkin_notif_body_no_place`: „Bezbedno" → „Javio/la se da je bezbedan/na"
+- `eta_share_pick_destination`: „Dodirni mapu i odaberi odredište" → „Ukucaj adresu ili mesto"
+- `crash_countdown_body`: dodato eksplicitno ime dugmeta: „Dodirni „Dobro sam" da otkažeš"
+
+Mrtvi stringovi obrisani: `eta_share_active`, `eta_share_active_no_name`.
+
+### G-6) Release AAB build
+
+`./gradlew :app:bundleRelease` uspešan. R8 minify prošao. Signed sa production keystore-om.
+
+**Fajl:** `app/build/outputs/bundle/release/app-release.aab` (37MB)
+
+Play Console → Production → Create new release → Upload → Release notes → Rollout.
+
+### G-7) Widget experiment (uklonjen)
 
 Kreiran Glance API home screen widget (LogoBlue pozadina, avatari članova, tap otvara Krug), pa uklonjen na user request. Razlog: bez per-member last-seen/distance podataka, widget je samo dekorativni shortcut — nije MVP-worthy. Kod uklonjen, Glance dependency skinut sa `libs.versions.toml` + `app/build.gradle.kts`. Design pattern zapamćen — može se vratiti kad budu bili spremni za pravo useful widget content.
 
