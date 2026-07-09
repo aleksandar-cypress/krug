@@ -2,6 +2,7 @@ package org.krug.app.feature.onboarding.pages
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -29,11 +30,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,8 +59,13 @@ internal fun OnboardingPageScaffold(
 ) {
     // Staggered enter — hero scale+fade, text slide+fade, button scale+fade. Bez ovog,
     // svaki permission ekran "ulazi" kao monolit i ne signalizira fokus user-ovog dejstva.
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible = true }
+    //
+    // MutableTransitionState umesto `var visible by mutableStateOf + LaunchedEffect`:
+    // stariji pattern je pravio blank frame između prvog composition-a (visible=false,
+    // sve invisible) i LaunchedEffect fire-ovanja (visible=true, animacija starta). User
+    // je video „zastane pa se pojavi". Sa MutableTransitionState(false).apply { targetState = true },
+    // AnimatedVisibility odmah zna da treba da animira iz hidden ka visible bez tog gap-a.
+    val visibleState = remember { MutableTransitionState(false).apply { targetState = true } }
 
     Column(
         modifier = Modifier
@@ -85,10 +88,13 @@ internal fun OnboardingPageScaffold(
             ),
             label = "onb-hero-scale",
         )
+        // Enter: samo fadeIn na hero. scaleIn + pulse se množe (dve scale transformacije
+        // na istom Box-u) što daje mali „bounce" glitch kad scaleIn završava a pulse
+        // preuzima. Sa samo fadeIn, ikona se glatko pojavljuje u svom prirodnom scale-u
+        // sa pulse-om koji već daje osećaj „breathe" pokreta.
         AnimatedVisibility(
-            visible = visible,
-            enter = scaleIn(initialScale = 0.8f, animationSpec = tween(500)) +
-                fadeIn(animationSpec = tween(500)),
+            visibleState = visibleState,
+            enter = fadeIn(animationSpec = tween(500)),
         ) {
             Box(
                 modifier = Modifier
@@ -113,7 +119,7 @@ internal fun OnboardingPageScaffold(
         Spacer(Modifier.size(36.dp))
 
         AnimatedVisibility(
-            visible = visible,
+            visibleState = visibleState,
             enter = slideInVertically(
                 initialOffsetY = { it / 3 },
                 animationSpec = tween(500, delayMillis = 250),
@@ -139,7 +145,7 @@ internal fun OnboardingPageScaffold(
         Spacer(Modifier.weight(1f))
 
         AnimatedVisibility(
-            visible = visible,
+            visibleState = visibleState,
             enter = fadeIn(animationSpec = tween(400, delayMillis = 500)) +
                 scaleIn(initialScale = 0.92f, animationSpec = tween(400, delayMillis = 500)),
         ) {

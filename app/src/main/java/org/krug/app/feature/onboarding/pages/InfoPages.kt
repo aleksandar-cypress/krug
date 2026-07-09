@@ -29,11 +29,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,8 +50,10 @@ import org.krug.app.ui.brand.KrugLogo
 fun IntroPage(onContinue: () -> Unit) {
     // Staggered reveal — sve sekcije se pojavljuju jedna po jedna posle prvog frame-a.
     // Bez ovog, ekran "ulazi" kao monolit i welcome content nema vizuelni breathing room.
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible = true }
+    //
+    // MutableTransitionState umesto var visible + LaunchedEffect da izbegnemo blank frame
+    // između prvog composition-a i state flip-a (bio uzrok „zastane pa se pojavi" glitch-a).
+    val visibleState = remember { androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true } }
 
     Column(
         modifier = Modifier
@@ -64,11 +63,12 @@ fun IntroPage(onContinue: () -> Unit) {
     ) {
         Spacer(Modifier.size(40.dp))
 
-        // Brand hero — scale-in iz 80% da logo "raste" na ekran, nije samo pop.
+        // Brand hero — samo fadeIn. KrugLogo ima svoju entrance animaciju (spin 360°)
+        // preko `animated=true` ako se doda; kompaudovanje sa još jednim scaleIn-om je
+        // dalo glitch kod always-on onboarding prompta.
         AnimatedVisibility(
-            visible = visible,
-            enter = scaleIn(initialScale = 0.8f, animationSpec = tween(500)) +
-                fadeIn(animationSpec = tween(500)),
+            visibleState = visibleState,
+            enter = fadeIn(animationSpec = tween(500)),
         ) {
             KrugLogo(
                 modifier = Modifier.size(140.dp),
@@ -78,7 +78,7 @@ fun IntroPage(onContinue: () -> Unit) {
         Spacer(Modifier.size(28.dp))
 
         AnimatedVisibility(
-            visible = visible,
+            visibleState = visibleState,
             enter = slideInVertically(
                 initialOffsetY = { it / 3 },
                 animationSpec = tween(500, delayMillis = 200),
@@ -111,7 +111,7 @@ fun IntroPage(onContinue: () -> Unit) {
         ) {
             // Feature row-ovi — staggered po 150ms da ne ulaze istovremeno (less chaotic).
             AnimatedVisibility(
-                visible = visible,
+                visibleState = visibleState,
                 enter = slideInVertically(
                     initialOffsetY = { it / 4 },
                     animationSpec = tween(500, delayMillis = 400),
@@ -124,7 +124,7 @@ fun IntroPage(onContinue: () -> Unit) {
                 )
             }
             AnimatedVisibility(
-                visible = visible,
+                visibleState = visibleState,
                 enter = slideInVertically(
                     initialOffsetY = { it / 4 },
                     animationSpec = tween(500, delayMillis = 550),
@@ -141,7 +141,7 @@ fun IntroPage(onContinue: () -> Unit) {
         Spacer(Modifier.size(16.dp))
 
         AnimatedVisibility(
-            visible = visible,
+            visibleState = visibleState,
             enter = fadeIn(animationSpec = tween(400, delayMillis = 750)) +
                 scaleIn(initialScale = 0.92f, animationSpec = tween(400, delayMillis = 750)),
         ) {

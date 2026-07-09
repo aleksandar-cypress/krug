@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Add
@@ -2617,7 +2618,7 @@ private fun MemberRow(
 private fun BatteryBadge(pct: Int, charging: Boolean) {
     val color = batteryColor(pct)
     Surface(
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(12.dp),
         color = color.copy(alpha = 0.14f),
     ) {
         Row(
@@ -2779,19 +2780,34 @@ private fun MemberDetailSheet(
         val isLongOffline = member.isLongOffline()
         val isOffline = member.isOffline()
 
+        // Banner-i za posebna stanja. Standardizovan shape (16dp), padding (16dp), icon size
+        // (22dp), spacing između ikone i teksta (12dp). Svaki banner ima svoju „temperature":
+        //  - SOS: LogoRed full-bleed, hitno
+        //  - LongOffline: PrivateGray stronger (~16% alpha), akcija potrebna
+        //  - Offline: LogoOrange tint, tranzientno „javiće se sam"
+        //  - Private: PrivateGray light (~12% alpha), neutralno info
+        val bannerShape = RoundedCornerShape(16.dp)
+        val bannerPadding = 16.dp
+        val bannerIconSize = 22.dp
+        val bannerIconTextGap = 12.dp
         if (member.sos != null) {
             Spacer(Modifier.height(16.dp))
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = bannerShape,
                 color = SosRed,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
-                    modifier = Modifier.padding(14.dp),
+                    modifier = Modifier.padding(bannerPadding),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Filled.Warning, contentDescription = null, tint = Color.White)
-                    Spacer(Modifier.width(10.dp))
+                    Icon(
+                        Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(bannerIconSize),
+                    )
+                    Spacer(Modifier.width(bannerIconTextGap))
                     val sosName = member.displayName
                         .ifBlank { if (member.isSelf) stringResource(R.string.member_label_you) else stringResource(R.string.member_label_member) }
                     Text(
@@ -2806,57 +2822,63 @@ private fun MemberDetailSheet(
             }
         } else if (isLongOffline) {
             Spacer(Modifier.height(16.dp))
-            // Long-offline banner: member nije osvežio lokaciju 24h+. Bez Cloud Functions
-            // ne možemo razlikovati "obrisao app" od "telefon ugašen" od "no permission" —
-            // ali svi razlozi imaju isti UX impact: refresh neće raditi. Banner objašnjava
-            // user-u + sugeriše remove iz Detalji kruga (gde vlasnik može kicks-uje člana).
             val daysOffline = ((System.currentTimeMillis() - (member.location?.updatedAt ?: 0L)) /
                 (24L * 60L * 60L * 1000L)).toInt().coerceAtLeast(1)
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = PrivateGray.copy(alpha = 0.12f),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = stringResource(R.string.member_state_long_offline_title, daysOffline),
-                        color = PrivateGray,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.member_state_long_offline_body),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        } else if (isOffline) {
-            // Offline banner: prekid RTDB konekcije (onDisconnect handler firirao ~30s posle
-            // stvarnog gubitka veze). Različito od long-offline (24h+) — ovde je high-prob
-            // da će se vratiti (tunel, lift, dead battery, force-stop). User razume "sync
-            // će se automatski nastaviti" pa ne pokušava manual refresh koji ionako neće raditi.
-            Spacer(Modifier.height(16.dp))
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = PrivateGray.copy(alpha = 0.12f),
+                shape = bannerShape,
+                color = PrivateGray.copy(alpha = 0.16f),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
-                    modifier = Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bannerPadding),
+                    verticalAlignment = Alignment.Top,
                 ) {
                     Icon(
                         imageVector = Icons.Filled.CloudOff,
                         contentDescription = null,
                         tint = PrivateGray,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(bannerIconSize),
                     )
-                    Spacer(Modifier.width(10.dp))
-                    Column {
+                    Spacer(Modifier.width(bannerIconTextGap))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.member_state_long_offline_title, daysOffline),
+                            color = PrivateGray,
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.member_state_long_offline_body),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        } else if (isOffline) {
+            // Offline (tranzientno): LogoOrange tint umesto sivog — signalizuje „privremeno,
+            // javiće se". Sivi ton je za long-offline (mrtvo stanje, treba akcija).
+            Spacer(Modifier.height(16.dp))
+            Surface(
+                shape = bannerShape,
+                color = LogoOrange.copy(alpha = 0.14f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(bannerPadding),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CloudOff,
+                        contentDescription = null,
+                        tint = LogoOrange,
+                        modifier = Modifier.size(bannerIconSize),
+                    )
+                    Spacer(Modifier.width(bannerIconTextGap))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = stringResource(R.string.member_state_offline),
-                            color = PrivateGray,
+                            color = LogoOrange,
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                         )
                         Spacer(Modifier.height(4.dp))
@@ -2871,22 +2893,34 @@ private fun MemberDetailSheet(
         } else if (isPrivate) {
             Spacer(Modifier.height(16.dp))
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = bannerShape,
                 color = PrivateGray.copy(alpha = 0.12f),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = stringResource(R.string.member_state_private),
-                        color = PrivateGray,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                Row(
+                    modifier = Modifier.padding(bannerPadding),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.VisibilityOff,
+                        contentDescription = null,
+                        tint = PrivateGray,
+                        modifier = Modifier.size(bannerIconSize),
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.member_state_private_body),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    Spacer(Modifier.width(bannerIconTextGap))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.member_state_private),
+                            color = PrivateGray,
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.member_state_private_body),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
             }
         }
@@ -3237,12 +3271,12 @@ private fun StatChip(
     )
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(accentColor.copy(alpha = 0.08f))
             .border(
                 width = 1.dp,
                 color = accentColor.copy(alpha = 0.22f),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(12.dp),
             )
             .padding(horizontal = 12.dp, vertical = 12.dp),
     ) {
