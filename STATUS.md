@@ -2,6 +2,149 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-07-09, 32.5. sesija — multi-device + polish + copy cleanup pred odmor)
+
+Ova sesija je bila continuation prethodne (32.) — sve što je 32. dodala je pushed u commit `558d1f4`. Ova sesija je dodala infrastrukturu multi-device usera, brendiran What's new dialog za 1.2.0, road distance u MemberDetailSheet-u umesto vazdušne linije, i seriju UI polish + copy cleanup fixes. Pushed u `6e16a3a` + follow-up commits.
+
+**Idem na odmor sledeći dan.** Naredna sesija: real-device testing (crash detection threshold u autu je jedina stvar koju iz Claude-a ne mogu da verifikujem) i Play Store 1.2.0 upload. Sve što je code-side je gotovo, deploy-ovano, testirano na S24.
+
+### A) Multi-device support
+
+`LocalPrefs.deviceId` — stabilan UUID per-installacija u SharedPrefs (uninstall + reinstall daje novi ID, ali to je čisto ponašanje).
+
+`core/device/DeviceRegistry.kt`:
+- `registerDevice(uid, fcmToken, deviceLabel)` — upsert u `users/{uid}/devices/{deviceId}` sa deviceId + fcmToken + deviceModel + lastActiveMs + registeredAt
+- `heartbeat(uid)` — lightweight update lastActiveMs (poziva se iz FGS locationCallback-a)
+- `unregisterDevice(uid)` — cleanup pri sign-out-u
+- `observeDevices(uid): Flow<List<DeviceModel>>` — za publish gate + buduću „Moji uređaji" UI
+
+`AuthRepository`:
+- Injected `deviceRegistry`
+- `syncFcmToken` sad i registruje device sa deviceLabel-om
+- `signOut` unregister-uje device pre Firebase signOut-a
+
+`KrugMessagingService.onNewToken` — registruje device sa svežim FCM tokenom (za token rotation-e Firebase periodično radi).
+
+`LocationTrackingService`:
+- `observeSelfDevices()` cache-uje `latestOtherDeviceActiveMs` + `latestOtherDeviceId`
+- `isPrimaryDevice(nowMs)` publish gate: self je primary ako (a) nema drugih uređaja, ILI (b) drugi nije aktivan u `OTHER_DEVICE_ACTIVE_WINDOW_MS=90s`, ILI (c) tiebreaker po deviceId lex order kad su oba aktivna
+- `locationCallback.onLocationResult` sad zove `deviceRegistry.heartbeat` na svaki fix + `isPrimaryDevice` gate pre publish-a
+- Bez ovog: dva uređaja istog user-a bi naizmenično prepisivala RTDB lokaciju → peer-i bi videli jitter (kuća ↔ posao)
+
+Firestore rules: `users/{uid}/devices/{deviceId}` — self write, isAuthed read (Cloud Function-i bypass-uju rules preko admin SDK-a).
+
+Cloud Function `onLocationRefreshRequest` — čita SVE device tokene iz devices subcollection-a i šalje push na svaki paralelno (`Promise.all`). Fallback na legacy `users.{uid}.fcmToken` za pre-1.2 klijente. Cleanup tokena koji su invalid (`messaging/registration-token-not-registered`) briše ih iz odgovarajuće lokacije.
+
+Rules + Cloud Function **deployed** na `krug-86527`.
+
+**Ograničenja MVP-a:**
+- Nema UI stranice „Moji uređaji" u Settings-u (auto-managed za sada)
+- Nema ručne selekcije primary uređaja (deterministički auto-elect)
+- Google-only auth zadržan (anonymous je iza BuildConfig.DEBUG gate-a) — multi-device i inače radi samo za Google usere jer anonymous daje novi UID po instalaciji
+
+### B) What's new 1.2.0
+
+`WhatsNewDialog` update sa 4 nova 1.2.0 feature-a (check-in, ETA, speeding, crash) umesto starih 1.1 (Places/History/Auto). Icons: `CheckCircle`, `Navigation`, `Speed`, `Warning`. Scrollable content jer sada može biti duži. Hint text „Uključi šta ti odgovara u Podešavanja › Privatnost".
+
+Postojeći version-code gate (`LocalPrefs.lastSeenWhatsNewVersion`) automatski okida modal pri prvom otvaranju posle update-a jer je versionCode 10 → 11.
+
+### C) Road distance u MemberDetailSheet
+
+`MapViewModel.roadDistanceKm(fromLat, fromLng, toLat, toLng): Double?` — Mapbox Directions API poziv sa 4s timeout-om. Vraća km ili null pri failure-u.
+
+`MemberDetailSheet`:
+- Novi parametar `fetchRoadDistanceKm: (suspend (Double, Double, Double, Double) -> Double?)?`
+- `LaunchedEffect(member.uid, selfLat, selfLng, memberLat, memberLng)` fetch-uje pri otvaranju sheet-a
+- State: `roadDistanceKm` + `roadDistanceLoaded`
+- Display logic:
+  - **Loading**: „Putem: ≈ 3.2 km" (haversine sa ≈ prefix)
+  - **Success**: „Putem: 3.8 km" (road distance iz Mapbox-a)
+  - **Fallback**: „Vazdušna linija: 2.9 km" ako Directions API pukne
+
+Nove string-ove: `member_chip_distance` (Putem / By road) uz postojeći `member_chip_distance_aerial` (Vazdušna linija / Air distance).
+
+Napomena: **Android Auto (MapCarScreen)** i dalje koristi haversine — u autu je 30s update cadence prečest da bi Directions bio isplativ.
+
+### D) UI polish
+
+**AboutScreen logo animation:**
+- `KrugLogo(animated = true)` u AboutScreen — ista entrance animacija kao Splash (spin 360° sa FastOutSlowInEasing, delay 300ms, duration 1200ms)
+- Tap-to-spin ostaje: posle entrance-a svaki tap dodaje 360° rotate
+
+**MemberDetailSheet button parovi:**
+Prethodno stack-ovano jedan-ispod-drugog (4 reda za self), sada parovi po redu (2-3 reda):
+- OTHER member (2 reda): [Refresh] [Directions ikona] / [History] [Trips]
+- SELF member (3 reda): [Refresh] [Check-in] / [Share ETA] [History] / [Trips] [Directions ikona]
+- Sve „vodi na sledeći ekran" dugmad su **Outlined** (History, Trips), samo Refresh je filled primary. Directions ikonica je filled LogoTeal jer je external launch. Konzistentna hijerarhija.
+
+**ETA banner redesign** (iz 32. sesije, dopunjeno):
+- Icon u kružnici (Navigation dok se vozi, CheckCircle kad stigne)
+- ETA time primary text, destinacija + km secondary
+- Tertiary container color kad je arrived
+
+**ETA destination pin (novi marker):**
+- `MapMarkers.destinationMarker()` — zaobljeni kvadrat sa LogoBlue fill-om i belom → strelicom
+- Distinktan od teardrop Place pinova, klik na widget/mapu odmah vidiš razliku
+
+### E) Copy cleanup — em-dash i awkward phrasing
+
+Memory constraint: „no em-dash in user-facing text". Uklonjeni user-facing em-dash-ovi:
+
+1. **DrivingReportsScreen title** — bio „Izveštaj o vožnji — Jelena", sada „Izveštaj o vožnji za Jelena" (EN: „Driving reports for Jelena"). Novi string `driving_reports_title_for` sa placeholder-om.
+2. **ETA banner destination fallback** — pre placeholder „—" kad je label prazan, sad generički „destinaciju" / „destination" string (`eta_share_dest_unknown`).
+3. **ETA notifikacije** — split u dva string-a: `eta_notif_started_body` (sa destinacijom) + `eta_notif_started_body_no_dest` (bez), isto za arrived. Bez em-dash-a placeholder-a u tekstu.
+
+SR polish:
+- `checkin_channel` „Prijavljivanje" → „Provere sigurnosti" (bolje opisuje šta radi)
+- `checkin_notif_body_with_place` „Bezbedno na lokaciji: X" → „Sa lokacije: X" (jasnije kad je „bezbedno" već u title-u)
+- `checkin_notif_body_no_place` „Bezbedno" → „Javio/la se da je bezbedan/na" (pun rečeničan izraz umesto rezanog)
+- `eta_share_pick_destination` „Dodirni mapu i odaberi odredište" → „Ukucaj adresu ili mesto" (UI je search field, ne map tap — copy nije odgovarao implementaciji)
+- `crash_countdown_body` dodato eksplicitno ime dugmeta koje treba tapnuti: „SOS ide za %d s. Dodirni „Dobro sam" da otkažeš."
+
+Uklonjeni mrtvi stringovi `eta_share_active` / `eta_share_active_no_name` iz oba strings.xml (kod je već koristio novi banner design).
+
+### F) Security review — odluka Google-only
+
+Diskusija o auth security-ju. Utvrđeno:
+- **Release build ima samo Google Sign-In** (Anonymous je iza `BuildConfig.DEBUG` gate-a u `AuthScreen.kt:126`).
+- Google OAuth 2.0 + Firebase JWT + App Check + Firestore rules = solid setup na industry standard-ima.
+- Bez password-a znači: nema DB koja može da procuri, nema password fatigue, recovery ide preko Google account recovery-ja.
+- Isključuje korisnike bez Google naloga (Huawei GMS-less, čist Android). Prihvaćen tradeoff — dodavanje email magic link-a bi otvorilo spam/phishing attack surface za marginal gain (5-10% Balkan usera bez Google-a).
+
+Odluka: **ostajemo Google-only** za sada. Ako izbačaj isključenih usera postane realan problem posle 1.2.0 releasea, opcija je Phone/SMS OTP (SIM-bound, ne otvara spam surface, ~$0.03/SMS cost).
+
+### G) Widget experiment (uklonjen)
+
+Kreiran Glance API home screen widget (LogoBlue pozadina, avatari članova, tap otvara Krug), pa uklonjen na user request. Razlog: bez per-member last-seen/distance podataka, widget je samo dekorativni shortcut — nije MVP-worthy. Kod uklonjen, Glance dependency skinut sa `libs.versions.toml` + `app/build.gradle.kts`. Design pattern zapamćen — može se vratiti kad budu bili spremni za pravo useful widget content.
+
+### H) Version + release stanje
+
+- `versionCode = 11`, `versionName = "1.2.0"` (iz 32. sesije, ne dirano ovde)
+- Firestore rules: `speedingEvents`, `checkIns`, `etaShares`, `users/{uid}/devices` — deployed
+- TTL policies: 24h retention za sve 3 event kolekcije, ručno kreirane u Cloud Console (Console traži postojeći field, morali smo napraviti dummy dokumente sa `timestamp`/`updatedAt` polje pa obrisati)
+- Cloud Function: multi-device fanout **deployed** na europe-west1
+- APK 1.2.0-debug instaliran na S24 (`R5CWC1F9FND`) preko `adb install`, testiran
+
+### Šta preostaje pred 1.2.0 release
+
+**Za Aleksandra pre odmora (opciono):**
+- Play Store 1.2.0 upload (uz screenshot-ove ako uspe)
+- Nova screenshot-a za listing (opciono, 1.1.x rade ali ne pokazuju 1.2.0 feature-e)
+
+**Posle odmora:**
+- **Real-device crash detection test** — kritično. 4g threshold je moj pogodak. Voziš u autu, spuštaš telefon slobodno par puta, gledaš da li okine false-positive. Bez toga rizikujemo phantom SOS-e u produkciji.
+- **ETA share live update na terenu** — hodaš/voziš 5min, gledaš da li banner update-uje ETA na svakih 60s.
+- **Multi-device test** — Jelenin telefon takođe instalira 1.2.0, obe se logujemo sa istim Google, prati se da li se u krugu pojavljuje jedan član + oba dobijaju push notifikacije + samo jedan publish-uje lokaciju.
+
+**Feature-i za sledeće sesije (nisu prioritet za 1.2.0):**
+- Silent SOS (power button 5x)
+- Nearby member alert (500m radius ping)
+- History playback (timeline scrubber)
+- Weekly summary
+- Onboarding pages (full-screen swipeable za 1.2.0 feature-e, umesto samo modal WhatsNewDialog-a)
+
+---
+
 ## Gde smo stali (2026-07-09, 32. sesija — 1.2.0 batch: 4 nova feature-a + cleanup)
 
 Sažetak, kompaktno: subtitle fix + phantom double-arrived fix + 4 nova feature-a (Speeding alerts, Safe check-ins, ETA sharing, Crash detection) + ETA doc leak fix + speeding accuracy filter + ETA destination pin. Version bump 1.1.5 → 1.2.0 (versionCode 10 → 11). Firestore rules deployed (dodate kolekcije `speedingEvents`, `checkIns`, `etaShares`).

@@ -453,6 +453,11 @@
     grid-template-columns: repeat(3, 1fr);
     gap: 24px;
   }
+  .grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+  }
   .feature {
     background: #fff;
     border: 1px solid var(--border);
@@ -941,7 +946,7 @@
   /* ============ RESPONSIVE ============ */
   @media (max-width: 880px) {
     .nav-links { display: none; }
-    .grid-3, .why-grid, .pricing-grid { grid-template-columns: 1fr; }
+    .grid-3, .grid-4, .why-grid, .pricing-grid { grid-template-columns: 1fr; }
     .reassure-list { grid-template-columns: 1fr; }
     .steps { grid-template-columns: repeat(2, 1fr); gap: 28px 16px; }
     .steps::before { display: none; }
@@ -1097,62 +1102,76 @@
 </section>
 
 <!-- ============ FEATURES ============ -->
-<!-- ============ WHAT'S NEW v1.1 ============ -->
+<!-- ============ WHAT'S NEW v1.2 ============ -->
 <section class="container" style="padding-top: 24px;">
   <div class="section-head reveal">
     <span class="eyebrow">
-      <span class="t-sr">Novo u v1.1</span><span class="t-en">New in v1.1</span>
+      <span class="t-sr">Novo u v1.2</span><span class="t-en">New in v1.2</span>
     </span>
     <h2>
-      <span class="t-sr">Mesta, istorija, Android Auto.</span>
-      <span class="t-en">Places, history, Android Auto.</span>
+      <span class="t-sr">Četiri nova sigurnosna feature-a.</span>
+      <span class="t-en">Four new safety features.</span>
     </h2>
     <p>
-      <span class="t-sr">Krug sada zna kada članovi stižu kući. Prati trag poslednjih 30 dana. I radi u kolima.</span>
-      <span class="t-en">Krug now knows when your people arrive home. Traces the trail for the last 30 days. And works in the car.</span>
+      <span class="t-sr">Provere sigurnosti, deljenje ETA uživo, upozorenja o brzini, detekcija pada u vožnji. Sve besplatno.</span>
+      <span class="t-en">Safety check-ins, live ETA sharing, speeding alerts, crash detection while driving. All free.</span>
     </p>
   </div>
 
-  <div class="grid-3">
-    <div class="feature f-blue reveal">
+  <div class="grid-4">
+    <div class="feature f-teal reveal">
       <div class="ico">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
       </div>
       <h3>
-        <span class="t-sr">Mesta</span>
-        <span class="t-en">Places</span>
+        <span class="t-sr">Provere sigurnosti</span>
+        <span class="t-en">Safety check-ins</span>
       </h3>
       <p>
-        <span class="t-sr">Dodaj Kuću, Školu, Posao. Automatsko obaveštenje kada neko iz kruga stigne ili ode. Do 3 mesta besplatno.</span>
-        <span class="t-en">Add Home, School, Work. Automatic notification when someone in the circle arrives or leaves. Up to 3 places free.</span>
+        <span class="t-sr">Dodirni „Stigao/la sam" i krug odmah zna da si bezbedan, sa trenutnom lokacijom.</span>
+        <span class="t-en">Tap "I'm here" and your circle knows you're safe, with your current location.</span>
+      </p>
+    </div>
+
+    <div class="feature f-blue reveal">
+      <div class="ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+      </div>
+      <h3>
+        <span class="t-sr">Deljenje ETA</span>
+        <span class="t-en">ETA sharing</span>
+      </h3>
+      <p>
+        <span class="t-sr">Podeli procenu vremena dolaska. Krug prati približavanje u realnom vremenu, do 100 m od destinacije.</span>
+        <span class="t-en">Share your arrival estimate. Your circle sees you approaching in real time, down to 100 m from the destination.</span>
+      </p>
+    </div>
+
+    <div class="feature f-orange reveal">
+      <div class="ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 22v-4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>
+      </div>
+      <h3>
+        <span class="t-sr">Upozorenja o brzini</span>
+        <span class="t-en">Speeding alerts</span>
+      </h3>
+      <p>
+        <span class="t-sr">Podesi svoj prag brzine (npr. 120 km/h). Krug dobija obaveštenje kada ga pređeš. Opciono.</span>
+        <span class="t-en">Set your own speed threshold (e.g. 120 km/h). Your circle is notified when you exceed it. Optional.</span>
       </p>
     </div>
 
     <div class="feature f-pink reveal">
       <div class="ico">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       </div>
       <h3>
-        <span class="t-sr">Istorija kretanja</span>
-        <span class="t-en">Location history</span>
+        <span class="t-sr">Detekcija pada</span>
+        <span class="t-en">Crash detection</span>
       </h3>
       <p>
-        <span class="t-sr">Prikaz poslednjih 30 dana kao trag na mapi. Pređena kilometraža, aktivno vreme, maksimalna brzina.</span>
-        <span class="t-en">See the last 30 days as a trail on the map. Distance covered, active time, max speed.</span>
-      </p>
-    </div>
-
-    <div class="feature f-teal reveal">
-      <div class="ico">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2"/><circle cx="6.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/></svg>
-      </div>
-      <h3>
-        <span class="t-sr">Android Auto</span>
-        <span class="t-en">Android Auto</span>
-      </h3>
-      <p>
-        <span class="t-sr">Vidi krug na tabli u kolima. Tap na člana pokreće navigaciju u Google Maps-u. SOS glasovna obaveštenja.</span>
-        <span class="t-en">See the circle on the car dashboard. Tap a member to start navigation in Google Maps. SOS voice alerts.</span>
+        <span class="t-sr">Nagli udar u vožnji pokreće 10-sekundni odbrojavač. Ako ne otkažeš, auto-SOS ide krugu. Opciono.</span>
+        <span class="t-en">Sudden impact while driving triggers a 10-second countdown. If you don't cancel, auto-SOS goes to your circle. Optional.</span>
       </p>
     </div>
   </div>
@@ -1387,12 +1406,12 @@
       <span class="t-sr">Cene</span><span class="t-en">Pricing</span>
     </span>
     <h2>
-      <span class="t-sr">Verzija 1. Sve besplatno.</span>
-      <span class="t-en">Version 1. Everything free.</span>
+      <span class="t-sr">Verzija 1.2. Sigurnost besplatno.</span>
+      <span class="t-en">Version 1.2. Safety, free.</span>
     </h2>
     <p>
-      <span class="t-sr">Sve funkcije iz v1 ostaju zauvek besplatne. Premium dodaje nove stvari, ne oduzima postojeće.</span>
-      <span class="t-en">All v1 features stay free forever. Premium adds new things, never takes existing ones away.</span>
+      <span class="t-sr">Sve bezbednosne funkcije ostaju zauvek besplatne. Premium dodaje udobnosti, ne oduzima postojeće.</span>
+      <span class="t-en">All safety features stay free forever. Premium adds conveniences, never takes existing ones away.</span>
     </p>
   </div>
 
@@ -1413,8 +1432,12 @@
       <ul>
         <li><span class="t-sr">Neograničeno krugova i članova</span><span class="t-en">Unlimited circles and members</span></li>
         <li><span class="t-sr">Uživo lokacija sa statusom baterije</span><span class="t-en">Live location with battery status</span></li>
-        <li><span class="t-sr">Putna distanca i ETA (vožnja)</span><span class="t-en">Driving distance and ETA</span></li>
+        <li><span class="t-sr">Putna distanca do svakog člana</span><span class="t-en">Real driving distance to each member</span></li>
+        <li><span class="t-sr">Deljenje ETA („Stižem za 15 min do X")</span><span class="t-en">ETA sharing ("I'm 15 min out from X")</span></li>
+        <li><span class="t-sr">Provere sigurnosti („Stigao/la sam")</span><span class="t-en">Safety check-ins ("I'm here")</span></li>
         <li><span class="t-sr">SOS sa lokacijom, push notifikacije, vibracija</span><span class="t-en">SOS with location, push notifications, vibration</span></li>
+        <li><span class="t-sr">Detekcija pada u vožnji sa auto-SOS-om</span><span class="t-en">Crash detection while driving with auto-SOS</span></li>
+        <li><span class="t-sr">Upozorenja o brzini (za tvoj krug)</span><span class="t-en">Speeding alerts (for your circle)</span></li>
         <li><span class="t-sr">Do 3 mesta po krugu (Kuća, Škola, Posao)</span><span class="t-en">Up to 3 places per circle (Home, School, Work)</span></li>
         <li><span class="t-sr">Istorija lokacije 7 dana</span><span class="t-en">7-day location history</span></li>
         <li><span class="t-sr">Tihi sati (bez obaveštenja preko noći)</span><span class="t-en">Silent hours (no notifications overnight)</span></li>
@@ -1429,26 +1452,21 @@
       </span>
       <h3>Premium</h3>
       <div class="amount">
-        <span class="num">
-          <span class="t-sr">Cena uskoro</span>
-          <span class="t-en">Price soon</span>
-        </span>
+        <span class="num">2.99</span>
+        <span class="cur">€</span>
       </div>
       <div class="amount-sub">
-        <span class="t-sr">pretplata preko Google Play</span>
-        <span class="t-en">subscription via Google Play</span>
+        <span class="t-sr">mesečno, ili 19.99 € godišnje (44 % popust). 7 dana besplatno.</span>
+        <span class="t-en">per month, or €19.99 per year (44% off). 7-day free trial.</span>
       </div>
       <ul>
-        <li><span class="t-sr">Neograničena mesta i geofence po krugu</span><span class="t-en">Unlimited places &amp; geofence per circle</span></li>
-        <li><span class="t-sr">Istorija lokacije 90 dana</span><span class="t-en">90-day location history</span></li>
-        <li><span class="t-sr">SOS push i kad je app primaoca zatvorena</span><span class="t-en">SOS push even when the recipient's app is closed</span></li>
-        <li><span class="t-sr">Zone pravila („Kad dete napusti školu, javi mi")</span><span class="t-en">Zone rules ("When my kid leaves school, notify me")</span></li>
-        <li><span class="t-sr">Provera nakon vožnje („Da li si OK?")</span><span class="t-en">Post-drive check ("Are you OK?")</span></li>
-        <li><span class="t-sr">Nedeljni izveštaj putovanja (km, brzine, mesta)</span><span class="t-en">Weekly trip reports (km, speeds, places)</span></li>
-        <li><span class="t-sr">Izvoz istorije kao GPX/KML</span><span class="t-en">History export as GPX/KML</span></li>
-        <li><span class="t-sr">Prilagođena SOS poruka (medicinski podaci)</span><span class="t-en">Custom SOS message (medical info)</span></li>
-        <li><span class="t-sr">Više SOS destinacija (izvan kruga)</span><span class="t-en">Multiple SOS destinations (beyond circle)</span></li>
-        <li><span class="t-sr">Android Auto integracija (kad Google odobri)</span><span class="t-en">Android Auto integration (pending Google approval)</span></li>
+        <li><span class="t-sr">Do 10 mesta po krugu (Free: 3)</span><span class="t-en">Up to 10 places per circle (Free: 3)</span></li>
+        <li><span class="t-sr">Istorija lokacije 30 dana (Free: 7)</span><span class="t-en">30-day location history (Free: 7)</span></li>
+        <li><span class="t-sr">Upozorenja o bateriji člana kruga</span><span class="t-en">Battery alerts for circle members</span></li>
+        <li><span class="t-sr">Izveštaji o vožnji (dnevno, nedeljno, mesečno)</span><span class="t-en">Driving reports (daily, weekly, monthly)</span></li>
+        <li><span class="t-sr">Prilagođeni stilovi mape (Satelit, Outdoors, Tamna)</span><span class="t-en">Custom map styles (Satellite, Outdoors, Dark)</span></li>
+        <li><span class="t-sr">Android Auto — kompletni prikaz kruga (kad Google odobri)</span><span class="t-en">Android Auto — full circle view (pending Google approval)</span></li>
+        <li><span class="t-sr">Prioritetna podrška (odgovor u 24 h)</span><span class="t-en">Priority support (reply within 24 h)</span></li>
       </ul>
     </div>
   </div>
@@ -1593,8 +1611,8 @@
         <span class="t-en">Will Krug stay free?</span>
       </summary>
       <div class="faq-body">
-        <span class="t-sr">Sve funkcije iz v1 (deljenje lokacije, SOS, krugovi, status baterije, putna distanca) ostaju zauvek besplatne. U v1.1 ćemo dodati premium tier sa istorijom lokacije, mestima/geofence-om i SOS push-em kad je app primaoca zatvorena. To su nove stvari, ne stari feature-i iza paywall-a.</span>
-        <span class="t-en">All v1 features (location sharing, SOS, circles, battery status, driving distance) stay free forever. In v1.1 we'll add a premium tier with location history, places/geofencing, and SOS push when the recipient's app is closed. New things, not existing features moved behind a paywall.</span>
+        <span class="t-sr">Sve bezbednosne funkcije (deljenje lokacije, SOS, krugovi, provere sigurnosti, ETA, upozorenja o brzini, detekcija pada) ostaju zauvek besplatne. Premium (2.99 €/mesec ili 19.99 €/god) dodaje udobnosti: više mesta, dužu istoriju, obaveštenja o bateriji, prilagođene mape. Ne oduzima postojeće.</span>
+        <span class="t-en">All safety features (location sharing, SOS, circles, check-ins, ETA, speeding alerts, crash detection) stay free forever. Premium (€2.99/month or €19.99/year) adds conveniences: more places, longer history, battery alerts, custom maps. Never takes existing ones away.</span>
       </div>
     </details>
   </div>

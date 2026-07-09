@@ -3075,13 +3075,9 @@ private fun MemberDetailSheet(
                         }
                     }
                     if (onOpenHistory != null) {
-                        androidx.compose.material3.Button(
+                        androidx.compose.material3.OutlinedButton(
                             onClick = onOpenHistory,
                             shape = buttonShape,
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = org.krug.app.ui.theme.LogoBlue,
-                                contentColor = Color.White,
-                            ),
                             modifier = Modifier.weight(1f).height(buttonHeight),
                         ) {
                             Icon(Icons.Outlined.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -3183,13 +3179,9 @@ private fun MemberDetailSheet(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (onOpenHistory != null) {
-                        androidx.compose.material3.Button(
+                        androidx.compose.material3.OutlinedButton(
                             onClick = onOpenHistory,
                             shape = buttonShape,
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = org.krug.app.ui.theme.LogoBlue,
-                                contentColor = Color.White,
-                            ),
                             modifier = Modifier.weight(1f).height(buttonHeight),
                         ) {
                             Icon(Icons.Outlined.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -3810,8 +3802,10 @@ private fun EtaShareBanner(
                     else MaterialTheme.colorScheme.onPrimaryContainer,
                     maxLines = 1,
                 )
-                // Secondary line — destinacija + remaining km.
-                val label = share.destinationLabel.ifBlank { "—" }
+                // Secondary line — destinacija + remaining km. Ako nema destinacije,
+                // prikazujemo generički placeholder umesto em-dash-a.
+                val hasLabel = share.destinationLabel.isNotBlank()
+                val label = if (hasLabel) share.destinationLabel else stringResource(R.string.eta_share_dest_unknown)
                 val kmText = if (share.remainingKm > 0.1 && !arrived) {
                     " • %.1f km".format(share.remainingKm)
                 } else ""

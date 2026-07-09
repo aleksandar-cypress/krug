@@ -56,7 +56,7 @@ fun DrivingReportsScreen(
     val title = if (viewModel.displayName.isBlank()) {
         stringResource(R.string.driving_reports_title)
     } else {
-        "${stringResource(R.string.driving_reports_title)} — ${viewModel.displayName}"
+        stringResource(R.string.driving_reports_title_for, viewModel.displayName)
     }
     Scaffold(
         topBar = {

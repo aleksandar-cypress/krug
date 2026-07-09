@@ -167,6 +167,7 @@
 
     <!-- Driving reports -->
     <string name="driving_reports_title">Driving reports</string>
+    <string name="driving_reports_title_for">Driving reports for %1$s</string>
     <string name="driving_reports_empty_title">No trips yet</string>
     <string name="driving_reports_empty_hint">Trips over 300 m at driving speed are recorded automatically. Take a short ride and check back.</string>
     <string name="driving_reports_range_today">Today</string>
@@ -205,11 +206,11 @@
     <string name="settings_speeding_threshold_value">%1$d km/h</string>
 
     <!-- Safe check-ins -->
-    <string name="checkin_channel">Check-ins</string>
+    <string name="checkin_channel">Safety check-ins</string>
     <string name="checkin_channel_desc">Notifications when a circle member checks in as safe</string>
     <string name="checkin_notif_title">%1$s checked in</string>
-    <string name="checkin_notif_body_with_place">Safe at %1$s</string>
-    <string name="checkin_notif_body_no_place">Safe</string>
+    <string name="checkin_notif_body_with_place">Safely at %1$s</string>
+    <string name="checkin_notif_body_no_place">Checked in safely</string>
     <string name="checkin_button_label">I\'m here</string>
     <string name="checkin_button_short">Check in</string>
     <string name="checkin_confirm_title">Check in as safe?</string>
@@ -223,19 +224,20 @@
     <string name="eta_channel_desc">Notifications when a circle member starts or updates an ETA share</string>
     <string name="eta_notif_started_title">%1$s is on the way</string>
     <string name="eta_notif_started_body">ETA %1$s to %2$s</string>
+    <string name="eta_notif_started_body_no_dest">ETA %1$s</string>
     <string name="eta_notif_arrived_title">%1$s has arrived</string>
     <string name="eta_notif_arrived_body">At %1$s</string>
+    <string name="eta_notif_arrived_body_no_dest">Safely arrived</string>
     <string name="eta_share_title">Share ETA</string>
-    <string name="eta_share_pick_destination">Tap the map to pick a destination</string>
+    <string name="eta_share_pick_destination">Type an address or place</string>
     <string name="eta_share_confirm">Share ETA</string>
     <string name="eta_share_cancel">Stop sharing</string>
-    <string name="eta_share_active">ETA %1$s to %2$s</string>
-    <string name="eta_share_active_no_name">ETA %1$s</string>
     <string name="eta_share_arrived">Arrived</string>
+    <string name="eta_share_dest_unknown">destination</string>
 
     <!-- Crash detection -->
     <string name="crash_countdown_title">Crash detected</string>
-    <string name="crash_countdown_body">Sending SOS in %1$d s. Tap if you\'re OK.</string>
+    <string name="crash_countdown_body">SOS in %1$d s. Tap „I\'m OK" to cancel.</string>
     <string name="crash_countdown_cancel">I\'m OK</string>
     <string name="crash_countdown_send_now">Send now</string>
     <string name="settings_crash_detection">Crash detection</string>

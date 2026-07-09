@@ -44,11 +44,15 @@ class EtaNotifier @Inject constructor(
         ensureChannel()
         val pi = openIntent(share.id.hashCode())
         val title = context.getString(R.string.eta_notif_started_title, share.userName)
-        val body = context.getString(
-            R.string.eta_notif_started_body,
-            humanizeEta(share.etaMinutes),
-            share.destinationLabel.ifBlank { "—" },
-        )
+        val body = if (share.destinationLabel.isBlank()) {
+            context.getString(R.string.eta_notif_started_body_no_dest, humanizeEta(share.etaMinutes))
+        } else {
+            context.getString(
+                R.string.eta_notif_started_body,
+                humanizeEta(share.etaMinutes),
+                share.destinationLabel,
+            )
+        }
         val notif = build(title, body, pi, notifIdStarted(share.userId))
         NotificationManagerCompat.from(context).let { mgr ->
             runCatching {
@@ -62,10 +66,11 @@ class EtaNotifier @Inject constructor(
         ensureChannel()
         val pi = openIntent(share.id.hashCode() + 1)
         val title = context.getString(R.string.eta_notif_arrived_title, share.userName)
-        val body = context.getString(
-            R.string.eta_notif_arrived_body,
-            share.destinationLabel.ifBlank { "—" },
-        )
+        val body = if (share.destinationLabel.isBlank()) {
+            context.getString(R.string.eta_notif_arrived_body_no_dest)
+        } else {
+            context.getString(R.string.eta_notif_arrived_body, share.destinationLabel)
+        }
         val notif = build(title, body, pi, notifIdArrived(share.userId))
         // Poništi „na putu" notif kad stigne — clutter cleanup.
         NotificationManagerCompat.from(context).cancel(notifIdStarted(share.userId))
