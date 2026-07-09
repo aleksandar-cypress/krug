@@ -28,6 +28,13 @@
 -keep class org.krug.app.core.places.PlaceModel { *; }
 -keep class org.krug.app.core.places.PlaceEventModel { *; }
 -keep class org.krug.app.core.driving.TripModel { *; }
+# 1.2.0 modeli (32.-32.5. sesija) — bez ovih R8 obfuskuje field-ove pa Firestore
+# mapper baca "No properties to serialize found on class r8.a" pri prvom fetch-u
+# koji se dešava odmah pri otvaranju mape (SOS/place events observers).
+-keep class org.krug.app.core.speeding.SpeedingEventModel { *; }
+-keep class org.krug.app.core.checkin.CheckInEventModel { *; }
+-keep class org.krug.app.core.eta.EtaShareModel { *; }
+-keep class org.krug.app.core.device.DeviceModel { *; }
 
 # Companion objects + default constructor su potrebni Firebase mapper-u.
 -keepclassmembers class org.krug.app.core.user.UserModel { <init>(...); }
@@ -41,6 +48,10 @@
 -keepclassmembers class org.krug.app.core.places.PlaceModel { <init>(...); }
 -keepclassmembers class org.krug.app.core.places.PlaceEventModel { <init>(...); }
 -keepclassmembers class org.krug.app.core.driving.TripModel { <init>(...); }
+-keepclassmembers class org.krug.app.core.speeding.SpeedingEventModel { <init>(...); }
+-keepclassmembers class org.krug.app.core.checkin.CheckInEventModel { <init>(...); }
+-keepclassmembers class org.krug.app.core.eta.EtaShareModel { <init>(...); }
+-keepclassmembers class org.krug.app.core.device.DeviceModel { <init>(...); }
 
 # Firebase Firestore/RTDB annotation-marked classes — defense-in-depth.
 # Bilo koji data class sa @ServerTimestamp / @DocumentId / @IgnoreExtraProperties fields
