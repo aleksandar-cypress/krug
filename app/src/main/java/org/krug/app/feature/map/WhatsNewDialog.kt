@@ -6,10 +6,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.DirectionsCar
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Place
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Navigation
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,26 +39,41 @@ fun WhatsNewDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.whats_new_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
                 Text(
                     stringResource(R.string.whats_new_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Feature(
-                    icon = Icons.Outlined.Place,
-                    title = stringResource(R.string.whats_new_places_title),
-                    body = stringResource(R.string.whats_new_places_body),
+                    icon = Icons.Outlined.CheckCircle,
+                    title = stringResource(R.string.whats_new_checkin_title),
+                    body = stringResource(R.string.whats_new_checkin_body),
                 )
                 Feature(
-                    icon = Icons.Outlined.History,
-                    title = stringResource(R.string.whats_new_history_title),
-                    body = stringResource(R.string.whats_new_history_body),
+                    icon = Icons.Outlined.Navigation,
+                    title = stringResource(R.string.whats_new_eta_title),
+                    body = stringResource(R.string.whats_new_eta_body),
                 )
                 Feature(
-                    icon = Icons.Outlined.DirectionsCar,
-                    title = stringResource(R.string.whats_new_auto_title),
-                    body = stringResource(R.string.whats_new_auto_body),
+                    icon = Icons.Outlined.Speed,
+                    title = stringResource(R.string.whats_new_speeding_title),
+                    body = stringResource(R.string.whats_new_speeding_body),
+                )
+                Feature(
+                    icon = Icons.Outlined.Warning,
+                    title = stringResource(R.string.whats_new_crash_title),
+                    body = stringResource(R.string.whats_new_crash_body),
+                )
+                Spacer(Modifier.size(4.dp))
+                Text(
+                    stringResource(R.string.whats_new_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium,
                 )
             }
         },

@@ -1077,6 +1077,9 @@ fun MapScreen(
                             showEtaPicker = true
                         }
                     } else null,
+                    fetchRoadDistanceKm = { fromLat, fromLng, toLat, toLng ->
+                        viewModel.roadDistanceKm(fromLat, fromLng, toLat, toLng)
+                    },
                 )
             }
         }
@@ -2658,7 +2661,25 @@ private fun MemberDetailSheet(
     onOpenDriving: (() -> Unit)?,
     onCheckIn: (() -> Unit)? = null,
     onShareEta: (() -> Unit)? = null,
+    fetchRoadDistanceKm: (suspend (Double, Double, Double, Double) -> Double?)? = null,
 ) {
+    // Road distance — Mapbox Directions API poziv pri otvaranju sheet-a. Loading dok
+    // stigne (~200-500ms), fallback na haversine sa eksplicitnom „vazdušna" oznakom
+    // ako API pukne.
+    var roadDistanceKm by remember(member.uid) { mutableStateOf<Double?>(null) }
+    var roadDistanceLoaded by remember(member.uid) { mutableStateOf(false) }
+    LaunchedEffect(member.uid, selfLocation?.lat, selfLocation?.lng, member.location?.lat, member.location?.lng) {
+        if (member.isSelf) return@LaunchedEffect
+        if (selfLocation == null || member.location == null) return@LaunchedEffect
+        if (fetchRoadDistanceKm == null) return@LaunchedEffect
+        roadDistanceLoaded = false
+        val km = fetchRoadDistanceKm(
+            selfLocation.lat, selfLocation.lng,
+            member.location.lat, member.location.lng,
+        )
+        roadDistanceKm = km
+        roadDistanceLoaded = true
+    }
     var refreshTriggered by remember { mutableStateOf(false) }
     LaunchedEffect(refreshTriggered) {
         if (refreshTriggered) {
@@ -2901,21 +2922,43 @@ private fun MemberDetailSheet(
                     } else {
                         Spacer(Modifier.weight(1f))
                     }
-                    // Slot 2: Distance za druge, Speed za self.
+                    // Slot 2: Distance za druge, Speed za self. Preferiramo road distance
+                    // (Mapbox Directions) kad se učita — realno korisniji signal od vazdušne
+                    // linije (razlika ume da bude 30-50% u urbanoj mreži). Fallback:
+                    // haversine sa explicit „vazdušna" labelom dok se road ne učita ili ako pukne.
                     if (!member.isSelf && selfLocation != null && member.location != null) {
-                        val displayMeters = haversineMeters(
+                        val aerialMeters = haversineMeters(
                             selfLocation.lat, selfLocation.lng,
                             member.location.lat, member.location.lng,
                         )
-                        val bearing = if (displayMeters >= 30.0) {
+                        val bearing = if (aerialMeters >= 30.0) {
                             bearingDegrees(
                                 selfLocation.lat, selfLocation.lng,
                                 member.location.lat, member.location.lng,
                             )
                         } else 0f
+                        val roadKm = roadDistanceKm
+                        val displayLabel: String
+                        val displayValue: String
+                        when {
+                            !roadDistanceLoaded -> {
+                                // Loading — pokazuj haversine sa oznakom "≈" da user zna da nije final.
+                                displayLabel = stringResource(R.string.member_chip_distance)
+                                displayValue = "≈ " + formatDistance(LocalContext.current, aerialMeters)
+                            }
+                            roadKm != null -> {
+                                displayLabel = stringResource(R.string.member_chip_distance)
+                                displayValue = formatDistance(LocalContext.current, roadKm * 1000.0)
+                            }
+                            else -> {
+                                // API pukao — jasno reci da je vazdušna linija.
+                                displayLabel = stringResource(R.string.member_chip_distance_aerial)
+                                displayValue = formatDistance(LocalContext.current, aerialMeters)
+                            }
+                        }
                         StatChip(
-                            label = stringResource(R.string.member_chip_distance_aerial),
-                            value = formatDistance(LocalContext.current, displayMeters),
+                            label = displayLabel,
+                            value = displayValue,
                             accentColor = MaterialTheme.colorScheme.primary,
                             icon = Icons.Filled.Navigation,
                             iconRotationDeg = bearing,
@@ -2956,84 +2999,166 @@ private fun MemberDetailSheet(
         }
 
         Spacer(Modifier.height(20.dp))
-        // Refresh: full-width primary. Za self uvek, za druge samo ako !private && !long-offline.
-        // Ne disable-uje se za isOffline (5min bez publish-a) jer to ne znaci nuzno da je FGS
-        // mrtav — moze biti Doze ili kratak WiFi drop; refresh moze da uspe kad se povrati.
-        // Long-offline (24h+) skriva refresh potpuno preko showRefresh check-a.
+        // Layout dugmadi u parovima (dva po redu, weight 1 svakome) umesto stack-a
+        // pojedinačnih full-width dugmadi. Kompaktnije, deluje kao pravi action bar.
         //
-        // Visina 48dp + rounded 24dp — matching dole (icon + view history).
+        // OTHER member:
+        //   Row 1: [Refresh]  [Directions icon 64dp]
+        //   Row 2: [History]  [Trips]
+        //
+        // SELF member:
+        //   Row 1: [Refresh]  [Check-in]
+        //   Row 2: [Share ETA] [History]
+        //   Row 3: [Trips]    [Directions icon 64dp]
         val showRefresh = member.isSelf || (!isPrivate && !isLongOffline && member.location != null)
         val buttonHeight = 48.dp
         val buttonShape = RoundedCornerShape(24.dp)
-        if (showRefresh) {
-            androidx.compose.material3.Button(
-                onClick = {
-                    onRefresh()
-                    refreshTriggered = true
-                },
-                enabled = !refreshTriggered,
-                shape = buttonShape,
-                modifier = Modifier.fillMaxWidth().height(buttonHeight),
+        val hasLocation = member.location != null
+
+        if (member.isSelf) {
+            // Row 1 self: Refresh + Check-in.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(
-                    if (member.isSelf) {
-                        if (refreshTriggered) stringResource(R.string.member_refresh_self_done) else stringResource(R.string.member_refresh_self)
-                    } else {
-                        if (refreshTriggered) stringResource(R.string.member_refresh_other_sent) else stringResource(R.string.member_refresh_other)
-                    },
-                )
+                if (showRefresh) {
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            onRefresh()
+                            refreshTriggered = true
+                        },
+                        enabled = !refreshTriggered,
+                        shape = buttonShape,
+                        modifier = Modifier.weight(1f).height(buttonHeight),
+                    ) {
+                        Text(
+                            if (refreshTriggered) stringResource(R.string.member_refresh_self_done)
+                            else stringResource(R.string.member_refresh_self),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (onCheckIn != null) {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = onCheckIn,
+                        shape = buttonShape,
+                        modifier = Modifier.weight(1f).height(buttonHeight),
+                    ) {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            stringResource(R.string.checkin_button_short),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
-        }
-        // Safe check-in — samo za self member. „Stigao/la sam" broadcast krug-u sa
-        // trenutnom lokacijom + reverse-geocoded label-om. Otvara confirm dijalog pre
-        // slanja (protiv accidental tap-a).
-        if (member.isSelf && onCheckIn != null) {
-            Spacer(Modifier.height(8.dp))
-            androidx.compose.material3.OutlinedButton(
-                onClick = onCheckIn,
-                shape = buttonShape,
-                modifier = Modifier.fillMaxWidth().height(buttonHeight),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.CheckCircle,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(text = stringResource(R.string.checkin_button_label))
-            }
-        }
-        if (member.isSelf && onShareEta != null) {
-            Spacer(Modifier.height(8.dp))
-            androidx.compose.material3.OutlinedButton(
-                onClick = onShareEta,
-                shape = buttonShape,
-                modifier = Modifier.fillMaxWidth().height(buttonHeight),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Navigation,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(text = stringResource(R.string.eta_share_title))
-            }
-        }
-        // Row: [Icon-only directions LogoTeal] [View history LogoBlue full remaining].
-        // Row fillMaxWidth + weight na View history — bez ovog Row ne zauzima ceo prostor
-        // (visual mismatch sa Refresh iznad).
-        //
-        // Kad `onOpenHistory` bude null (buducci premium gate, free-tier user), History
-        // dugme se sakriva a Directions se promise u full-width primary Button — layout
-        // ostaje "punjen" i ne izgleda kao da smo zaboravili akciju.
-        if (member.location != null) {
-            if (showRefresh) Spacer(Modifier.height(8.dp))
-            if (onOpenHistory != null) {
+            // Row 2 self: Share ETA + History.
+            if (onShareEta != null || onOpenHistory != null) {
+                Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (onShareEta != null) {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = onShareEta,
+                            shape = buttonShape,
+                            modifier = Modifier.weight(1f).height(buttonHeight),
+                        ) {
+                            Icon(Icons.Filled.Navigation, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                stringResource(R.string.eta_share_title),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    if (onOpenHistory != null) {
+                        androidx.compose.material3.Button(
+                            onClick = onOpenHistory,
+                            shape = buttonShape,
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = org.krug.app.ui.theme.LogoBlue,
+                                contentColor = Color.White,
+                            ),
+                            modifier = Modifier.weight(1f).height(buttonHeight),
+                        ) {
+                            Icon(Icons.Outlined.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                stringResource(R.string.history_cta),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+            // Row 3 self: Trips + Directions icon.
+            if (onOpenDriving != null || hasLocation) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (onOpenDriving != null) {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = onOpenDriving,
+                            shape = buttonShape,
+                            modifier = Modifier.weight(1f).height(buttonHeight),
+                        ) {
+                            Icon(Icons.Outlined.Speed, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                stringResource(R.string.member_driving_cta),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    if (hasLocation) {
+                        androidx.compose.material3.FilledIconButton(
+                            onClick = onOpenInMaps,
+                            shape = buttonShape,
+                            colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
+                                containerColor = org.krug.app.ui.theme.LogoTeal,
+                                contentColor = Color.White,
+                            ),
+                            modifier = Modifier.size(width = 64.dp, height = buttonHeight),
+                        ) {
+                            Icon(
+                                Icons.Filled.Directions,
+                                contentDescription = stringResource(R.string.action_open_in_google_maps),
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        } else {
+            // OTHER member: Row 1 = Refresh + Directions icon, Row 2 = History + Trips.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (showRefresh) {
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            onRefresh()
+                            refreshTriggered = true
+                        },
+                        enabled = !refreshTriggered,
+                        shape = buttonShape,
+                        modifier = Modifier.weight(1f).height(buttonHeight),
+                    ) {
+                        Text(
+                            if (refreshTriggered) stringResource(R.string.member_refresh_other_sent)
+                            else stringResource(R.string.member_refresh_other),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (hasLocation) {
                     androidx.compose.material3.FilledIconButton(
                         onClick = onOpenInMaps,
                         shape = buttonShape,
@@ -3044,76 +3169,51 @@ private fun MemberDetailSheet(
                         modifier = Modifier.size(width = 64.dp, height = buttonHeight),
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Directions,
+                            Icons.Filled.Directions,
                             contentDescription = stringResource(R.string.action_open_in_google_maps),
                             modifier = Modifier.size(24.dp),
                         )
                     }
-                    androidx.compose.material3.Button(
-                        onClick = onOpenHistory,
-                        shape = buttonShape,
-                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                            containerColor = org.krug.app.ui.theme.LogoBlue,
-                            contentColor = Color.White,
-                        ),
-                        modifier = Modifier.weight(1f).height(buttonHeight),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.AccessTime,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.history_cta),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            } else {
-                androidx.compose.material3.Button(
-                    onClick = onOpenInMaps,
-                    shape = buttonShape,
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                        containerColor = org.krug.app.ui.theme.LogoTeal,
-                        contentColor = Color.White,
-                    ),
-                    modifier = Modifier.fillMaxWidth().height(buttonHeight),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Directions,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = stringResource(R.string.action_open_in_google_maps),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
                 }
             }
-            // Driving reports — full-width secondary button ispod istorije. Gate ce
-            // ovo kasnije uslovljavati na `premiumChecker.isPremiumNow`. Za sada svima.
-            if (onOpenDriving != null) {
+            if (onOpenHistory != null || onOpenDriving != null) {
                 Spacer(Modifier.height(8.dp))
-                androidx.compose.material3.OutlinedButton(
-                    onClick = onOpenDriving,
-                    shape = buttonShape,
-                    modifier = Modifier.fillMaxWidth().height(buttonHeight),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Speed,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = stringResource(R.string.member_driving_cta),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    if (onOpenHistory != null) {
+                        androidx.compose.material3.Button(
+                            onClick = onOpenHistory,
+                            shape = buttonShape,
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = org.krug.app.ui.theme.LogoBlue,
+                                contentColor = Color.White,
+                            ),
+                            modifier = Modifier.weight(1f).height(buttonHeight),
+                        ) {
+                            Icon(Icons.Outlined.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                stringResource(R.string.history_cta),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    if (onOpenDriving != null) {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = onOpenDriving,
+                            shape = buttonShape,
+                            modifier = Modifier.weight(1f).height(buttonHeight),
+                        ) {
+                            Icon(Icons.Outlined.Speed, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                stringResource(R.string.member_driving_cta),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))

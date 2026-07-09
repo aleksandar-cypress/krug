@@ -309,14 +309,17 @@
     <string name="car_signin_required">Open Krug on your phone and sign in to see your circle here.</string>
 
     <!-- What's new in v1.1 -->
-    <string name="whats_new_title">What\'s new</string>
-    <string name="whats_new_subtitle">Version 1.1 brings big additions:</string>
-    <string name="whats_new_places_title">Places</string>
-    <string name="whats_new_places_body">Add Home, School, Work. Get notified when your circle arrives or leaves.</string>
-    <string name="whats_new_history_title">Location history</string>
-    <string name="whats_new_history_body">See the last 30 days as a trail on the map with distance stats.</string>
-    <string name="whats_new_auto_title">Android Auto</string>
-    <string name="whats_new_auto_body">See your circle on the car dashboard. SOS voice alerts while driving.</string>
+    <string name="whats_new_title">What\'s new in 1.2</string>
+    <string name="whats_new_subtitle">Four new safety features for you and your circle:</string>
+    <string name="whats_new_checkin_title">Safe check-ins</string>
+    <string name="whats_new_checkin_body">Tap \"I\'m here\" to let your circle know you\'ve arrived safely.</string>
+    <string name="whats_new_eta_title">ETA sharing</string>
+    <string name="whats_new_eta_body">Share live arrival time. Your circle sees you approaching in real time.</string>
+    <string name="whats_new_speeding_title">Speeding alerts</string>
+    <string name="whats_new_speeding_body">Opt-in: your circle gets notified if you exceed a speed you set.</string>
+    <string name="whats_new_crash_title">Crash detection</string>
+    <string name="whats_new_crash_body">Opt-in: sudden impact while driving triggers a 10-second countdown before auto-SOS.</string>
+    <string name="whats_new_hint">Enable the ones you want in Settings › Privacy.</string>
     <string name="whats_new_close">Got it</string>
     <string name="places_saved_snackbar">Place saved: %1$s</string>
     <string name="places_updated_snackbar">Place updated</string>
@@ -475,8 +478,8 @@
     <!-- Member detail sheet -->
     <string name="member_chip_battery">Battery</string>
     <string name="member_chip_battery_charging">Charging</string>
-    <string name="member_chip_distance">Distance</string>
-    <string name="member_chip_distance_aerial">Distance</string>
+    <string name="member_chip_distance">By road</string>
+    <string name="member_chip_distance_aerial">Air distance</string>
     <string name="member_chip_last_seen">Last seen</string>
     <string name="member_chip_speed">Speed</string>
     <string name="member_chip_speed_value">%1$d km/h</string>

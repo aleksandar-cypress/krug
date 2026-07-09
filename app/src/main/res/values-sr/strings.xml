@@ -312,14 +312,17 @@
     <string name="car_loading">Učitavam krug…</string>
 
     <!-- Šta je novo u v1.1 -->
-    <string name="whats_new_title">Šta je novo</string>
-    <string name="whats_new_subtitle">Verzija 1.1 donosi velike dodatke:</string>
-    <string name="whats_new_places_title">Mesta</string>
-    <string name="whats_new_places_body">Dodaj Kuću, Školu, Posao. Obaveštenje kad neko stigne ili ode.</string>
-    <string name="whats_new_history_title">Istorija kretanja</string>
-    <string name="whats_new_history_body">Poslednjih 30 dana kao trag na mapi sa statistikama.</string>
-    <string name="whats_new_auto_title">Android Auto</string>
-    <string name="whats_new_auto_body">Vidi krug na tabli u kolima. SOS glasovna obaveštenja dok voziš.</string>
+    <string name="whats_new_title">Šta je novo u 1.2</string>
+    <string name="whats_new_subtitle">Četiri nova sigurnosna feature-a za tebe i tvoj krug:</string>
+    <string name="whats_new_checkin_title">Safe check-ins</string>
+    <string name="whats_new_checkin_body">Dodirni „Stigao/la sam" i krug odmah zna da si bezbedan.</string>
+    <string name="whats_new_eta_title">Deljenje ETA</string>
+    <string name="whats_new_eta_body">Podeli procenu vremena dolaska. Krug prati približavanje u realnom vremenu.</string>
+    <string name="whats_new_speeding_title">Upozorenja o brzini</string>
+    <string name="whats_new_speeding_body">Opciono: krug dobija obaveštenje kad pređeš brzinu koju si podesio.</string>
+    <string name="whats_new_crash_title">Detekcija pada</string>
+    <string name="whats_new_crash_body">Opciono: nagli udar dok voziš pokreće 10-sekundni odbrojavač pre auto-SOS-a.</string>
+    <string name="whats_new_hint">Uključi šta ti odgovara u Podešavanja › Privatnost.</string>
     <string name="whats_new_close">Razumem</string>
     <string name="places_saved_snackbar">Mesto sačuvano: %1$s</string>
     <string name="places_updated_snackbar">Mesto izmenjeno</string>
@@ -478,8 +481,8 @@
     <!-- Member detail sheet -->
     <string name="member_chip_battery">Baterija</string>
     <string name="member_chip_battery_charging">Puni se</string>
-    <string name="member_chip_distance">Udaljenost</string>
-    <string name="member_chip_distance_aerial">Razdaljina</string>
+    <string name="member_chip_distance">Putem</string>
+    <string name="member_chip_distance_aerial">Vazdušna linija</string>
     <string name="member_chip_last_seen">Poslednje</string>
     <string name="member_chip_speed">Brzina</string>
     <string name="member_chip_speed_value">%1$d km/h</string>

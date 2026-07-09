@@ -47,72 +47,90 @@ exports.onLocationRefreshRequest = onValueCreated(
           {targetUid, requesterUid, timestamp},
       );
 
-      // 1) Fetch target user's FCM token
       const firestore = getFirestore();
-      const userDoc = await firestore
+
+      // 1) Multi-device: fetch svih tokena iz users/{uid}/devices subcollection-a.
+      //    Ako subcollection ne postoji (stariji klijenti pre 1.2.0), fallback na
+      //    legacy users/{uid}.fcmToken single-token model.
+      const devicesSnap = await firestore
           .collection("users")
           .doc(targetUid)
+          .collection("devices")
           .get();
 
-      if (!userDoc.exists) {
-        logger.warn("Target user doc not found", {targetUid});
-        return;
+      const deviceTokens = [];
+      devicesSnap.forEach((doc) => {
+        const t = doc.get("fcmToken");
+        if (t) deviceTokens.push({deviceId: doc.id, token: t});
+      });
+
+      // Legacy fallback — ako nema devices subcollection-a.
+      if (deviceTokens.length === 0) {
+        const userDoc = await firestore
+            .collection("users")
+            .doc(targetUid)
+            .get();
+        if (!userDoc.exists) {
+          logger.warn("Target user doc not found", {targetUid});
+          return;
+        }
+        const legacyToken = userDoc.get("fcmToken");
+        if (!legacyToken) {
+          logger.warn("Target has no FCM tokens anywhere", {targetUid});
+          return;
+        }
+        deviceTokens.push({deviceId: "legacy", token: legacyToken});
       }
 
-      const fcmToken = userDoc.get("fcmToken");
-      if (!fcmToken) {
-        logger.warn(
-            "Target user has no fcmToken (needs 1.1.4+ client)",
-            {targetUid},
-        );
-        return;
-      }
+      logger.info("Fanout to devices", {targetUid, count: deviceTokens.length});
 
-      // 2) Send high-priority FCM data message
+      // 2) Send high-priority FCM data message na SVAKI device-token paralelno.
       // Data-only (bez notification field): app dobija onMessageReceived čak i u
       // background/Doze. Sa notification field, Android bi mozda auto-prikazao sistemsku
-      // notifikaciju i ne bi budio proces — sto nam ne treba, mi hocemo silent wakeup
-      // koji forsira FGS one-shot fix.
-      const message = {
-        token: fcmToken,
-        data: {
-          type: "refresh",
-          requesterUid: requesterUid,
-          timestamp: String(timestamp || Date.now()),
-        },
-        android: {
-          priority: "high",
-          // TTL 5min: ako je uredjaj offline duze od ovog, push se odbaci (nema smisla
-          // buditi FGS 2h kasnije za refresh koji je user vec zaboravio)
-          ttl: 5 * 60 * 1000,
-        },
-      };
-
-      try {
-        const response = await getMessaging().send(message);
-        logger.info(
-            "FCM push sent",
-            {targetUid, response, tokenLen: fcmToken.length},
-        );
-      } catch (error) {
-        // Common error codes:
-        //  messaging/registration-token-not-registered → user je uninstall-ovao ili token
-        //    je stariji od 6 meseci. Obrisemo iz Firestore-a da ne trosimo kvote.
-        //  messaging/invalid-argument → malformed token, obrisi.
-        logger.error("FCM send failed", {targetUid, error: error.message, code: error.code});
-
-        const code = error.code || "";
-        if (
-          code === "messaging/registration-token-not-registered" ||
-          code === "messaging/invalid-argument" ||
-          code === "messaging/invalid-registration-token"
-        ) {
-          logger.info("Clearing invalid FCM token from Firestore", {targetUid});
-          await firestore
-              .collection("users")
-              .doc(targetUid)
-              .update({fcmToken: null});
+      // notifikaciju i ne bi budio proces.
+      const results = await Promise.all(deviceTokens.map(async ({deviceId, token}) => {
+        const message = {
+          token: token,
+          data: {
+            type: "refresh",
+            requesterUid: requesterUid,
+            timestamp: String(timestamp || Date.now()),
+          },
+          android: {
+            priority: "high",
+            ttl: 5 * 60 * 1000,
+          },
+        };
+        try {
+          const response = await getMessaging().send(message);
+          return {deviceId, ok: true, response};
+        } catch (error) {
+          const code = error.code || "";
+          // Cleanup samo za invalid/expired tokene (ne za mrežne greške).
+          if (
+            code === "messaging/registration-token-not-registered" ||
+            code === "messaging/invalid-argument" ||
+            code === "messaging/invalid-registration-token"
+          ) {
+            if (deviceId === "legacy") {
+              await firestore.collection("users").doc(targetUid)
+                  .update({fcmToken: null});
+            } else {
+              await firestore.collection("users").doc(targetUid)
+                  .collection("devices").doc(deviceId).delete();
+            }
+            logger.info("Removed invalid token", {targetUid, deviceId});
+          }
+          return {deviceId, ok: false, error: error.message, code};
         }
-      }
+      }));
+
+      const successCount = results.filter((r) => r.ok).length;
+      logger.info("Fanout result", {
+        targetUid,
+        total: results.length,
+        success: successCount,
+        failed: results.length - successCount,
+      });
     },
 );

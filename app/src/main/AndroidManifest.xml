@@ -124,6 +124,7 @@
             </intent-filter>
         </receiver>
 
+
         <!-- Android Auto — CarAppService (Navigation template). Auto host bind-uje kad
              telefon konektuje sa autom preko USB/wireless. exported=true jer Auto host
              (odvojen proces) treba da bind-uje.

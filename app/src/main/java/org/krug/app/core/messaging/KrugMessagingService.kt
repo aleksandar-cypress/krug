@@ -43,6 +43,7 @@ class KrugMessagingService : FirebaseMessagingService() {
 
     @Inject lateinit var userRepository: UserRepository
     @Inject lateinit var firebaseAuth: FirebaseAuth
+    @Inject lateinit var deviceRegistry: org.krug.app.core.device.DeviceRegistry
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -56,9 +57,15 @@ class KrugMessagingService : FirebaseMessagingService() {
             return
         }
         scope.launch {
+            // Legacy fcmToken na user doc-u (single-device fallback za Cloud Function pre
+            // multi-device migracije) + novi per-device zapis. Cloud Function čita oba,
+            // preferira devices subcollection ako postoji.
             runCatching { userRepository.updateFcmToken(uid, token) }
                 .onSuccess { Timber.i("FCM token uploaded to Firestore for uid=%s", uid) }
                 .onFailure { Timber.w(it, "onNewToken upload failed") }
+            val label = android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercaseChar() } +
+                " " + android.os.Build.MODEL
+            deviceRegistry.registerDevice(uid, token, label)
         }
     }
 

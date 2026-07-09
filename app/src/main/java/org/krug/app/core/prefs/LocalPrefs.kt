@@ -29,6 +29,22 @@ class LocalPrefs @Inject constructor(
         get() = prefs.getInt(KEY_LAST_SEEN_WHATS_NEW, 0)
         set(value) = prefs.edit(commit = false) { putInt(KEY_LAST_SEEN_WHATS_NEW, value) }
 
+    /**
+     * Stabilan device ID — generisan jednom pri prvom pristupu, čuva se u SharedPrefs.
+     * Uninstall + reinstall daje novi ID (koje je fino ponašanje jer je to čisto stanje).
+     * Ne koristimo Settings.Secure.ANDROID_ID (može biti null na starim uređajima, isti
+     * u work profile na Enterprise Android-u, itd.). UUID je stable dokle god SharedPrefs
+     * postoji.
+     */
+    val deviceId: String
+        get() {
+            val existing = prefs.getString(KEY_DEVICE_ID, null)
+            if (existing != null) return existing
+            val fresh = java.util.UUID.randomUUID().toString()
+            prefs.edit(commit = true) { putString(KEY_DEVICE_ID, fresh) }
+            return fresh
+        }
+
     private val _activeCircleId = MutableStateFlow(prefs.getString(KEY_ACTIVE_CIRCLE, null))
 
     /** Reactive — UI observe-uje, fallback na prvi krug ako null/nevažeći. */
@@ -222,5 +238,6 @@ class LocalPrefs @Inject constructor(
         const val KEY_MAP_STYLE = "map_style_key"
         const val DEFAULT_MAP_STYLE_KEY = "STANDARD"
         const val KEY_BATTERY_ALERTED = "battery_alerted_ts"
+        const val KEY_DEVICE_ID = "device_id"
     }
 }

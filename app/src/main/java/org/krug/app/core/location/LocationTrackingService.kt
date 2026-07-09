@@ -89,6 +89,7 @@ class LocationTrackingService : Service() {
     @Inject lateinit var crashDetector: org.krug.app.core.crash.CrashDetector
     @Inject lateinit var crashAlertNotifier: org.krug.app.core.crash.CrashAlertNotifier
     @Inject lateinit var crashActionBus: org.krug.app.core.crash.CrashActionBus
+    @Inject lateinit var deviceRegistry: org.krug.app.core.device.DeviceRegistry
 
     /**
      * Cache displayName-a self korisnika — puni observeSelfName() na startu FGS-a i
@@ -140,6 +141,14 @@ class LocationTrackingService : Service() {
 
     /** Flag „crash detektor je pokrenut" — sprečava double-start pri settings toggle-u. */
     @Volatile private var crashDetectorStarted: Boolean = false
+
+    /**
+     * Multi-device publish gate: cache-ovan lastActiveMs najskorije aktivnog uređaja u
+     * user-ovom device registry-ju (self isključen). Ako je self uređaj skorije aktivan
+     * (moj heartbeat > max drugih), self je primary → publish. Inače skip.
+     * Osvežava se u observeSelfDevices() na svaku promenu subcollection-a.
+     */
+    @Volatile private var latestOtherDeviceActiveMs: Long = 0L
 
     /**
      * Per-uid map: poslednji `triggeredAt` koji je već notifikovan korisnika.
@@ -219,6 +228,18 @@ class LocationTrackingService : Service() {
             checkAndExpireTemporarySharing()
             if (!currentSettings.shareLocationGlobal) {
                 Timber.d("Location sharing paused; skipping publish")
+                return
+            }
+            // Multi-device publish gate — samo najskorije aktivan uređaj u user-ovom
+            // device registry-ju publish-uje. Drugi ne publish-uje da izbegnemo RTDB
+            // location race izmedju dva user-ova uređaja. Async heartbeat write ide
+            // svejedno — na osnovu tog signala drugi uređaj zna „ja sam još živ".
+            val nowMs = System.currentTimeMillis()
+            scope.launch {
+                firebaseAuth.currentUser?.uid?.let { deviceRegistry.heartbeat(it) }
+            }
+            if (!isPrimaryDevice(nowMs)) {
+                Timber.d("Not primary device (other active ${nowMs - latestOtherDeviceActiveMs}ms ago); skip publish")
                 return
             }
             // Movement filter — preskoči publish ako se nismo mnogo pomerili, OSIM ako je
@@ -480,6 +501,7 @@ class LocationTrackingService : Service() {
         observeCircleEta()
         observeSelfEtaShare()
         observeCrashActions()
+        observeSelfDevices()
         registerActivityRecognition()
         startHeartbeatLoop()
     }
@@ -1161,6 +1183,51 @@ class LocationTrackingService : Service() {
         return out[0].toDouble()
     }
 
+    /**
+     * Prati device registry i cache-uje `latestOtherDeviceActiveMs` — publish gate koristi
+     * ovaj signal da odluči je li ovaj uređaj primary (najskorije aktivan). Bez ovog,
+     * dva uređaja istog user-a bi naizmenično prepisivala RTDB lokaciju i peers bi videli
+     * jitter (kuća ↔ posao).
+     */
+    private fun observeSelfDevices() {
+        val selfUid = firebaseAuth.currentUser?.uid ?: return
+        val myId = deviceRegistry.deviceId
+        scope.launch {
+            deviceRegistry.observeDevices(selfUid).collectLatest { devices ->
+                val others = devices.filter { it.deviceId != myId }
+                val mostRecent = others.maxByOrNull { it.lastActiveMs }
+                latestOtherDeviceActiveMs = mostRecent?.lastActiveMs ?: 0L
+                latestOtherDeviceId = mostRecent?.deviceId
+            }
+        }
+    }
+
+    /**
+     * Publish gate — vraća true ako je ovaj uređaj primary za publikovanje lokacije.
+     *
+     * Pravilo: self je primary AKO
+     *  (a) nema drugih uređaja (fresh install / single-device user), ILI
+     *  (b) drugi uređaj nije aktivan u poslednjih `OTHER_DEVICE_ACTIVE_WINDOW_MS`
+     *      (npr. tablet je izlaznut, samo telefon vozi). Bez ovog, telefon ne bi
+     *      publish-ovao dok god tablet ima recent heartbeat — ali tablet je off pa
+     *      lokacija ne stiže.
+     *
+     * Kad su OBA uređaja aktivna (rare edge case: user ostavio oba upaljena):
+     *  (c) primary je onaj sa lex-manjim deviceId string-om — deterministički,
+     *      obe strane se slažu o istom rezultatu bez cross-device coordinacije.
+     */
+    private fun isPrimaryDevice(nowMs: Long): Boolean {
+        if (latestOtherDeviceActiveMs == 0L) return true
+        // Drugi je „recently active" ako je heartbeat unutar prozora.
+        val otherRecentlyActive = (nowMs - latestOtherDeviceActiveMs) < OTHER_DEVICE_ACTIVE_WINDOW_MS
+        if (!otherRecentlyActive) return true
+        // Oba aktivna — deterministic tiebreaker.
+        return deviceRegistry.deviceId < latestOtherDeviceId.orEmpty()
+    }
+
+    /** Cache-ovan deviceId najskorije aktivnog drugog uređaja — za tiebreaker u isPrimaryDevice. */
+    @Volatile private var latestOtherDeviceId: String? = null
+
     private fun observeCircleCheckIns() {
         val selfUid = firebaseAuth.currentUser?.uid ?: return
         scope.launch {
@@ -1573,6 +1640,13 @@ class LocationTrackingService : Service() {
 
         /** Crash countdown pre auto-SOS-a — 10s daje user-u vreme da otkaže false-positive. */
         const val CRASH_COUNTDOWN_SEC = 10
+
+        /**
+         * Prozor „drugi uređaj je nedavno aktivan" — ako je heartbeat drugog uređaja
+         * unutar ovog vremena, tretiramo ga kao active i primary logic ide na tiebreaker.
+         * 90s pokriva 60s heartbeat interval + doza margine za mrežni jitter.
+         */
+        const val OTHER_DEVICE_ACTIVE_WINDOW_MS = 90_000L
         private const val EXTRA_FORCE_REFRESH = "force_refresh"
         private const val EXTRA_SOS_BOOST = "sos_boost"
         const val EXTRA_ACTIVITY_CHANGED = "activity_changed"

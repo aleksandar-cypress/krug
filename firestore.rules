@@ -74,6 +74,15 @@ service cloud.firestore {
         allow create: if isSelf(uid);
         allow update, delete: if false;
       }
+
+      // Devices (multi-device support) — svaki uređaj user-a registruje sebe sa
+      // fcmToken-om + lastActiveMs za publish gate. Cloud Function-i čitaju sve
+      // tokene da bi push fanout-ovali. Self-only write; read je isAuthed (za
+      // Cloud Function-i preko admin SDK-a bypass-uje ovo svejedno).
+      match /devices/{deviceId} {
+        allow read: if isAuthed();
+        allow write: if isSelf(uid);
+      }
     }
 
     // circles/{cid}

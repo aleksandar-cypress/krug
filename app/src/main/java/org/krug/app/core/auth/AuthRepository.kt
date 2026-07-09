@@ -54,6 +54,7 @@ class AuthRepository @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val firebaseAuth: FirebaseAuth,
     private val userRepository: UserRepository,
+    private val deviceRegistry: org.krug.app.core.device.DeviceRegistry,
 ) {
     val currentUser: FirebaseUser? get() = firebaseAuth.currentUser
 
@@ -143,6 +144,10 @@ class AuthRepository @Inject constructor(
             val token = FirebaseMessaging.getInstance().token.await()
             if (token.isNotBlank()) {
                 userRepository.updateFcmToken(uid, token)
+                // Multi-device: registruj ovaj uređaj sa svojim tokenom u devices
+                // subcollection. Cloud Function-i mogu da fanout-uju push na sve
+                // registrovane uređaje (ne samo poslednji koji se ulogovao).
+                deviceRegistry.registerDevice(uid, token, deviceLabel())
                 Timber.i("FCM token synced post sign-in for uid=%s (len=%d)", uid, token.length)
             }
         }.onFailure { Timber.w(it, "syncFcmToken failed for uid=%s", uid) }
@@ -217,6 +222,10 @@ class AuthRepository @Inject constructor(
     suspend fun signOut(activityContext: Context) {
         val outgoingUid = firebaseAuth.currentUser?.uid
         Timber.i("Sign-out requested for uid=%s", outgoingUid ?: "(none)")
+        // Unregister ovaj uređaj iz registry-ja pre sign-out-a — bez ovog, tuđe device-e
+        // koje su i dalje aktivne bi trošile push kvote na tokene koji ne bi mogli da se
+        // odjave (auth već ovaj token više nije validan Firebase-u).
+        outgoingUid?.let { deviceRegistry.unregisterDevice(it) }
         // Bounce RTDB konekciju PRE signOut-a — drops aktivne ValueEventListenere koji
         // su zakačeni sa starim auth token-om. Bez ovog, listeneri mogu da prožive
         // tranziciju (Firebase ih ne raskida automatski na auth change) i pokušaju

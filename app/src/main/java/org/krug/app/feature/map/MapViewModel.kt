@@ -388,6 +388,26 @@ class MapViewModel @Inject constructor(
         return out[0].toDouble() / 1000.0
     }
 
+    /**
+     * Fetch real road distance via Mapbox Directions API. Vraća km ili null ako API pukne
+     * (network, timeout, no route). MemberDetailSheet zove ovo pri otvaranju sheet-a — user
+     * je aktivno pregleda jednog člana i road distance je vredna informacija (razlika od
+     * vazdušne linije može biti 30-50% u urbanoj mreži zbog reka, autoputa, žica).
+     *
+     * Ne cache-ujemo — svaki poziv je fresh Directions request. Route se menja kroz saobraćaj
+     * i vremenske uslove; cached vrednost bi mogla biti stara. Cost analiza: user otvara
+     * 5-10 member sheet-ova dnevno → daleko od Mapbox besplatne kvote.
+     */
+    suspend fun roadDistanceKm(
+        fromLat: Double, fromLng: Double,
+        toLat: Double, toLng: Double,
+    ): Double? {
+        val route = withTimeoutOrNull(4_000L) {
+            directionsRepository.driveEta(fromLat, fromLng, toLat, toLng)
+        } ?: return null
+        return route.distanceMeters / 1000.0
+    }
+
     fun clearSos() {
         val uid = authRepository.currentUser?.uid ?: return
         Timber.i("SOS cleared uid=%s", uid)

@@ -91,8 +91,9 @@ fun AboutScreen(onBack: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.size(8.dp))
-                // Tap-to-spin: vector logo se okrene 360° na svaki tap. Mali easter-egg
-                // koji daje brand interakciju bez ometanja primarnih akcija na ekranu.
+                // Ulazak na About = ista entrance animacija kao Splash (spin 360° sa
+                // FastOutSlowInEasing, delay 300ms, duration 1200ms). Tap-to-spin ostaje —
+                // posle entrance-a svaki tap okida dodatni 360° rotate na trenutni ugao.
                 var spinTaps by remember { mutableIntStateOf(0) }
                 KrugLogo(
                     modifier = Modifier
@@ -102,6 +103,7 @@ fun AboutScreen(onBack: () -> Unit) {
                         // Padding unutar clip-a sprečava da head_blue (čija najviša tačka
                         // pada na y≈0 u viewport coord-u) bude sečen kružnim clip-om.
                         .padding(10.dp),
+                    animated = true,
                     spinKey = spinTaps,
                 )
                 Spacer(Modifier.size(16.dp))
