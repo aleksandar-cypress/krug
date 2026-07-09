@@ -220,17 +220,22 @@
     <string name="checkin_toast_failed">Check-in failed. Try again.</string>
 
     <!-- ETA sharing -->
-    <string name="eta_channel">ETA shares</string>
-    <string name="eta_channel_desc">Notifications when a circle member starts or updates an ETA share</string>
+    <string name="eta_channel">Arrival sharing</string>
+    <string name="eta_channel_desc">Notifications when a circle member shares their arrival time or has arrived</string>
     <string name="eta_notif_started_title">%1$s is on the way</string>
-    <string name="eta_notif_started_body">ETA %1$s to %2$s</string>
-    <string name="eta_notif_started_body_no_dest">ETA %1$s</string>
+    <string name="eta_notif_started_body">Arriving in %1$s at %2$s</string>
+    <string name="eta_notif_started_body_no_dest">Arriving in %1$s</string>
     <string name="eta_notif_arrived_title">%1$s has arrived</string>
     <string name="eta_notif_arrived_body">At %1$s</string>
     <string name="eta_notif_arrived_body_no_dest">Safely arrived</string>
-    <string name="eta_share_title">Share ETA</string>
+    <string name="eta_share_title">Share arrival</string>
+    <string name="eta_share_active_label">Sharing active</string>
+    <string name="eta_share_title_short">Share</string>
+    <string name="history_cta_short">History</string>
+    <string name="member_refresh_self_short">Refresh</string>
     <string name="eta_share_pick_destination">Type an address or place</string>
-    <string name="eta_share_confirm">Share ETA</string>
+    <string name="eta_share_input_label">Address or place</string>
+    <string name="eta_share_confirm">Share</string>
     <string name="eta_share_cancel">Stop sharing</string>
     <string name="eta_share_arrived">Arrived</string>
     <string name="eta_share_dest_unknown">destination</string>
@@ -315,8 +320,8 @@
     <string name="whats_new_subtitle">Four new safety features for you and your circle:</string>
     <string name="whats_new_checkin_title">Safe check-ins</string>
     <string name="whats_new_checkin_body">Tap \"I\'m here\" to let your circle know you\'ve arrived safely.</string>
-    <string name="whats_new_eta_title">ETA sharing</string>
-    <string name="whats_new_eta_body">Share live arrival time. Your circle sees you approaching in real time.</string>
+    <string name="whats_new_eta_title">Arrival sharing</string>
+    <string name="whats_new_eta_body">Share your live arrival time. Your circle sees you approaching in real time.</string>
     <string name="whats_new_speeding_title">Speeding alerts</string>
     <string name="whats_new_speeding_body">Opt-in: your circle gets notified if you exceed a speed you set.</string>
     <string name="whats_new_crash_title">Crash detection</string>

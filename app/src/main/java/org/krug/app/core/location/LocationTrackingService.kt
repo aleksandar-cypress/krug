@@ -1085,22 +1085,30 @@ class LocationTrackingService : Service() {
                     }
                 }
                 .collectLatest { shares ->
+                    Timber.d("observeCircleEta: %d shares received", shares.size)
                     shares.forEach { share ->
                         if (share.userId == selfUid) return@forEach
                         val hasArrived = share.arrivedAt != null
                         if (hasArrived) {
                             if (share.id !in notifiedEtaArrived) {
                                 notifiedEtaArrived.add(share.id)
-                                if (!isInSilentHours(currentSettings.silentHours)) {
+                                if (isInSilentHours(currentSettings.silentHours)) {
+                                    Timber.d("observeCircleEta: silent hours, skip arrived notif for %s", share.userId)
+                                } else {
                                     etaNotifier.notifyArrived(share)
                                 }
                             }
                         } else {
                             if (share.id !in notifiedEtaStarted) {
                                 notifiedEtaStarted.add(share.id)
-                                if (!isInSilentHours(currentSettings.silentHours)) {
+                                if (isInSilentHours(currentSettings.silentHours)) {
+                                    Timber.d("observeCircleEta: silent hours, skip started notif for %s", share.userId)
+                                } else {
+                                    Timber.i("observeCircleEta: firing started notif for uid=%s dest=%s", share.userId, share.destinationLabel)
                                     etaNotifier.notifyStarted(share)
                                 }
+                            } else {
+                                Timber.d("observeCircleEta: already notified for %s", share.id)
                             }
                         }
                     }

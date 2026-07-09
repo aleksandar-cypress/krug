@@ -41,6 +41,12 @@ class EtaNotifier @Inject constructor(
     }
 
     fun notifyStarted(share: EtaShareModel) {
+        Timber.i("EtaNotifier.notifyStarted uid=%s dest=%s eta=%d", share.userId, share.destinationLabel, share.etaMinutes)
+        val nm = NotificationManagerCompat.from(context)
+        if (!nm.areNotificationsEnabled()) {
+            Timber.w("EtaNotifier: notifications DISABLED at app level — cannot post ETA notif")
+            return
+        }
         ensureChannel()
         val pi = openIntent(share.id.hashCode())
         val title = context.getString(R.string.eta_notif_started_title, share.userName)
@@ -63,6 +69,12 @@ class EtaNotifier @Inject constructor(
     }
 
     fun notifyArrived(share: EtaShareModel) {
+        Timber.i("EtaNotifier.notifyArrived uid=%s dest=%s", share.userId, share.destinationLabel)
+        val nm = NotificationManagerCompat.from(context)
+        if (!nm.areNotificationsEnabled()) {
+            Timber.w("EtaNotifier: notifications DISABLED at app level — cannot post arrived notif")
+            return
+        }
         ensureChannel()
         val pi = openIntent(share.id.hashCode() + 1)
         val title = context.getString(R.string.eta_notif_arrived_title, share.userName)

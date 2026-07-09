@@ -935,6 +935,13 @@ fun MapScreen(
                     onCancel = { viewModel.cancelEtaShare() },
                 )
             }
+            // Tuđi aktivni ETA share-ovi — bez cancel dugmeta (ne mogu ja da otkažem tuđe).
+            state.otherEtaShares.forEach { share ->
+                EtaShareBanner(
+                    share = share,
+                    onCancel = null,
+                )
+            }
         }
 
         SosFab(
@@ -1078,6 +1085,7 @@ fun MapScreen(
                             showEtaPicker = true
                         }
                     } else null,
+                    hasActiveEtaShare = state.myEtaShare != null,
                     fetchRoadDistanceKm = { fromLat, fromLng, toLat, toLng ->
                         viewModel.roadDistanceKm(fromLat, fromLng, toLat, toLng)
                     },
@@ -2662,6 +2670,7 @@ private fun MemberDetailSheet(
     onOpenDriving: (() -> Unit)?,
     onCheckIn: (() -> Unit)? = null,
     onShareEta: (() -> Unit)? = null,
+    hasActiveEtaShare: Boolean = false,
     fetchRoadDistanceKm: (suspend (Double, Double, Double, Double) -> Double?)? = null,
 ) {
     // Road distance — Mapbox Directions API poziv pri otvaranju sheet-a. Loading dok
@@ -2942,9 +2951,10 @@ private fun MemberDetailSheet(
             val charging = member.location?.charging == true
             val speedMps = member.location?.speed ?: 0f
             val kmh = (speedMps * 3.6f).toInt().coerceAtLeast(0)
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (member.isSelf) {
+                // Self: sva 3 stat chip-a u jednom redu (Battery + Speed + Last seen).
+                // Nema distance za sebe (svi info kompaktnije).
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    // Slot 1: Battery (uvek za oba, ali placeholder ako nema fresh vrednosti)
                     if (batt != null && batt in 0..100) {
                         StatChip(
                             label = if (charging) stringResource(R.string.member_chip_battery_charging) else stringResource(R.string.member_chip_battery),
@@ -2956,71 +2966,13 @@ private fun MemberDetailSheet(
                     } else {
                         Spacer(Modifier.weight(1f))
                     }
-                    // Slot 2: Distance za druge, Speed za self. Preferiramo road distance
-                    // (Mapbox Directions) kad se učita — realno korisniji signal od vazdušne
-                    // linije (razlika ume da bude 30-50% u urbanoj mreži). Fallback:
-                    // haversine sa explicit „vazdušna" labelom dok se road ne učita ili ako pukne.
-                    if (!member.isSelf && selfLocation != null && member.location != null) {
-                        val aerialMeters = haversineMeters(
-                            selfLocation.lat, selfLocation.lng,
-                            member.location.lat, member.location.lng,
-                        )
-                        val bearing = if (aerialMeters >= 30.0) {
-                            bearingDegrees(
-                                selfLocation.lat, selfLocation.lng,
-                                member.location.lat, member.location.lng,
-                            )
-                        } else 0f
-                        val roadKm = roadDistanceKm
-                        val displayLabel: String
-                        val displayValue: String
-                        when {
-                            !roadDistanceLoaded -> {
-                                // Loading — pokazuj haversine sa oznakom "≈" da user zna da nije final.
-                                displayLabel = stringResource(R.string.member_chip_distance)
-                                displayValue = "≈ " + formatDistance(LocalContext.current, aerialMeters)
-                            }
-                            roadKm != null -> {
-                                displayLabel = stringResource(R.string.member_chip_distance)
-                                displayValue = formatDistance(LocalContext.current, roadKm * 1000.0)
-                            }
-                            else -> {
-                                // API pukao — jasno reci da je vazdušna linija.
-                                displayLabel = stringResource(R.string.member_chip_distance_aerial)
-                                displayValue = formatDistance(LocalContext.current, aerialMeters)
-                            }
-                        }
-                        StatChip(
-                            label = displayLabel,
-                            value = displayValue,
-                            accentColor = MaterialTheme.colorScheme.primary,
-                            icon = Icons.Filled.Navigation,
-                            iconRotationDeg = bearing,
-                            modifier = Modifier.weight(1f),
-                        )
-                    } else if (member.isSelf) {
-                        StatChip(
-                            label = stringResource(R.string.member_chip_speed),
-                            value = stringResource(R.string.member_chip_speed_value, kmh),
-                            accentColor = MaterialTheme.colorScheme.tertiary,
-                            icon = Icons.Outlined.Speed,
-                            modifier = Modifier.weight(1f),
-                        )
-                    } else {
-                        Spacer(Modifier.weight(1f))
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    // Row 2: Speed+LastSeen za druge, samo LastSeen (full) za self.
-                    if (!member.isSelf) {
-                        StatChip(
-                            label = stringResource(R.string.member_chip_speed),
-                            value = stringResource(R.string.member_chip_speed_value, kmh),
-                            accentColor = MaterialTheme.colorScheme.tertiary,
-                            icon = Icons.Outlined.Speed,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+                    StatChip(
+                        label = stringResource(R.string.member_chip_speed),
+                        value = stringResource(R.string.member_chip_speed_value, kmh),
+                        accentColor = MaterialTheme.colorScheme.tertiary,
+                        icon = Icons.Outlined.Speed,
+                        modifier = Modifier.weight(1f),
+                    )
                     StatChip(
                         label = stringResource(R.string.member_chip_last_seen),
                         value = compactLastSeen(LocalContext.current, member.location?.updatedAt),
@@ -3028,6 +2980,79 @@ private fun MemberDetailSheet(
                         icon = Icons.Outlined.AccessTime,
                         modifier = Modifier.weight(1f),
                     )
+                }
+            } else {
+                // Others: 2×2 grid — Battery + Distance / Speed + Last seen. Distance je
+                // road (Mapbox Directions) sa haversine fallback-om ako API pukne.
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (batt != null && batt in 0..100) {
+                            StatChip(
+                                label = if (charging) stringResource(R.string.member_chip_battery_charging) else stringResource(R.string.member_chip_battery),
+                                value = "$batt%",
+                                accentColor = batteryColor(batt),
+                                icon = if (charging) Icons.Filled.BatteryChargingFull else Icons.Outlined.BatteryFull,
+                                modifier = Modifier.weight(1f),
+                            )
+                        } else {
+                            Spacer(Modifier.weight(1f))
+                        }
+                        if (selfLocation != null && member.location != null) {
+                            val aerialMeters = haversineMeters(
+                                selfLocation.lat, selfLocation.lng,
+                                member.location.lat, member.location.lng,
+                            )
+                            val bearing = if (aerialMeters >= 30.0) {
+                                bearingDegrees(
+                                    selfLocation.lat, selfLocation.lng,
+                                    member.location.lat, member.location.lng,
+                                )
+                            } else 0f
+                            val roadKm = roadDistanceKm
+                            val displayLabel: String
+                            val displayValue: String
+                            when {
+                                !roadDistanceLoaded -> {
+                                    displayLabel = stringResource(R.string.member_chip_distance)
+                                    displayValue = "≈ " + formatDistance(LocalContext.current, aerialMeters)
+                                }
+                                roadKm != null -> {
+                                    displayLabel = stringResource(R.string.member_chip_distance)
+                                    displayValue = formatDistance(LocalContext.current, roadKm * 1000.0)
+                                }
+                                else -> {
+                                    displayLabel = stringResource(R.string.member_chip_distance_aerial)
+                                    displayValue = formatDistance(LocalContext.current, aerialMeters)
+                                }
+                            }
+                            StatChip(
+                                label = displayLabel,
+                                value = displayValue,
+                                accentColor = MaterialTheme.colorScheme.primary,
+                                icon = Icons.Filled.Navigation,
+                                iconRotationDeg = bearing,
+                                modifier = Modifier.weight(1f),
+                            )
+                        } else {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StatChip(
+                            label = stringResource(R.string.member_chip_speed),
+                            value = stringResource(R.string.member_chip_speed_value, kmh),
+                            accentColor = MaterialTheme.colorScheme.tertiary,
+                            icon = Icons.Outlined.Speed,
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatChip(
+                            label = stringResource(R.string.member_chip_last_seen),
+                            value = compactLastSeen(LocalContext.current, member.location?.updatedAt),
+                            accentColor = MaterialTheme.colorScheme.primary,
+                            icon = Icons.Outlined.AccessTime,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
         }
@@ -3050,7 +3075,61 @@ private fun MemberDetailSheet(
         val hasLocation = member.location != null
 
         if (member.isSelf) {
-            // Row 1 self: Refresh + Check-in.
+            // Layout self dugmadi: 2 reda po 3 stavke.
+            //   Row 1 (data/view): [Istorija] [Vožnja] [Prijavi]   — outlined
+            //   Row 2 (live actions): [Osveži] [Podeli] [→ Google Maps]  — Refresh je filled
+            // Grupisano po nameri: gore „pogledaj podatke", dole „live akcije + navigacija".
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (onOpenHistory != null) {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = onOpenHistory,
+                        shape = buttonShape,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+                        modifier = Modifier.weight(1f).height(buttonHeight),
+                    ) {
+                        Icon(Icons.Outlined.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            stringResource(R.string.history_cta_short),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (onOpenDriving != null) {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = onOpenDriving,
+                        shape = buttonShape,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+                        modifier = Modifier.weight(1f).height(buttonHeight),
+                    ) {
+                        Icon(Icons.Outlined.Speed, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            stringResource(R.string.member_driving_cta),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (onCheckIn != null) {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = onCheckIn,
+                        shape = buttonShape,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+                        modifier = Modifier.weight(1f).height(buttonHeight),
+                    ) {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            stringResource(R.string.checkin_button_short),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -3063,104 +3142,48 @@ private fun MemberDetailSheet(
                         },
                         enabled = !refreshTriggered,
                         shape = buttonShape,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
                         modifier = Modifier.weight(1f).height(buttonHeight),
                     ) {
                         Text(
                             if (refreshTriggered) stringResource(R.string.member_refresh_self_done)
-                            else stringResource(R.string.member_refresh_self),
+                            else stringResource(R.string.member_refresh_self_short),
                             maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
-                if (onCheckIn != null) {
+                if (onShareEta != null) {
                     androidx.compose.material3.OutlinedButton(
-                        onClick = onCheckIn,
+                        onClick = onShareEta,
+                        enabled = !hasActiveEtaShare,
                         shape = buttonShape,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
                         modifier = Modifier.weight(1f).height(buttonHeight),
                     ) {
-                        Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
+                        Icon(Icons.Filled.Navigation, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
                         Text(
-                            stringResource(R.string.checkin_button_short),
+                            if (hasActiveEtaShare) stringResource(R.string.eta_share_active_label)
+                            else stringResource(R.string.eta_share_title_short),
                             maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
-            }
-            // Row 2 self: Share ETA + History.
-            if (onShareEta != null || onOpenHistory != null) {
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    if (onShareEta != null) {
-                        androidx.compose.material3.OutlinedButton(
-                            onClick = onShareEta,
-                            shape = buttonShape,
-                            modifier = Modifier.weight(1f).height(buttonHeight),
-                        ) {
-                            Icon(Icons.Filled.Navigation, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                stringResource(R.string.eta_share_title),
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                    if (onOpenHistory != null) {
-                        androidx.compose.material3.OutlinedButton(
-                            onClick = onOpenHistory,
-                            shape = buttonShape,
-                            modifier = Modifier.weight(1f).height(buttonHeight),
-                        ) {
-                            Icon(Icons.Outlined.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                stringResource(R.string.history_cta),
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
-            }
-            // Row 3 self: Trips + Directions icon.
-            if (onOpenDriving != null || hasLocation) {
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    if (onOpenDriving != null) {
-                        androidx.compose.material3.OutlinedButton(
-                            onClick = onOpenDriving,
-                            shape = buttonShape,
-                            modifier = Modifier.weight(1f).height(buttonHeight),
-                        ) {
-                            Icon(Icons.Outlined.Speed, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                stringResource(R.string.member_driving_cta),
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                    if (hasLocation) {
-                        androidx.compose.material3.FilledIconButton(
-                            onClick = onOpenInMaps,
-                            shape = buttonShape,
-                            colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
-                                containerColor = org.krug.app.ui.theme.LogoTeal,
-                                contentColor = Color.White,
-                            ),
-                            modifier = Modifier.size(width = 64.dp, height = buttonHeight),
-                        ) {
-                            Icon(
-                                Icons.Filled.Directions,
-                                contentDescription = stringResource(R.string.action_open_in_google_maps),
-                                modifier = Modifier.size(24.dp),
-                            )
-                        }
+                if (hasLocation) {
+                    androidx.compose.material3.FilledIconButton(
+                        onClick = onOpenInMaps,
+                        shape = buttonShape,
+                        colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
+                            containerColor = org.krug.app.ui.theme.LogoTeal,
+                            contentColor = Color.White,
+                        ),
+                        modifier = Modifier.size(width = 64.dp, height = buttonHeight),
+                    ) {
+                        Icon(
+                            Icons.Filled.Directions,
+                            contentDescription = stringResource(R.string.action_open_in_google_maps),
+                            modifier = Modifier.size(24.dp),
+                        )
                     }
                 }
             }
@@ -3731,16 +3754,26 @@ private fun EtaDestinationPicker(
         title = { Text(stringResource(R.string.eta_share_title)) },
         text = {
             Column {
-                Text(
-                    text = stringResource(R.string.eta_share_pick_destination),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
+                // Bez label-a + explicit outline color, OutlinedTextField border je
+                // nevidljiv na AlertDialog surface-u dok se ne fokusira. Sa label-om
+                // („Adresa"), leading search ikonom i primary outline, polje se odmah
+                // jasno vidi kao input.
                 androidx.compose.material3.OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
                     singleLine = true,
+                    label = { Text(stringResource(R.string.eta_share_input_label)) },
+                    placeholder = { Text(stringResource(R.string.eta_share_pick_destination)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.Navigation,
+                            contentDescription = null,
+                        )
+                    },
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    ),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(12.dp))
@@ -3791,7 +3824,7 @@ private fun EtaDestinationPicker(
 @Composable
 private fun EtaShareBanner(
     share: org.krug.app.core.eta.EtaShareModel,
-    onCancel: () -> Unit,
+    onCancel: (() -> Unit)?,
 ) {
     val arrived = share.arrivedAt != null
     Surface(
@@ -3827,14 +3860,22 @@ private fun EtaShareBanner(
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                // Primary line — ETA time (or "Stigao/la") u velikom fontu.
+                // Primary line — za self: samo ETA („15 min"). Za tuđi share: ime + ETA
+                // („Aleksandar • 15 min") tako da user zna KO je na putu.
+                val isSelf = onCancel != null
+                val primaryText = when {
+                    arrived && isSelf -> stringResource(R.string.eta_share_arrived)
+                    arrived && !isSelf -> "${share.userName.ifBlank { "" }} · ${stringResource(R.string.eta_share_arrived)}"
+                    isSelf -> "${share.etaMinutes} min"
+                    else -> "${share.userName.ifBlank { "" }} · ${share.etaMinutes} min"
+                }
                 Text(
-                    text = if (arrived) stringResource(R.string.eta_share_arrived)
-                    else "${share.etaMinutes} min",
+                    text = primaryText.trim().trimStart('·', ' '),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = if (arrived) MaterialTheme.colorScheme.onTertiaryContainer
                     else MaterialTheme.colorScheme.onPrimaryContainer,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 // Secondary line — destinacija + remaining km. Ako nema destinacije,
                 // prikazujemo generički placeholder umesto em-dash-a.
@@ -3852,7 +3893,7 @@ private fun EtaShareBanner(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (!arrived) {
+            if (!arrived && onCancel != null) {
                 Spacer(Modifier.width(8.dp))
                 androidx.compose.material3.TextButton(
                     onClick = onCancel,

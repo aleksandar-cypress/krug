@@ -224,17 +224,22 @@
     <string name="checkin_toast_failed">Prijava neuspešna. Pokušaj opet.</string>
 
     <!-- ETA sharing -->
-    <string name="eta_channel">Deljenje ETA</string>
-    <string name="eta_channel_desc">Obaveštenja kada član kruga podeli ETA ili je stigao</string>
+    <string name="eta_channel">Deljenje vremena dolaska</string>
+    <string name="eta_channel_desc">Obaveštenja kada član kruga podeli vreme dolaska ili je stigao</string>
     <string name="eta_notif_started_title">%1$s je na putu</string>
-    <string name="eta_notif_started_body">ETA %1$s do %2$s</string>
-    <string name="eta_notif_started_body_no_dest">ETA %1$s</string>
+    <string name="eta_notif_started_body">Stiže za %1$s do %2$s</string>
+    <string name="eta_notif_started_body_no_dest">Stiže za %1$s</string>
     <string name="eta_notif_arrived_title">%1$s je stigao/la</string>
     <string name="eta_notif_arrived_body">Na lokaciji: %1$s</string>
     <string name="eta_notif_arrived_body_no_dest">Bezbedno stigao/la</string>
-    <string name="eta_share_title">Podeli ETA</string>
+    <string name="eta_share_title">Podeli vreme dolaska</string>
+    <string name="eta_share_active_label">Deljenje aktivno</string>
+    <string name="eta_share_title_short">Podeli</string>
+    <string name="history_cta_short">Istorija</string>
+    <string name="member_refresh_self_short">Osveži</string>
     <string name="eta_share_pick_destination">Ukucaj adresu ili mesto</string>
-    <string name="eta_share_confirm">Podeli ETA</string>
+    <string name="eta_share_input_label">Adresa ili mesto</string>
+    <string name="eta_share_confirm">Podeli</string>
     <string name="eta_share_cancel">Prekini deljenje</string>
     <string name="eta_share_arrived">Stigao/la</string>
     <string name="eta_share_dest_unknown">destinaciju</string>
@@ -318,8 +323,8 @@
     <string name="whats_new_subtitle">Četiri nova sigurnosna feature-a za tebe i tvoj krug:</string>
     <string name="whats_new_checkin_title">Safe check-ins</string>
     <string name="whats_new_checkin_body">Dodirni „Stigao/la sam" i krug odmah zna da si bezbedan.</string>
-    <string name="whats_new_eta_title">Deljenje ETA</string>
-    <string name="whats_new_eta_body">Podeli procenu vremena dolaska. Krug prati približavanje u realnom vremenu.</string>
+    <string name="whats_new_eta_title">Deljenje vremena dolaska</string>
+    <string name="whats_new_eta_body">Podeli vreme dolaska. Krug prati približavanje u realnom vremenu.</string>
     <string name="whats_new_speeding_title">Upozorenja o brzini</string>
     <string name="whats_new_speeding_body">Opciono: krug dobija obaveštenje kad pređeš brzinu koju si podesio.</string>
     <string name="whats_new_crash_title">Detekcija pada</string>
