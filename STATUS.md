@@ -2,6 +2,60 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-07-09, kraj dana + hotfix — 1.2.1 u internal testing, čeka production promote)
+
+**INCIDENT: 1.2.0 release je crash-ovao pri launch-u.** Debug APK koji smo ceo dan testirali na S24 preko `adb install` **NE prolazi kroz R8/ProGuard** — potpuno drugi code path od release-a. R8 obfuskuje/renaming, debug ne. Firebase reflection radi na debug-u savršeno, na release-u pao je čim je naišao na obfuskirane POJO klase.
+
+**Crash stack trace (release 1.2.0 na S24):**
+```
+java.lang.RuntimeException: No properties to serialize found on class r8.a
+  at H5.i.<init>(SourceFile:973)  // Firebase CustomClassMapper.BeanMapper
+  at H5.k.g/c (Firestore convertToCustomClass)
+  at y5.g.j (Query.toObject)
+```
+
+**Root cause:** 4 nove Firebase POJO klase iz 32. i 32.5. sesije nisu bile u `proguard-rules.pro`. R8 je obfuskirao field-ove pa Firestore mapper nije mogao ništa da mapira pri prvom fetch-u (koji se dešava odmah pri otvaranju mape preko SOS observer + places observer + speeding/checkin/eta observers).
+
+Fali-le klase:
+- `SpeedingEventModel` (core/speeding/)
+- `CheckInEventModel` (core/checkin/)
+- `EtaShareModel` (core/eta/)
+- `DeviceModel` (core/device/)
+
+`@ServerTimestamp` fallback rule (`-keepclasseswithmembers ... @ServerTimestamp <fields>`) nije bio dovoljan jer:
+- Keep-uje samo annotated fields, ne ceo class (ostali fields obfuskirani)
+- `DeviceModel` uopšte nema `@ServerTimestamp` field (koristi `Long lastActiveMs`)
+
+**Hotfix commit `e35dd48`:**
+- Eksplicitne `-keep` + `-keepclassmembers` rules za sve 4 klase u `app/proguard-rules.pro`
+- Version bump: 1.2.0 (versionCode 11) → **1.2.1 (versionCode 12)**
+- Testiran preko `./gradlew :app:assembleRelease` + `adb install` release APK-a na S24 (SM-S928B) — mapa se otvara, nema crash-a
+
+**Trenutno stanje:**
+- **1.2.1 uploaded na Play Console → Internal testing** (Jul 9 11:21)
+- **Nije još promovisan u Production** — čeka Aleksandar da završi kratki smoke test kroz Play Store internal track pa promote
+- 1.2.0 je STILL u produkciji i crash-uje kod svih koji su updejtovali — **kritično da 1.2.1 zameni što pre**
+
+**Proces lesson (za budućnost):**
+- Pre `bundleRelease` obavezno `assembleRelease` + `adb install` release APK-a na fizički uređaj + klik-around test (mapa, member sheet, Places, History, Settings)
+- Debug build **ne otkriva** R8 reflection issues — mora se testirati minified release
+- Novi Firebase POJO klase → automatski dodati u `proguard-rules.pro` u istom commit-u (ne odlagati)
+- Ne oslanjati se na `@ServerTimestamp` fallback rule — pokriva samo klase koje imaju taj annotation
+
+**Sledeći koraci za Aleksandra (posle odmora ili odmah kad ima vremena):**
+1. Otvori Play Store na S24 → Krug → Update na 1.2.1 iz internal track-a
+2. Otvori app, verifikuj: mapa se otvara, članovi se učitavaju, klik na člana otvara sheet bez crash-a, Places rade, History radi
+3. Play Console → Internal testing → **Promote release → Production**
+4. Preporučen staged rollout: 20% dan 1, 50% dan 2, 100% dan 3. Ako se pojavi crash u Crashlytics kod 20%, halt-uješ rollout pre nego što svi dobiju.
+
+**Šta preostaje posle 1.2.1 stabilizacije:**
+- Real-device crash detection test (4g threshold, u autu)
+- Multi-device test (Jelenin telefon + isti Google)
+- ETA share live update na terenu
+- Screen time report u child modu (user pokazao interes) — 2-3 dana kad se vrati
+
+---
+
 ## Gde smo stali (2026-07-09, kraj dana — 1.2.0 AAB spreman, ide na Play Store, ja idem na odmor)
 
 Kraj dugačkog produktivnog dana. **1.2.0 AAB je build-ovan i signed** (`app/build/outputs/bundle/release/app-release.aab`, 37MB). Aleksandar uploaduje na Play Console kada bude imao vremena. Landing update-ovan i push-ovan na cPanel već.
