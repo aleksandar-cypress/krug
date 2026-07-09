@@ -87,8 +87,22 @@ fun HistoryScreen(
     // range.fromMs/toMs (00:00-23:59) samo ako nema point-a (empty state ionako pokrivamo
     // odvojeno). Za današnji dan max se coerce-uje ka NOW ako je poslednji point stariji
     // (user zna da je live, showuje "sada" umesto "pre 10 min").
+    //
+    // effectiveFromMs preskače statični period na početku dana: FGS piše lokaciju svakih
+    // 15min čak i dok je user na kuci, pa bi playback pokazivao par sati „mrtvog" perioda
+    // pre prvog stvarnog kretanja. Umesto toga, počinjemo 1h pre prve tačke koja je > 100m
+    // udaljena od prethodne. Bounded na prvi realan point da ne skoči van dana.
     val now = System.currentTimeMillis()
-    val effectiveFromMs = points.firstOrNull()?.timestamp?.time ?: range.fromMs
+    val effectiveFromMs = run {
+        val firstPointMs = points.firstOrNull()?.timestamp?.time ?: return@run range.fromMs
+        val firstMovementMs = findFirstMovementMs(points, minStepMeters = 100.0)
+        if (firstMovementMs != null) {
+            val oneHourBefore = firstMovementMs - 60 * 60_000L
+            maxOf(firstPointMs, oneHourBefore)
+        } else {
+            firstPointMs
+        }
+    }
     val effectiveToMs = run {
         val lastPointMs = points.lastOrNull()?.timestamp?.time ?: return@run range.toMs
         val isToday = now in range.fromMs..range.toMs
@@ -512,6 +526,29 @@ private fun computeHasMovement(
     val res = FloatArray(1)
     android.location.Location.distanceBetween(minLat, minLng, maxLat, maxLng, res)
     return res[0] > minSpanMeters
+}
+
+/**
+ * Vraća timestamp prve tačke koja je > `minStepMeters` udaljena od prethodne — tj.
+ * trenutak kada je user stvarno počeo da se kreće (a ne samo periodični publish dok je
+ * stajao). Ako user nije mrdao (svi points klasterisani), vraća null. Koristi se za
+ * scrub start point tako da playback ne pokazuje sate „mrtvog" perioda pre kretanja.
+ */
+private fun findFirstMovementMs(
+    points: List<org.krug.app.core.location.LocationHistoryPoint>,
+    minStepMeters: Double,
+): Long? {
+    if (points.size < 2) return null
+    val res = FloatArray(1)
+    for (i in 1 until points.size) {
+        val prev = points[i - 1]
+        val cur = points[i]
+        android.location.Location.distanceBetween(prev.lat, prev.lng, cur.lat, cur.lng, res)
+        if (res[0] > minStepMeters) {
+            return cur.timestamp?.time
+        }
+    }
+    return null
 }
 
 private data class HistoryStats(
