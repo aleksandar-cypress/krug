@@ -60,7 +60,6 @@ import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createPolylineAnnotationManager
 import com.mapbox.maps.plugin.locationcomponent.location
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Locale
 import org.krug.app.R
 

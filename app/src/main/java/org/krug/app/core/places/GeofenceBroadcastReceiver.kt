@@ -80,22 +80,10 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
          * GPS drift bio dovoljan (ili verify fallback vratio null i propustio event bez
          * distance provere). 100m prag traži drift ≥ radius+100m da bi se EXIT priznao —
          * realno samo pri fizičkom izlasku iz zone. Dodatno je uveden semantički guard
-         * (lastTransitionTypeByPlace) koji blokira ENTER→ENTER bez EXIT-a između.
+         * (persist-uje se u `LocalPrefs.loadPlaceTransitionTypes()`) koji blokira
+         * ENTER→ENTER bez EXIT-a između.
          */
         private const val PHANTOM_THRESHOLD_M = 100
-
-        /**
-         * Per-place last-transition-type guard. Semantički filter: ne dozvoli dva
-         * uzastopna ENTER-a (ili EXIT-a) za isti placeId bez event-a suprotnog tipa
-         * između. Nadgradnja iznad distance filter-a — čak i ako phantom EXIT nekako
-         * prođe distance provjeru, ovaj čuvar spreči da drugi ENTER stigne kao notif.
-         *
-         * Persistira se u `LocalPrefs.loadPlaceTransitionTypes()` (bilo je in-memory
-         * do 1.2.3): Doze wake/process death je resetovao mapu, pa je prvi EXIT posle
-         * restart-a prolazio kao „prvi legitiman" iako je bio phantom. Prefs preživljava
-         * process kill i omogućava fail-closed politiku za EXIT bez GPS verify-a
-         * (ispod, u onReceive).
-         */
 
         /**
          * "Jeftin verify" kvalifikacija — ako `event.triggeringLocation` ispunjava

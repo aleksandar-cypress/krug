@@ -3546,14 +3546,12 @@ private fun PermissionWarningBanner(onOpenSettings: (onlyNotifsMissing: Boolean)
     // Inicijalni check izvršiti sinhronizovano da banner odmah pokaže stanje pri prvom
     // composition-u; bez ovog, čekamo prvi ON_RESUME event koji ne dolazi na initial
     // mount pa user vidi mapu bez banner-a iako mu nedostaju permission-i.
-    var missingPermissions by remember { mutableStateOf(computeMissingPermissions(context)) }
-    var onlyNotifsMissing by remember { mutableStateOf(isOnlyNotifsMissing(context)) }
+    var snapshot by remember { mutableStateOf(computeMissingPermsSnapshot(context)) }
 
     DisposableEffect(lifecycle) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                missingPermissions = computeMissingPermissions(context)
-                onlyNotifsMissing = isOnlyNotifsMissing(context)
+                snapshot = computeMissingPermsSnapshot(context)
             }
         }
         lifecycle.addObserver(observer)
@@ -3561,7 +3559,7 @@ private fun PermissionWarningBanner(onOpenSettings: (onlyNotifsMissing: Boolean)
     }
 
     AnimatedVisibility(
-        visible = missingPermissions.isNotEmpty(),
+        visible = snapshot.labels.isNotEmpty(),
         enter = expandVertically() + fadeIn(),
         exit = shrinkVertically() + fadeOut(),
     ) {
@@ -3571,7 +3569,7 @@ private fun PermissionWarningBanner(onOpenSettings: (onlyNotifsMissing: Boolean)
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .clickable { onOpenSettings(onlyNotifsMissing) },
+                    .clickable { onOpenSettings(snapshot.onlyNotifsMissing) },
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.errorContainer,
             ) {
@@ -3595,7 +3593,7 @@ private fun PermissionWarningBanner(onOpenSettings: (onlyNotifsMissing: Boolean)
                         Text(
                             text = stringResource(
                                 R.string.permission_banner_body,
-                                missingPermissions.joinToString(" · "),
+                                snapshot.labels.joinToString(" · "),
                             ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer,
@@ -3719,42 +3717,42 @@ private fun SelfShareBrokenBanner(onOpenReliability: () -> Unit) {
     }
 }
 
-private fun computeMissingPermissions(context: android.content.Context): List<String> {
-    // Banner lista SAMO runtime permissions (location/bg location/notifications) koje user
-    // mora eksplicitno da grant-uje. Battery-opt i activity-recognition su tretirani odvojeno
-    // (onboarding, startup dialog, Settings > Location reliability) jer meshanje "permission"
-    // i "OS setting" u istom banner-u konfuzira user-a — misli da je to nova permisija.
-    val missing = mutableListOf<String>()
-    if (!org.krug.app.core.permissions.PermissionUtils.hasForegroundLocation(context)) {
-        missing += context.getString(R.string.permission_missing_location)
-    }
-    if (org.krug.app.core.permissions.PermissionUtils.needsBackgroundLocationPermission &&
-        !org.krug.app.core.permissions.PermissionUtils.hasBackgroundLocation(context)
-    ) {
-        missing += context.getString(R.string.permission_missing_location_background)
-    }
-    // Notif check: uklonjen `needsNotificationsPermission` gate — sada koristimo
-    // NotificationManagerCompat.areNotificationsEnabled() koji radi za sve verzije
-    // (i za < 13 gde user može disable-ovati u system settings-ima, npr. Family Link
-    // parent-lock scenario koji se desio Jani).
-    if (!org.krug.app.core.permissions.PermissionUtils.hasNotifications(context)) {
-        missing += context.getString(R.string.permission_missing_notifications)
-    }
-    return missing
-}
-
 /**
- * True ako je JEDINO notif ugašeno — druga runtime permission-a su OK. Koristimo za
- * bolji UX na banner tap-u: kad je samo notif problem, idemo direktno na notif screen
- * (bez lutanja kroz App details). Family Link/preteens često nemaju iskustvo sa
- * generic App details ekranom.
+ * Snapshot missing-permission stanja u jednom prolazu. Vraća listu lokalizovanih
+ * label-a (za banner body) + boolean da li je JEDINO notif problem (za bolji UX na
+ * tap-u — kad je samo notif, idemo direktno na notif settings screen umesto app
+ * details). Bez ovog data class-a smo dva puta pozivali iste PermissionUtils
+ * helper-e na svaki ON_RESUME event.
+ *
+ * Banner lista SAMO runtime permissions (location/bg location/notifications) koje
+ * user mora eksplicitno da grant-uje. Battery-opt i activity-recognition su
+ * tretirani odvojeno (onboarding, startup dialog, Settings > Location reliability)
+ * jer meshanje „permission" i „OS setting" u istom banner-u konfuzira user-a.
+ *
+ * Notif check: uklonjen `needsNotificationsPermission` gate — sada koristimo
+ * `NotificationManagerCompat.areNotificationsEnabled()` koji radi za sve verzije
+ * (i za < 13 gde user može disable-ovati u system settings-ima, npr. Family Link
+ * parent-lock scenario koji se desio Jani).
  */
-private fun isOnlyNotifsMissing(context: android.content.Context): Boolean {
-    val hasLoc = org.krug.app.core.permissions.PermissionUtils.hasForegroundLocation(context)
-    val hasBg = !org.krug.app.core.permissions.PermissionUtils.needsBackgroundLocationPermission ||
-        org.krug.app.core.permissions.PermissionUtils.hasBackgroundLocation(context)
-    val hasNotif = org.krug.app.core.permissions.PermissionUtils.hasNotifications(context)
-    return hasLoc && hasBg && !hasNotif
+private data class MissingPermsSnapshot(
+    val labels: List<String>,
+    val onlyNotifsMissing: Boolean,
+)
+
+private fun computeMissingPermsSnapshot(context: android.content.Context): MissingPermsSnapshot {
+    val perms = org.krug.app.core.permissions.PermissionUtils
+    val hasLoc = perms.hasForegroundLocation(context)
+    val hasBg = !perms.needsBackgroundLocationPermission || perms.hasBackgroundLocation(context)
+    val hasNotif = perms.hasNotifications(context)
+    val labels = buildList {
+        if (!hasLoc) add(context.getString(R.string.permission_missing_location))
+        if (!hasBg) add(context.getString(R.string.permission_missing_location_background))
+        if (!hasNotif) add(context.getString(R.string.permission_missing_notifications))
+    }
+    return MissingPermsSnapshot(
+        labels = labels,
+        onlyNotifsMissing = hasLoc && hasBg && !hasNotif,
+    )
 }
 
 @Composable
