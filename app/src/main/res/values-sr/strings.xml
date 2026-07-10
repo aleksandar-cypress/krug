@@ -188,7 +188,7 @@
     <string name="battery_alert_channel">Upozorenja o bateriji</string>
     <string name="battery_alert_channel_desc">Obaveštenja kada član kruga ima nisku bateriju</string>
     <string name="battery_alert_title">%1$s: niska baterija (%2$d%%)</string>
-    <string name="battery_alert_body">Baterija ispod 20%%. Javi im se da napune telefon.</string>
+    <string name="battery_alert_body">Baterija ispod 20%. Javi im se da napune telefon.</string>
     <string name="battery_alert_unknown_sender">Član kruga</string>
     <string name="settings_battery_alerts">Upozorenja o bateriji</string>
     <string name="settings_battery_alerts_subtitle">Obavesti me kada član padne ispod 20%</string>
@@ -636,4 +636,6 @@
     <string name="diagnostics_section_permissions">Dozvole</string>
     <string name="diagnostics_section_identity">Identitet</string>
     <string name="diagnostics_section_device">Uređaj</string>
+    <string name="diagnostics_send_report">Pošalji izveštaj Aleksandru</string>
+    <string name="diagnostics_send_no_email_app">Nema email aplikacije na uređaju.</string>
 </resources>

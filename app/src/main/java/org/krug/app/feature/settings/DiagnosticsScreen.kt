@@ -3,7 +3,10 @@ package org.krug.app.feature.settings
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,10 +39,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.location.DetectedActivity
 import com.google.firebase.auth.FirebaseAuth
+import org.krug.app.BuildConfig
 import org.krug.app.R
 import org.krug.app.core.location.LocationTrackingService
 import org.krug.app.core.permissions.PermissionUtils
 import org.krug.app.core.util.DeviceNames
+import timber.log.Timber
 
 private fun activityName(type: Int): String = when (type) {
     DetectedActivity.IN_VEHICLE -> "VEHICLE"
@@ -83,23 +88,41 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                     item { Spacer(Modifier.size(8.dp)) }
                 }
             }
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // Primarna akcija za internal testere — jednim tap-om otvara mailer sa
+                // pre-fill body-jem koji sadrži dijagnostiku (perms, FGS status, device,
+                // version). Tester samo dopiše šta se desilo i pošalje. Bez ovog dugmeta
+                // izveštaji stižu usmeno („nešto je puklo") pa Aleksandar mora naknadno
+                // da pita za ove iste vrednosti — mailto pattern eliminiše cikluse.
                 Button(
-                    onClick = { refreshTick++ },
-                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        sendFeedbackEmail(context, snapshot)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(stringResource(R.string.action_refresh))
+                    Text(stringResource(R.string.diagnostics_send_report))
                 }
-                Button(
-                    onClick = { copyToClipboard(context, snapshot.toClipboardText()) },
-                    modifier = Modifier.weight(1f),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(stringResource(R.string.action_copy_all))
+                    Button(
+                        onClick = { refreshTick++ },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.action_refresh))
+                    }
+                    Button(
+                        onClick = { copyToClipboard(context, snapshot.toClipboardText()) },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.action_copy_all))
+                    }
                 }
             }
         }
@@ -167,6 +190,14 @@ private fun collectSnapshot(context: Context): DiagSnapshot {
     return DiagSnapshot(
         sections = listOf(
             DiagSection(
+                title = "App",
+                rows = listOf(
+                    "versionName" to BuildConfig.VERSION_NAME,
+                    "versionCode" to BuildConfig.VERSION_CODE.toString(),
+                    "buildType" to BuildConfig.BUILD_TYPE,
+                ),
+            ),
+            DiagSection(
                 title = "FGS (Location Tracking Service)",
                 rows = listOf(
                     "isRunning" to LocationTrackingService.isRunning.get().toString(),
@@ -210,4 +241,38 @@ private fun collectSnapshot(context: Context): DiagSnapshot {
 private fun copyToClipboard(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("Krug dijagnostika", text))
+}
+
+/**
+ * Otvara sistemski mailer sa pre-fill body-jem = full dijagnostika. Testeri dodaju
+ * kratak opis šta se desilo i pošalju. `ACTION_SENDTO` sa mailto: URI-jem forsira
+ * samo email app-ove da rezultuju u chooser-u (bez SMS/generic share targeta).
+ *
+ * Za email placeholder ostavljamo prazno „napiši šta se desilo…" markiran red na
+ * vrhu — user zna gde da tapne i piše. Bez tog nudge-a, tester samo šalje golu
+ * dijagnostiku bez konteksta.
+ */
+private fun sendFeedbackEmail(context: Context, snapshot: DiagSnapshot) {
+    val versionName = BuildConfig.VERSION_NAME
+    val versionCode = BuildConfig.VERSION_CODE
+    val device = DeviceNames.friendly("${Build.MANUFACTURER} ${Build.MODEL}")
+    val subject = "Krug problem — $device — $versionName ($versionCode)"
+    val body = buildString {
+        appendLine("[Napiši šta se desilo — koraci, vreme, koje ekran, koji član kruga:]")
+        appendLine()
+        appendLine()
+        appendLine("---")
+        append(snapshot.toClipboardText())
+    }
+    val uri = Uri.parse(
+        "mailto:aleksandarr@gmail.com?subject=" +
+            Uri.encode(subject) +
+            "&body=" + Uri.encode(body),
+    )
+    val intent = Intent(Intent.ACTION_SENDTO, uri)
+    runCatching { context.startActivity(intent) }
+        .onFailure {
+            Timber.w(it, "DiagnosticsScreen: no email app resolved intent")
+            Toast.makeText(context, R.string.diagnostics_send_no_email_app, Toast.LENGTH_LONG).show()
+        }
 }

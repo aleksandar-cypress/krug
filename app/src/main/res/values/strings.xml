@@ -184,7 +184,7 @@
     <string name="battery_alert_channel">Battery alerts</string>
     <string name="battery_alert_channel_desc">Notifications when a circle member has low battery</string>
     <string name="battery_alert_title">%1$s: low battery (%2$d%%)</string>
-    <string name="battery_alert_body">Battery below 20%%. Consider reaching out so they can charge.</string>
+    <string name="battery_alert_body">Battery below 20%. Consider reaching out so they can charge.</string>
     <string name="battery_alert_unknown_sender">Circle member</string>
     <string name="settings_battery_alerts">Battery alerts</string>
     <string name="settings_battery_alerts_subtitle">Notify me when a member drops under 20%</string>
@@ -633,4 +633,6 @@
     <string name="diagnostics_section_permissions">Permissions</string>
     <string name="diagnostics_section_identity">Identity</string>
     <string name="diagnostics_section_device">Device</string>
+    <string name="diagnostics_send_report">Send report to Aleksandar</string>
+    <string name="diagnostics_send_no_email_app">No email app is installed on this device.</string>
 </resources>

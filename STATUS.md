@@ -41,6 +41,18 @@ Cilj 1.2.3: sakupiti 5 fix-a koji su prijavljeni jutros pre odlaska na odmor. Ni
 - Nov `openNotificationSettings(activity)` — `ACTION_APP_NOTIFICATION_SETTINGS` intent za direktno otvaranje notif screen-a bez lutanja po App details-u. Fallback na app details ako OEM ROM ne podržava
 - `PermissionWarningBanner` prima `onOpenSettings: (onlyNotifsMissing: Boolean) -> Unit`. Kad je JEDINO notif problem, tap ide direktno na notif settings; inače na app details
 
+**#6 `battery_alert_body` %% typo u produkcionoj notifikaciji**
+`values/strings.xml` + `values-sr/strings.xml`:
+- „Battery below 20%%. Consider reaching out..." — isti bug klase kao #2. Poziva se preko `getString(id)` bez args-a, pa `%%` renderuje kao literal. Svaka battery notif od 1.2.0 je pisala „20%%" u body-ju. Fix: `%%` → `%`
+- `battery_alert_title` = `%1$s: low battery (%2$d%%)` OSTAJE — ima format args (`%1$s`, `%2$d`), pa je `%%` legitiman escape
+
+**#7 Feedback button u Diagnostics (Aleksandar backchannel za odmor)**
+`DiagnosticsScreen.kt` + `values/strings.xml` + `values-sr/strings.xml`:
+- Novi „Pošalji izveštaj Aleksandru" button ide na fillMaxWidth iznad Refresh/Copy row-a
+- Otvara mailto: intent (`ACTION_SENDTO`) na `aleksandarr@gmail.com`, subject = „Krug problem — <device> — <version>", body = placeholder red („Napiši šta se desilo…") + full dijagnostika (App/FGS/Perms/Identity/Device snapshot)
+- Nova „App" sekcija u snapshot-u: versionName, versionCode, buildType — testeri i Aleksandar znaju exact build koji je u pitanju
+- Toast fallback ako user nema email app (retko na modernim Android-ima)
+
 ### R8 sanity check (per 1.2.1 postmortem lesson)
 
 Pre `bundleRelease`, obavezno:
@@ -62,7 +74,14 @@ Sve prošlo, „What's new in 1.2" modal se pojavio kao očekivano (i dalje majo
 - Multi-device test (Jelenin telefon + isti Google) — treba fizička provera na terenu
 - ETA share live update na 5min voznja — treba real drive test
 - Real-device crash detection (4g threshold) — treba dropovanje telefona u autu
-- Screen time report u child modu (~2-3 dana rada) — feature request, ne bug
+
+### Widget audit
+
+Grep za `widget|Widget|AppWidget|glance` prošao — jedini pogodak je `android.widget.Toast` (standardni Android class za snackbar, ne app-widget). Iz „widget experiment" 1.2.0 sesije nema ni jednog fajla, ni resursa, ni gradle deps-a. Čisto.
+
+### Screen time report u child modu — feature izbačen iz plana
+
+Ranije je bio u „Preostaje" listi kao 2-3 dana rada. Odluka 2026-07-10: izbaciti u potpunosti kao planirani feature. Razlog: uzrokuje distraction od bug-a koji stižu iz produkcije, a nije osnovna funkcija Krug-a (location sharing, ne parental control screen tracker). Ako u budućnosti postane relevantno — otvoriti kao poseban thread.
 
 ### Rizici
 
