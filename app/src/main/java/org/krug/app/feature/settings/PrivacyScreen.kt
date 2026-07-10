@@ -1,5 +1,6 @@
 package org.krug.app.feature.settings
 
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChildCare
 import androidx.compose.material3.FilterChip
@@ -168,8 +170,14 @@ fun PrivacyScreen(
         title = stringResource(R.string.privacy_title),
         onBack = onBack,
     ) { _ ->
+        // Privacy content ima 8+ toggle-a (Sharing, 3 Notifications, 2 Driving, itd.) i
+        // uveče na S24 (6.2") prelazi visinu ekrana → sve ispod Battery alerts je bilo
+        // nedostupno (nema scroll-a). verticalScroll otključa Silent hours, Speeding,
+        // Crash detection.
         Column(
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (state.isChildAnywhere) {

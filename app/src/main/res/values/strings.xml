@@ -187,7 +187,7 @@
     <string name="battery_alert_body">Battery below 20%%. Consider reaching out so they can charge.</string>
     <string name="battery_alert_unknown_sender">Circle member</string>
     <string name="settings_battery_alerts">Battery alerts</string>
-    <string name="settings_battery_alerts_subtitle">Notify me when a member drops under 20%%</string>
+    <string name="settings_battery_alerts_subtitle">Notify me when a member drops under 20%</string>
 
     <!-- Privacy screen sections -->
     <string name="privacy_section_sharing">Sharing</string>

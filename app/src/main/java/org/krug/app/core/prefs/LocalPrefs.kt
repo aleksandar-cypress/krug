@@ -208,6 +208,34 @@ class LocalPrefs @Inject constructor(
     }
 
     /**
+     * Persistent per-place last transition type ("ENTER" ili "EXIT"). Koristi
+     * `GeofenceBroadcastReceiver` kao semantic guard + fail-closed za EXIT kad
+     * GPS verify ne uspe.
+     *
+     * Bez persistence-a (samo in-memory u companion), Doze wake/process death
+     * resetuje state — prvi EXIT posle restart-a nema prior ENTER u memoriji pa
+     * phantom EXIT prolazi kao „prvi legitiman". Prefs čuvaju state između procesa.
+     *
+     * Format: "placeId1:TYPE1,placeId2:TYPE2,..." (jeftin string serialize).
+     */
+    fun loadPlaceTransitionTypes(): MutableMap<String, String> {
+        val raw = prefs.getString(KEY_PLACE_TRANSITION_TYPE, null).orEmpty()
+        if (raw.isBlank()) return mutableMapOf()
+        return raw.split(',').mapNotNull { entry ->
+            val parts = entry.split(':')
+            if (parts.size != 2) return@mapNotNull null
+            val pid = parts[0]
+            val type = parts[1]
+            if (pid.isBlank() || type.isBlank()) null else pid to type
+        }.toMap().toMutableMap()
+    }
+
+    fun savePlaceTransitionTypes(map: Map<String, String>) {
+        val serialized = map.entries.joinToString(",") { "${it.key}:${it.value}" }
+        prefs.edit(commit = false) { putString(KEY_PLACE_TRANSITION_TYPE, serialized) }
+    }
+
+    /**
      * GDPR — pozvati nakon delete-account ili reinstall recovery-ja. Briše sve per-account
      * state da novi sign-in ne nasledi stari `activeCircleId` (ne postoji više), `sos_notified`
      * dedup ili `onboardingCompleted` flag (novi nalog treba čist onboarding). `pendingDeleteUid`
@@ -221,6 +249,7 @@ class LocalPrefs @Inject constructor(
             remove(KEY_ACTIVITY_REC_PROMPT_SHOWN)
             remove(KEY_LAST_SEEN_PLACE_EVENT_TS)
             remove(KEY_BATTERY_ALERTED)
+            remove(KEY_PLACE_TRANSITION_TYPE)
         }
         _activeCircleId.value = null
     }
@@ -239,5 +268,6 @@ class LocalPrefs @Inject constructor(
         const val DEFAULT_MAP_STYLE_KEY = "STANDARD"
         const val KEY_BATTERY_ALERTED = "battery_alerted_ts"
         const val KEY_DEVICE_ID = "device_id"
+        const val KEY_PLACE_TRANSITION_TYPE = "place_transition_type"
     }
 }

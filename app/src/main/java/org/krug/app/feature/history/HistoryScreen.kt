@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -50,7 +51,9 @@ import com.mapbox.maps.Style
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
@@ -77,6 +80,15 @@ fun HistoryScreen(
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var polylineManager by remember { mutableStateOf<PolylineAnnotationManager?>(null) }
     var pointManager by remember { mutableStateOf<com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager?>(null) }
+    // Split annotation refs: statične (place pinovi + start marker) i dinamične (polyline
+    // + current position marker). Bez ovog splita, svaki 50ms playback tick pozivao je
+    // `pm.deleteAll()` + `create()` — između delete i create render pipeline pokazuje
+    // prazan frame, pa user vidi treperenje linije. Sada dinamične update-ujemo preko
+    // `manager.update(annotation)` (in-place mutacija), a statične re-render-ujemo samo
+    // kada se stvarno menjaju places/points podaci (dan promena).
+    var polylineAnn by remember { mutableStateOf<PolylineAnnotation?>(null) }
+    var currentMarkerAnn by remember { mutableStateOf<PointAnnotation?>(null) }
+    val staticAnns = remember { mutableStateListOf<PointAnnotation>() }
     // Scrub-ratio 0..1 mapiran na EFEKTIVNI range dana (prvi → poslednji point), ne na
     // 24h. Bez ovog, scrubbar spans 24h ali user je aktivan samo 3h → dve trećine slajdera
     // su "mrtve" (00:00-08:00, 20:00-23:59). Sa effective range: slajder ceo pokriva
@@ -130,15 +142,18 @@ fun HistoryScreen(
         if (scrubTime >= 1f) playing = false
     }
 
-    // Kad se promene point-i ili scrub, re-render polyline + start/end markere + Places pinove.
-    LaunchedEffect(points, activePlaces, scrubTime, polylineManager, pointManager) {
-        val pm = polylineManager ?: return@LaunchedEffect
+    // STATIC annotations — place pinovi + start marker. Re-render samo kad se stvarno
+    // menjaju podaci (dan promena, activePlaces update). Ne zavise od scrubTime, pa ih
+    // ne diramo tokom playback-a — bez ovog svaki 50ms tick brisao je i praviše iznova
+    // sve pinove što je izazivalo flicker.
+    LaunchedEffect(activePlaces, points, pointManager) {
         val ptm = pointManager ?: return@LaunchedEffect
-        pm.deleteAll()
-        ptm.deleteAll()
-        // 1) Places pinovi — statični, ne zavise od scrub-a.
+        // Očisti prethodne statične (nova dnevna data ili refresh places)
+        staticAnns.forEach { runCatching { ptm.delete(it) } }
+        staticAnns.clear()
+        // 1) Places pinovi
         activePlaces.forEach { place ->
-            ptm.create(
+            val ann = ptm.create(
                 PointAnnotationOptions()
                     .withPoint(Point.fromLngLat(place.lng, place.lat))
                     .withIconImage(
@@ -152,76 +167,123 @@ fun HistoryScreen(
                     .withTextHaloColor("#FFFFFF")
                     .withTextHaloWidth(1.5),
             )
+            staticAnns.add(ann)
         }
-        if (points.isEmpty()) return@LaunchedEffect
-        // Cutoff interpolira preko EFEKTIVNOG range-a (prvi → poslednji point), ne preko
-        // 24h intervala. scrubTime=0 → prvi point, scrubTime=1 → poslednji point / NOW.
-        val cutoff = effectiveFromMs + ((effectiveToMs - effectiveFromMs) * scrubTime).toLong()
-        val visible = points.filter { p -> (p.timestamp?.time ?: 0L) <= cutoff }
-        // Start marker — prva tačka dana (zelena)
+        // 2) Start marker — prva tačka dana (zelena)
         points.firstOrNull()?.let { start ->
-            ptm.create(
+            val ann = ptm.create(
                 PointAnnotationOptions()
                     .withPoint(Point.fromLngLat(start.lng, start.lat))
                     .withIconImage(
                         org.krug.app.feature.map.MapMarkers.dotMarker(context, "#10B981"),
                     ),
             )
+            staticAnns.add(ann)
         }
-        // Current position marker — poslednja visible tačka (indigo, veća od start-a)
-        visible.lastOrNull()?.let { cur ->
-            ptm.create(
-                PointAnnotationOptions()
-                    .withPoint(Point.fromLngLat(cur.lng, cur.lat))
-                    .withIconImage(
-                        org.krug.app.feature.map.MapMarkers.dotMarker(context, "#4F46E5", size = 18f),
-                    ),
+    }
+
+    // DYNAMIC annotations — polyline + current position marker. Update-uje se in-place
+    // preko `manager.update(ann)` umesto delete+create, pa render pipeline ne pokazuje
+    // prazan frame između tick-ova. Rezultat: linija se glatko produžava tokom playback-a
+    // bez treperenja.
+    LaunchedEffect(points, scrubTime, polylineManager, pointManager) {
+        val pm = polylineManager ?: return@LaunchedEffect
+        val ptm = pointManager ?: return@LaunchedEffect
+        if (points.isEmpty()) {
+            polylineAnn?.let { runCatching { pm.delete(it) } }
+            polylineAnn = null
+            currentMarkerAnn?.let { runCatching { ptm.delete(it) } }
+            currentMarkerAnn = null
+            return@LaunchedEffect
+        }
+        // Cutoff interpolira preko EFEKTIVNOG range-a (prvi → poslednji point), ne preko
+        // 24h intervala. scrubTime=0 → prvi point, scrubTime=1 → poslednji point / NOW.
+        val cutoff = effectiveFromMs + ((effectiveToMs - effectiveFromMs) * scrubTime).toLong()
+        val visible = points.filter { p -> (p.timestamp?.time ?: 0L) <= cutoff }
+
+        // Current position marker — poslednja visible tačka (indigo, veća od start-a).
+        // Update in-place ako već postoji, create ako je prvi tick.
+        val curPoint = visible.lastOrNull()?.let { Point.fromLngLat(it.lng, it.lat) }
+        if (curPoint != null) {
+            val existing = currentMarkerAnn
+            if (existing == null) {
+                currentMarkerAnn = ptm.create(
+                    PointAnnotationOptions()
+                        .withPoint(curPoint)
+                        .withIconImage(
+                            org.krug.app.feature.map.MapMarkers.dotMarker(context, "#4F46E5", size = 18f),
+                        ),
+                )
+            } else {
+                existing.point = curPoint
+                ptm.update(existing)
+            }
+        } else {
+            currentMarkerAnn?.let { runCatching { ptm.delete(it) } }
+            currentMarkerAnn = null
+        }
+
+        // Polyline — update geometry in-place, ili create pri prvom tick-u.
+        if (visible.size >= 2) {
+            val line = LineString.fromLngLats(
+                visible.map { Point.fromLngLat(it.lng, it.lat) },
             )
+            val existing = polylineAnn
+            if (existing == null) {
+                polylineAnn = pm.create(
+                    PolylineAnnotationOptions()
+                        .withGeometry(line)
+                        .withLineColor("#4F46E5")
+                        .withLineWidth(4.0),
+                )
+            } else {
+                existing.geometry = line
+                pm.update(existing)
+            }
+        } else {
+            polylineAnn?.let { runCatching { pm.delete(it) } }
+            polylineAnn = null
         }
-        if (visible.size < 2) return@LaunchedEffect
-        val line = LineString.fromLngLats(
-            visible.map { Point.fromLngLat(it.lng, it.lat) },
-        )
-        pm.create(
-            PolylineAnnotationOptions()
-                .withGeometry(line)
-                .withLineColor("#4F46E5")
-                .withLineWidth(4.0),
-        )
-        // Fit bounds SAMO prvi put kad points za taj dan stignu — kasnije user ima punu
-        // manuelnu kontrolu (pinch zoom, pan). Bez ovog: scrub bi svaki put resetovao
-        // camera i user ne bi mogao da zumira detalje.
-        //
-        // cameraForCoordinates sa padding-om (a ne manual center + fixed zoom 13.0) —
-        // ranije je fixed zoom značio da duži putevi (npr. Beograd → Novi Sad) ispadaju
-        // van view-a i user je morao ručno da zumira out. Padding pokriva TopBar (~120px
-        // sa system UI) + scrub kontrole (~260px sa slajder-om i action redovima) — bez
-        // ovog polilinija bi ušla ispod donjih kontrola.
-        //
-        // Delay 250ms: cameraForCoordinates zahteva da je map view layout completed
-        // (nenula dimenzije). LaunchedEffect fajruje čim polylineManager postane != null,
-        // ali AndroidView layout može još da bude 0x0 u tom trenutku → cameraForCoordinates
-        // vraća default (svet). Delay čeka da prvi frame prođe pa je map size valid.
-        //
-        // easeTo umesto setCamera: animirana tranzicija (700ms) da user vidi da se view
-        // menja — bez animacije, sudden jump izgleda kao bug.
-        if (!cameraFitDone) {
-            cameraFitDone = true
-            val mv = mapView ?: return@LaunchedEffect
-            kotlinx.coroutines.delay(250L)
-            val coords = points.map { Point.fromLngLat(it.lng, it.lat) }
-            val cam = mv.mapboxMap.cameraForCoordinates(
-                coordinates = coords,
+    }
+
+    // CAMERA FIT — jednom po (dan, data-load). Zaseban LaunchedEffect je važan jer:
+    //  1) Ne blokira static/dynamic render (paralelan effect).
+    //  2) Radi i kad points ima 0 ili 1 element — ranije je fit visio na `visible.size < 2`
+    //     ranom return-u pa uveče kad user nije mrdao ceo dan (ili je bio samo na jednom
+    //     mestu) view je ostajao na celoj planeti sa malim pin-om.
+    //
+    // Šta fit-uje:
+    //  - Ako ima ≥2 koordinata (points + activePlaces zajedno): cameraForCoordinates + padding
+    //  - Ako je tačno 1 koordinata: center + fixed zoom 15
+    //  - Ako je 0: leave alone (empty state banner je već vidljiv iznad mape)
+    //
+    // Delay 250ms je i dalje neophodan — cameraForCoordinates zahteva ne-nula map layout.
+    LaunchedEffect(range.fromMs, points, activePlaces, mapView) {
+        val mv = mapView ?: return@LaunchedEffect
+        if (cameraFitDone) return@LaunchedEffect
+        val allCoords = points.map { Point.fromLngLat(it.lng, it.lat) } +
+            activePlaces.map { Point.fromLngLat(it.lng, it.lat) }
+        if (allCoords.isEmpty()) return@LaunchedEffect
+        cameraFitDone = true
+        kotlinx.coroutines.delay(250L)
+        val cam = if (allCoords.size == 1) {
+            CameraOptions.Builder()
+                .center(allCoords[0])
+                .zoom(15.0)
+                .build()
+        } else {
+            mv.mapboxMap.cameraForCoordinates(
+                coordinates = allCoords,
                 camera = CameraOptions.Builder().build(),
                 coordinatesPadding = EdgeInsets(120.0, 60.0, 260.0, 60.0),
                 maxZoom = 16.0,
                 offset = null,
             )
-            mv.mapboxMap.easeTo(
-                cam,
-                MapAnimationOptions.mapAnimationOptions { duration(700L) },
-            )
         }
+        mv.mapboxMap.easeTo(
+            cam,
+            MapAnimationOptions.mapAnimationOptions { duration(700L) },
+        )
     }
 
     Scaffold(

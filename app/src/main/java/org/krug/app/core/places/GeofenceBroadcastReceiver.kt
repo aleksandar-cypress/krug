@@ -23,6 +23,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
+import org.krug.app.core.prefs.LocalPrefs
 import timber.log.Timber
 
 /**
@@ -41,6 +42,7 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
     @Inject lateinit var firestore: FirebaseFirestore
     @Inject lateinit var auth: FirebaseAuth
     @Inject lateinit var placeRepository: PlaceRepository
+    @Inject lateinit var localPrefs: LocalPrefs
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -83,16 +85,17 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
         private const val PHANTOM_THRESHOLD_M = 100
 
         /**
-         * In-memory per-place last-transition-type guard. Semantički filter: ne dozvoli
-         * dva uzastopna ENTER-a (ili EXIT-a) za isti placeId bez event-a suprotnog tipa
+         * Per-place last-transition-type guard. Semantički filter: ne dozvoli dva
+         * uzastopna ENTER-a (ili EXIT-a) za isti placeId bez event-a suprotnog tipa
          * između. Nadgradnja iznad distance filter-a — čak i ako phantom EXIT nekako
          * prođe distance provjeru, ovaj čuvar spreči da drugi ENTER stigne kao notif.
          *
-         * State je in-memory (kao lastEventTimes) — process death ga briše, pa prvi
-         * ENTER posle restart-a uvek prolazi. To je prihvatljivo: prava svrha je
-         * suzbijanje bliskih duplikata unutar iste sesije.
+         * Persistira se u `LocalPrefs.loadPlaceTransitionTypes()` (bilo je in-memory
+         * do 1.2.3): Doze wake/process death je resetovao mapu, pa je prvi EXIT posle
+         * restart-a prolazio kao „prvi legitiman" iako je bio phantom. Prefs preživljava
+         * process kill i omogućava fail-closed politiku za EXIT bez GPS verify-a
+         * (ispod, u onReceive).
          */
-        private val lastTransitionTypeByPlace = mutableMapOf<String, String>()
 
         /**
          * "Jeftin verify" kvalifikacija — ako `event.triggeringLocation` ispunjava
@@ -238,11 +241,31 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                 if (verifyLocation == null) {
                     Timber.w("GeofenceReceiver: no location for verify, proceeding without")
                 }
+                // Persistent per-place transition-type map (LocalPrefs backed). Učitavamo
+                // jednom po event-u, mutiramo lokalno, snimimo na kraju. Vraćamo se na prefs
+                // (a ne samo in-memory companion) da Doze wake/process kill ne resetuje state.
+                val persistedTypes = localPrefs.loadPlaceTransitionTypes()
                 triggered.forEach { fence ->
                     val (circleId, placeId) = parseRequestId(fence.requestId) ?: return@forEach
                     val placeInfo = fetchPlaceInfo(circleId, placeId)
-                    // GPS verifikacija (Filter 4). Preskoči samo ako imamo i fresh fix i place info;
-                    // inače propuštamo event (fallback na stariji stack filtera).
+                    val prevType = persistedTypes[placeId]
+                    // GPS verifikacija (Filter 4). Dva režima:
+                    //  A) Verify uspešan (verifyLocation != null && placeInfo != null):
+                    //     radi puni distance check kao pre — odbaci phantom po fizičkoj
+                    //     poziciji spram center-a place-a.
+                    //  B) Verify inconclusive (bilo koja komponenta null — GPS timeout ili
+                    //     Firestore fetch fail): FAIL-CLOSED za EXIT — traži da postoji
+                    //     PRETHODNI persisted ENTER u prefs. Ako ga nema, event je 99%
+                    //     phantom (Play Services „reconciles" state za mesto gde user nikad
+                    //     nije bio → EXIT fajruje iz vazduha). ENTER u inconclusive režimu
+                    //     puštamo — miss legit ENTER je manja šteta od tihog gubljenja
+                    //     stvarnog dolaska.
+                    //
+                    //  Bug koji ovo popravlja (Jul 2026, Jelena): user prijavljuje EXIT
+                    //  notif za place na kome fizički nikad nije bio. Root cause: verify
+                    //  je vraćao null (GPS timeout posle Doze) pa je stariji kod propustao
+                    //  event bez ikakve provere. Novi fail-closed brani ovaj scenario jer
+                    //  prefs neće imati ENTER (user nikad tamo nije bio).
                     if (verifyLocation != null && placeInfo != null) {
                         val distance = distanceMeters(
                             verifyLocation.latitude, verifyLocation.longitude,
@@ -265,6 +288,15 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                                 return@forEach
                             }
                         }
+                    } else if (type == PlaceEventModel.TYPE_EXIT && prevType != PlaceEventModel.TYPE_ENTER) {
+                        Timber.w(
+                            "GeofenceReceiver: skip phantom EXIT placeId=%s (verify inconclusive, no prior ENTER — verifyLoc=%s placeInfo=%s prevType=%s)",
+                            placeId,
+                            verifyLocation != null,
+                            placeInfo != null,
+                            prevType ?: "null",
+                        )
+                        return@forEach
                     }
                     // Dedup POSLE verify-a: da phantom event ne zauzme dedup slot i time
                     // blokira legitiman event koji stigne par minuta kasnije.
@@ -278,10 +310,8 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                     // Semantički guard: ne dopusti ENTER→ENTER (ili EXIT→EXIT) za isti place
                     // bez suprotnog event-a između. Hvata slučaj kad phantom EXIT ipak prođe
                     // distance filter (GPS drift preko radius+100m par minuta), pa sledeći
-                    // ENTER nema fizičku osnovu.
-                    val prevType = synchronized(lastTransitionTypeByPlace) {
-                        lastTransitionTypeByPlace[placeId]
-                    }
+                    // ENTER nema fizičku osnovu. Sada čita iz persisted prefs → survive
+                    // Doze/process kill.
                     if (prevType == type) {
                         Timber.w(
                             "GeofenceReceiver: skip repeated %s for place=%s (no intervening opposite transition)",
@@ -290,7 +320,8 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                         return@forEach
                     }
                     synchronized(lastEventTimes) { lastEventTimes[key] = now }
-                    synchronized(lastTransitionTypeByPlace) { lastTransitionTypeByPlace[placeId] = type }
+                    persistedTypes[placeId] = type
+                    localPrefs.savePlaceTransitionTypes(persistedTypes)
                     val placeName = placeInfo?.name ?: fetchPlaceName(circleId, placeId) ?: placeId
                     placeRepository.logEvent(
                         circleId = circleId,

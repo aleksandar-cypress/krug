@@ -2,6 +2,79 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-07-10, prepodne — 1.2.3 hotfix pre odmora)
+
+**1.2.3 AAB build-ovan i signed** (`app/build/outputs/bundle/release/app-release.aab`, versionCode 14). Aleksandar uploaduje na Play Console → Internal testing preko vikenda. Testeri (Jelena + porodica) instaliraju, testiraju 10 dana tokom odmora (utorak → sledeći ponedeljak).
+
+Cilj 1.2.3: sakupiti 5 fix-a koji su prijavljeni jutros pre odlaska na odmor. Nije bilo verifikacije na fizičkom uređaju iz UX-a osim R8 sanity check-a (assembleRelease + install + launch bez crash-a) — big test je tokom odmora.
+
+### Šta je novo u 1.2.3 (od 1.2.2)
+
+**#1 Phantom EXIT — Jelena je opet dobila EXIT za mesto na kome fizički nije bila**
+`GeofenceBroadcastReceiver.kt` + `LocalPrefs.kt`:
+- `lastTransitionTypeByPlace` sada persistira u SharedPrefs (bio in-memory) — Doze wake/process kill je resetovao guard, pa je prvi EXIT posle restart-a prolazio kao „prvi legitiman" iako je bio phantom
+- Fail-closed za EXIT kad GPS verify inconclusive (verifyLocation ili placeInfo null): traži se prior persisted ENTER u prefs. Bez njega → skip. Prethodni kod je propustao event bez ikakve provere što je otvarao phantom escape hatch
+- ENTER u inconclusive režimu i dalje prolazi — miss real ENTER je manja šteta od phantom EXIT notif-a (druga strana kruga zove telefonom „gde si nestao")
+- Novi key: `KEY_PLACE_TRANSITION_TYPE` (format `placeId1:TYPE1,placeId2:TYPE2,...`), čisti se u `clearForAccountReset`
+
+**#2 Settings → Privacy UI je bila „sjebana"**
+`PrivacyScreen.kt` + `values/strings.xml` + `values-sr/strings.xml`:
+- Nedostajao `verticalScroll` — screen ima 8+ toggle-a (Sharing, Notifications 3, Driving & Safety 2, itd.) što na S24 (6.2") prelazi viewport i sve ispod Battery alerts (Silent hours, Speeding, Crash detection) je bilo nedostupno. Dodavanjem `verticalScroll(rememberScrollState())` sve postaje dostupno
+- Fix `20%%` → `20%` u `settings_battery_alerts_subtitle` (oba lokala). `%%` je escape sekvenca za `String.format`, ali string se koristi kroz `stringResource(id)` bez args-a, pa `%%` renderuje kao literal `%%` u UI-ju
+
+**#3 History uveče — otvara se planeta sa malim pin-om, play ne pomera**
+`HistoryScreen.kt`:
+- Root cause: `if (visible.size < 2) return@LaunchedEffect` je fajrio PRE nego što se camera fit izvrši. Uveče kad je user bio stacioniran ceo dan, ostane 0 ili 1 point → kamera nikad ne zumira → default world view
+- Fix: camera fit izvučen u zaseban `LaunchedEffect` keyed na `(range.fromMs, points, activePlaces, mapView)` — radi za 0 (fit na activePlaces ako postoje), 1 (center + fixed zoom 15), i ≥2 (postojeći cameraForCoordinates + padding)
+
+**#4 Treperenje linije kretanja tokom playback**
+`HistoryScreen.kt`:
+- Root cause: `pm.deleteAll()` + `create()` na svakih 50ms tick-a — između delete i create render pipeline pokazuje prazan frame → flicker. Statične annotation-e (place pins + start marker) su nepotrebno rekreirane svaki tick
+- Fix: split u 3 LaunchedEffect-a
+  - **Static**: place pinovi + start marker → keyed na `(activePlaces, points, pointManager)`, re-render samo pri dan-promeni. Ref-ovi u `staticAnns: SnapshotStateList`
+  - **Dynamic**: polyline + current position marker → keyed na scrubTime, update in-place preko `manager.update(ann)` (bez delete+create)
+  - **Camera fit**: zaseban effect (vidi #3)
+
+**#5 In-app POST_NOTIFICATIONS banner (Jana blocker iz 1.2.2)**
+`PermissionUtils.kt` + `MapScreen.kt`:
+- `hasNotifications()` sada koristi `NotificationManagerCompat.areNotificationsEnabled()` umesto raw `POST_NOTIFICATIONS` grant check-a. Autoritativan i za Android <13 (user disable-uje notif u system settings, npr. Family Link parent-lock) i za 13+ (permission not granted)
+- Nov `openNotificationSettings(activity)` — `ACTION_APP_NOTIFICATION_SETTINGS` intent za direktno otvaranje notif screen-a bez lutanja po App details-u. Fallback na app details ako OEM ROM ne podržava
+- `PermissionWarningBanner` prima `onOpenSettings: (onlyNotifsMissing: Boolean) -> Unit`. Kad je JEDINO notif problem, tap ide direktno na notif settings; inače na app details
+
+### R8 sanity check (per 1.2.1 postmortem lesson)
+
+Pre `bundleRelease`, obavezno:
+1. `./gradlew :app:assembleRelease` → produce APK
+2. `adb install -r app-release.apk` na S24 (SM-S928B)
+3. `am start -n org.krug.app/.MainActivity` → verify launch bez crash-a
+
+Sve prošlo, „What's new in 1.2" modal se pojavio kao očekivano (i dalje major 1.2). Nema `No properties to serialize` crash-a — postojeci proguard-rules pokrivaju sve Firebase POJO klase (nema novih u 1.2.3).
+
+### Preostaje Aleksandaru (pre odmora ili odmah)
+
+1. **Play Console 1.2.3 upload na Internal testing track** (`app/build/outputs/bundle/release/app-release.aab`)
+2. Reci internal testerima da update-uju preko vikenda
+3. Preskoči 1.2.2 promote to Production, pusti 1.2.3 direktno (subsumes)
+4. Big feedback prijem posle odmora (~sredina/kraj sledeće nedelje)
+
+### Poznata ograničenja 1.2.3 (nedirano — za sledeci sprint)
+
+- Multi-device test (Jelenin telefon + isti Google) — treba fizička provera na terenu
+- ETA share live update na 5min voznja — treba real drive test
+- Real-device crash detection (4g threshold) — treba dropovanje telefona u autu
+- Screen time report u child modu (~2-3 dana rada) — feature request, ne bug
+
+### Rizici
+
+- **Fail-closed za EXIT može propustiti ~1-5% legitimnih EXIT-a** kad je verify inconclusive i user nikad nije bio na tom mestu ranije (npr. mesto kreirano dok si bio u njemu → user izlazi → verify faila → prefs kaže „nema prior ENTER" → skip). Odluka: bolje miss legit EXIT (auto-heals na sledećem heartbeat-u/ENTER-u) nego lažni EXIT notif porodici. Ako testeri prijave miss legit EXIT, dodati pre-seed persistedTypes pri `GeofenceManager.registerAll` (računa distancu do svake place-a pri registraciji)
+- **`areNotificationsEnabled()` može fajrirati banner i za usere koji su namerno mute-ovali specifičan channel** (npr. „ne trebaju mi speeding notif-i, ali trebaju mi SOS"). Zasada tretiramo kao „bilo šta ugašeno = banner", jer master toggle je najverovatniji scenario. Ako testeri prijave, pratiti per-channel state
+
+### Full commit chain 2026-07-10
+
+- (staviti hash pri commit-u) — 1.2.3: phantom EXIT persist prefs + fail-closed, Privacy scroll+%%, history camera uvece, playback flicker, POST_NOTIFICATIONS banner
+
+---
+
 ## Gde smo stali (2026-07-09, kraj dana + 1.2.2 — ETA polish, notif diagnostic, self layout 3+3)
 
 **1.2.2 AAB je build-ovan i signed** (`app/build/outputs/bundle/release/app-release.aab`, versionCode 13). Aleksandar uploaduje na Play Console → Internal testing → testira → Promote to Production.

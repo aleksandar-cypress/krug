@@ -191,7 +191,7 @@
     <string name="battery_alert_body">Baterija ispod 20%%. Javi im se da napune telefon.</string>
     <string name="battery_alert_unknown_sender">Član kruga</string>
     <string name="settings_battery_alerts">Upozorenja o bateriji</string>
-    <string name="settings_battery_alerts_subtitle">Obavesti me kada član padne ispod 20%%</string>
+    <string name="settings_battery_alerts_subtitle">Obavesti me kada član padne ispod 20%</string>
 
     <!-- Privacy screen sections -->
     <string name="privacy_section_sharing">Deljenje</string>

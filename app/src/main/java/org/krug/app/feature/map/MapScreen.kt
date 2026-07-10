@@ -865,9 +865,18 @@ fun MapScreen(
             // u backgroundu, FGS će biti ubijen i mapa ne dobija update. Banner pomaže
             // korisniku da brzo skoči u sistemski settings i vrati permission.
             PermissionWarningBanner(
-                onOpenSettings = {
-                    (context as? android.app.Activity)?.let {
-                        org.krug.app.core.permissions.PermissionUtils.openAppSettings(it)
+                onOpenSettings = { onlyNotifsMissing ->
+                    (context as? android.app.Activity)?.let { activity ->
+                        // Ako je JEDINO notif ugašeno, idi direktno na app notif screen —
+                        // Family Link/preteens često ne znaju gde je Notifications u
+                        // generic App details listi. Za mešanu listu (npr. background
+                        // location + notif) i dalje ide na app details (jedna tap-lokacija
+                        // za sve).
+                        if (onlyNotifsMissing) {
+                            org.krug.app.core.permissions.PermissionUtils.openNotificationSettings(activity)
+                        } else {
+                            org.krug.app.core.permissions.PermissionUtils.openAppSettings(activity)
+                        }
                     }
                 },
             )
@@ -3531,18 +3540,20 @@ private fun OfflineBannerContent(lastUpdatedAt: Long?) {
  * način — na A11+ se runtime permission ne sme tražiti dva puta posle "Don't ask again".
  */
 @Composable
-private fun PermissionWarningBanner(onOpenSettings: () -> Unit) {
+private fun PermissionWarningBanner(onOpenSettings: (onlyNotifsMissing: Boolean) -> Unit) {
     val context = LocalContext.current
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     // Inicijalni check izvršiti sinhronizovano da banner odmah pokaže stanje pri prvom
     // composition-u; bez ovog, čekamo prvi ON_RESUME event koji ne dolazi na initial
     // mount pa user vidi mapu bez banner-a iako mu nedostaju permission-i.
     var missingPermissions by remember { mutableStateOf(computeMissingPermissions(context)) }
+    var onlyNotifsMissing by remember { mutableStateOf(isOnlyNotifsMissing(context)) }
 
     DisposableEffect(lifecycle) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 missingPermissions = computeMissingPermissions(context)
+                onlyNotifsMissing = isOnlyNotifsMissing(context)
             }
         }
         lifecycle.addObserver(observer)
@@ -3560,7 +3571,7 @@ private fun PermissionWarningBanner(onOpenSettings: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .clickable(onClick = onOpenSettings),
+                    .clickable { onOpenSettings(onlyNotifsMissing) },
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.errorContainer,
             ) {
@@ -3722,12 +3733,28 @@ private fun computeMissingPermissions(context: android.content.Context): List<St
     ) {
         missing += context.getString(R.string.permission_missing_location_background)
     }
-    if (org.krug.app.core.permissions.PermissionUtils.needsNotificationsPermission &&
-        !org.krug.app.core.permissions.PermissionUtils.hasNotifications(context)
-    ) {
+    // Notif check: uklonjen `needsNotificationsPermission` gate — sada koristimo
+    // NotificationManagerCompat.areNotificationsEnabled() koji radi za sve verzije
+    // (i za < 13 gde user može disable-ovati u system settings-ima, npr. Family Link
+    // parent-lock scenario koji se desio Jani).
+    if (!org.krug.app.core.permissions.PermissionUtils.hasNotifications(context)) {
         missing += context.getString(R.string.permission_missing_notifications)
     }
     return missing
+}
+
+/**
+ * True ako je JEDINO notif ugašeno — druga runtime permission-a su OK. Koristimo za
+ * bolji UX na banner tap-u: kad je samo notif problem, idemo direktno na notif screen
+ * (bez lutanja kroz App details). Family Link/preteens često nemaju iskustvo sa
+ * generic App details ekranom.
+ */
+private fun isOnlyNotifsMissing(context: android.content.Context): Boolean {
+    val hasLoc = org.krug.app.core.permissions.PermissionUtils.hasForegroundLocation(context)
+    val hasBg = !org.krug.app.core.permissions.PermissionUtils.needsBackgroundLocationPermission ||
+        org.krug.app.core.permissions.PermissionUtils.hasBackgroundLocation(context)
+    val hasNotif = org.krug.app.core.permissions.PermissionUtils.hasNotifications(context)
+    return hasLoc && hasBg && !hasNotif
 }
 
 @Composable
