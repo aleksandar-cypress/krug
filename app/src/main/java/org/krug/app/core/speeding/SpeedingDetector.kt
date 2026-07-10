@@ -133,7 +133,17 @@ class SpeedingDetector @Inject constructor(
     ) {
         scope.launch {
             runCatching {
-                val circleIds = circleRepository.observeMyCircles(uid).first().map { it.id }
+                // Timeout na observeMyCircles.first() — bez ovog, kad je Firestore offline
+                // i local cache prazan (rare, ali moguć posle clear-cache/reinstall), first()
+                // suspenduje neograničeno i coroutine hang-uje u singleton scope-u zauvek.
+                // Sledeći speeding emit-i pravi nove hang-ove → curenje coroutine-a.
+                val circleIds = kotlinx.coroutines.withTimeoutOrNull(3_000L) {
+                    circleRepository.observeMyCircles(uid).first().map { it.id }
+                } ?: run {
+                    Timber.w("SpeedingDetector: observeMyCircles timeout, skip emit for uid=%s", uid)
+                    return@runCatching
+                }
+                if (circleIds.isEmpty()) return@runCatching
                 speedingRepository.logEvent(
                     circleIds = circleIds,
                     userId = uid,

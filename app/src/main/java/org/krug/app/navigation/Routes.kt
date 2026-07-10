@@ -15,7 +15,6 @@ import kotlinx.serialization.Serializable
 @Serializable data class ShowInvite(val circleId: String, val circleName: String, val code: String)
 @Serializable data class EnterCode(val prefilledCode: String? = null)
 @Serializable data class CircleDetail(val circleId: String)
-@Serializable data class MemberDetail(val circleId: String, val memberId: String)
 @Serializable data class Places(val circleId: String)
 @Serializable data class AddPlace(
     val circleId: String,

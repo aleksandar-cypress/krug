@@ -67,11 +67,13 @@ class SpeedingAlertNotifier @Inject constructor(
             .build()
         runCatching {
             @Suppress("MissingPermission")
-            NotificationManagerCompat.from(context).notify(event.id.hashCode(), notif)
+            NotificationManagerCompat.from(context).notify(NOTIF_TAG, event.id.hashCode(), notif)
         }.onFailure { Timber.w(it, "speeding alert failed") }
     }
 
     companion object {
         const val CHANNEL_ID = "krug_speeding_alerts"
+        // Vidi SosNotifier o notif tag pattern-u.
+        private const val NOTIF_TAG = "krug_speeding"
     }
 }

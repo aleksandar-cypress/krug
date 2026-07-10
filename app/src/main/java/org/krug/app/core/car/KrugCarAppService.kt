@@ -1,8 +1,10 @@
 package org.krug.app.core.car
 
+import android.content.pm.ApplicationInfo
 import androidx.car.app.CarAppService
 import androidx.car.app.Session
 import androidx.car.app.validation.HostValidator
+import org.krug.app.BuildConfig
 import timber.log.Timber
 
 /**
@@ -40,10 +42,24 @@ class KrugCarAppService : CarAppService() {
     }
 
     override fun createHostValidator(): HostValidator {
-        // Za debug/dev — allow all hosts (može simulator, DHU, itd. da se konektuje).
-        // Za release build treba uže allowlist preko HostValidator.Builder-a.
-        Timber.i("KrugCarAppService: createHostValidator (allow-all for dev)")
-        return HostValidator.ALLOW_ALL_HOSTS_VALIDATOR
+        // Debug: allow all hosts (DHU simulator, adb wireless testovi).
+        // Release: sužena allowlist (androidx.car.app biblioteka isporučuje
+        // `hosts_allowlist_sample` sa Google-signed Auto host paketima —
+        // com.google.android.projection.gearhead, com.google.android.embedded.projection).
+        // Bez ove restrikcije, bilo koja app potpisana bilo kojim ključem koja
+        // implementira Auto host bind protokol može da hoste-uje CarAppService i čita
+        // location/circle data. ALLOW_ALL je bio dev-only fallback koji se izgubio u
+        // 1.2.0 Auto MVP-ju, prošao kroz sve 1.2.x release-e.
+        val debuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        return if (debuggable || BuildConfig.DEBUG) {
+            Timber.i("KrugCarAppService: createHostValidator (allow-all, debug build)")
+            HostValidator.ALLOW_ALL_HOSTS_VALIDATOR
+        } else {
+            Timber.i("KrugCarAppService: createHostValidator (allowlist, release build)")
+            HostValidator.Builder(this)
+                .addAllowedHosts(androidx.car.app.R.array.hosts_allowlist_sample)
+                .build()
+        }
     }
 
     override fun onCreateSession(): Session {

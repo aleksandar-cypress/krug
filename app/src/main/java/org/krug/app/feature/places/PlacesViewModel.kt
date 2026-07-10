@@ -1,11 +1,14 @@
 package org.krug.app.feature.places
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import org.krug.app.R
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -56,6 +59,7 @@ class PlacesViewModel @Inject constructor(
     private val historyRepository: LocationHistoryRepository,
     private val auth: FirebaseAuth,
     localPrefs: LocalPrefs,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     /** Trenutno izabran stil mape (Settings → Map style). Koristi ga AddPlaceScreen. */
@@ -274,12 +278,15 @@ class PlacesViewModel @Inject constructor(
         if (_state.value.saving) return
         val trimmed = name.trim()
         if (trimmed.isBlank()) {
-            _state.value = _state.value.copy(error = "Ime ne može biti prazno")
+            _state.value = _state.value.copy(error = appContext.getString(R.string.edit_circle_error_empty))
             return
         }
         if (_state.value.places.size >= PlaceModel.FREE_TIER_MAX_PER_CIRCLE) {
             _state.value = _state.value.copy(
-                error = "Limit dostignut (${PlaceModel.FREE_TIER_MAX_PER_CIRCLE} mesta)",
+                error = appContext.getString(
+                    R.string.places_limit_reached,
+                    PlaceModel.FREE_TIER_MAX_PER_CIRCLE,
+                ),
             )
             return
         }
@@ -310,7 +317,7 @@ class PlacesViewModel @Inject constructor(
         if (_state.value.saving) return
         val trimmed = name.trim()
         if (trimmed.isBlank()) {
-            _state.value = _state.value.copy(error = "Ime ne može biti prazno")
+            _state.value = _state.value.copy(error = appContext.getString(R.string.edit_circle_error_empty))
             return
         }
         _state.value = _state.value.copy(saving = true, error = null)

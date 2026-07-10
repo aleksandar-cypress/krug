@@ -38,8 +38,8 @@ android {
         applicationId = "org.krug.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 14
-        versionName = "1.2.3"
+        versionCode = 15
+        versionName = "1.2.4"
 
         // Mapbox public token: kept as manifest placeholder for legacy meta-data,
         // and exposed via BuildConfig so KrugApplication can set MapboxOptions.accessToken

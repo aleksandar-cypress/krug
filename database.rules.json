@@ -38,7 +38,7 @@
         ".read": "auth != null && auth.uid === $targetUid",
         "$requesterUid": {
           ".write": "auth != null && (auth.uid === $requesterUid || auth.uid === $targetUid)",
-          ".validate": "newData.isNumber() || !newData.exists()"
+          ".validate": "!newData.exists() || (newData.isNumber() && newData.val() <= now + 60000 && newData.val() >= now - 60000 && (!data.exists() || newData.val() >= data.val() + 10000))"
         }
       }
     },

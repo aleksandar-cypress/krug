@@ -864,12 +864,18 @@ class LocationTrackingService : Service() {
      */
     private fun triggerCrashSos() {
         val uid = firebaseAuth.currentUser?.uid ?: return
-        val activeCircle = runCatching {
-            kotlinx.coroutines.runBlocking {
-                circleRepository.observeMyCircles(uid).first().firstOrNull()
-            }
-        }.getOrNull()
         scope.launch {
+            // observeMyCircles.first() može da suspenduje neograničeno ako je Firestore
+            // offline i local cache prazan (fresh user, ili posle sign-out/sign-in ciklusa).
+            // Ranije je bio wrap-ovan u runBlocking { first() } bez timeout-a → main thread
+            // ANR ako se triggerCrashSos poziva iz observer-a. Sad je unutar scope.launch
+            // + withTimeoutOrNull, pa najgori scenario je SOS bez circleId (i dalje ide,
+            // samo bez circle context-a — porodica dobija generic notif umesto per-circle).
+            val activeCircle = runCatching {
+                kotlinx.coroutines.withTimeoutOrNull(2_000L) {
+                    circleRepository.observeMyCircles(uid).first().firstOrNull()
+                }
+            }.getOrNull()
             runCatching {
                 sosRepository.trigger(
                     uid = uid,
@@ -1132,7 +1138,9 @@ class LocationTrackingService : Service() {
         if (distToDest <= ETA_ARRIVAL_RADIUS_M) {
             scope.launch {
                 val circleIds = runCatching {
-                    circleRepository.observeMyCircles(uid).first().map { it.id }
+                    kotlinx.coroutines.withTimeoutOrNull(3_000L) {
+                        circleRepository.observeMyCircles(uid).first().map { it.id }
+                    } ?: emptyList()
                 }.getOrDefault(emptyList())
                 if (circleIds.isNotEmpty()) {
                     etaRepository.markArrived(circleIds, uid)
@@ -1172,7 +1180,9 @@ class LocationTrackingService : Service() {
                 min to km
             }
             val circleIds = runCatching {
-                circleRepository.observeMyCircles(uid).first().map { it.id }
+                kotlinx.coroutines.withTimeoutOrNull(3_000L) {
+                    circleRepository.observeMyCircles(uid).first().map { it.id }
+                } ?: emptyList()
             }.getOrDefault(emptyList())
             if (circleIds.isNotEmpty()) {
                 etaRepository.updateShare(

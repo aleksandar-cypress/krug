@@ -33,13 +33,17 @@ object LogRingBuffer {
     private val timeFmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
 
     fun append(priority: Char, tag: String?, message: String) {
-        val time = timeFmt.format(Date())
-        val line = if (tag.isNullOrBlank()) {
-            "$time $priority: $message"
-        } else {
-            "$time $priority $tag: $message"
-        }
+        // timeFmt.format() MORA biti u synchronized bloku — SimpleDateFormat nije
+        // thread-safe (Javadoc eksplicitno). Timber loguje iz Main + FGS + coroutine
+        // dispatcher-a + WorkManager thread-ova; concurrent .format() poziv može da
+        // corruptuje internal calendar state (garbage timestamp, ili ParseException).
         synchronized(lock) {
+            val time = timeFmt.format(Date())
+            val line = if (tag.isNullOrBlank()) {
+                "$time $priority: $message"
+            } else {
+                "$time $priority $tag: $message"
+            }
             if (buffer.size >= CAPACITY) buffer.removeFirst()
             buffer.addLast(line)
         }

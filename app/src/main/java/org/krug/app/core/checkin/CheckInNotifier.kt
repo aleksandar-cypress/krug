@@ -67,11 +67,13 @@ class CheckInNotifier @Inject constructor(
             .build()
         runCatching {
             @Suppress("MissingPermission")
-            NotificationManagerCompat.from(context).notify(event.id.hashCode(), notif)
+            NotificationManagerCompat.from(context).notify(NOTIF_TAG, event.id.hashCode(), notif)
         }.onFailure { Timber.w(it, "checkin notif failed") }
     }
 
     companion object {
         const val CHANNEL_ID = "krug_checkins"
+        // Vidi SosNotifier o notif tag pattern-u.
+        private const val NOTIF_TAG = "krug_checkin"
     }
 }

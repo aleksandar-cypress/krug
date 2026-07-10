@@ -229,9 +229,9 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                 if (verifyLocation == null) {
                     Timber.w("GeofenceReceiver: no location for verify, proceeding without")
                 }
-                // Persistent per-place transition-type map (LocalPrefs backed). Učitavamo
-                // jednom po event-u, mutiramo lokalno, snimimo na kraju. Vraćamo se na prefs
-                // (a ne samo in-memory companion) da Doze wake/process kill ne resetuje state.
+                // Persistent per-place transition-type map (LocalPrefs backed). Read-only
+                // load ovde (za PhantomFilter classify); commit ide preko atomic
+                // updatePlaceTransitionType da spreči race između paralelnih broadcast-a.
                 val persistedTypes = localPrefs.loadPlaceTransitionTypes()
                 triggered.forEach { fence ->
                     val (circleId, placeId) = parseRequestId(fence.requestId) ?: return@forEach
@@ -275,8 +275,7 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                         return@forEach
                     }
                     synchronized(lastEventTimes) { lastEventTimes[key] = now }
-                    persistedTypes[placeId] = type
-                    localPrefs.savePlaceTransitionTypes(persistedTypes)
+                    localPrefs.updatePlaceTransitionType(placeId, type)
                     val placeName = placeInfo?.name ?: fetchPlaceName(circleId, placeId) ?: placeId
                     placeRepository.logEvent(
                         circleId = circleId,

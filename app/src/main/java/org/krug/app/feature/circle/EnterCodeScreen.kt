@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import org.krug.app.core.circle.InviteRepository
 import org.krug.app.core.util.confirmHaptic
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.krug.app.R
@@ -224,9 +225,19 @@ private fun CodeKeypad(
         BasicTextField(
             value = code,
             onValueChange = { new ->
-                if (new.length <= length && new.all { it.isDigit() }) onValueChange(new)
+                // Case-insensitive input: user može da ukuca lowercase, mi uppercase-ujemo
+                // pre validacije. Uppercase varijanta ide na wire i u Firestore doc ID
+                // (case-sensitive). Base36 alphanumeric (0-9 + A-Z); stari 6-digit kod-ovi
+                // su podskup pa i dalje rade dok TTL ne istekne.
+                val upper = new.uppercase()
+                if (upper.length <= length && upper.all { it in InviteRepository.CODE_ALPHABET }) {
+                    onValueChange(upper)
+                }
             },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Ascii,
+                autoCorrectEnabled = false,
+            ),
             singleLine = true,
             cursorBrush = SolidColor(Color.Transparent),
             textStyle = TextStyle(color = Color.Transparent),

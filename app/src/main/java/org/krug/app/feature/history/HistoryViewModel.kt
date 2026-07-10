@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.stateIn
 import org.krug.app.core.circle.CircleRepository
 import org.krug.app.core.location.LocationHistoryPoint
 import org.krug.app.core.location.LocationHistoryRepository
+import org.krug.app.core.location.LocationModel
+import org.krug.app.core.location.LocationRepository
 import org.krug.app.core.map.MapStyleOption
 import org.krug.app.core.places.PlaceModel
 import org.krug.app.core.places.PlaceRepository
@@ -38,6 +40,7 @@ class HistoryViewModel @Inject constructor(
     private val circleRepository: CircleRepository,
     private val localPrefs: LocalPrefs,
     private val auth: FirebaseAuth,
+    private val locationRepository: LocationRepository,
 ) : ViewModel() {
 
     val uid: String = requireNotNull(savedStateHandle["uid"])
@@ -76,6 +79,15 @@ class HistoryViewModel @Inject constructor(
             else placeRepository.observePlaces(activeId)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Fallback seed za camera fit — kad member nema history point-a za izabrani dan I
+     * user nema places u aktivnom krugu, camera bi ostajala na Mapbox default-u (zoom 0
+     * = ceo svet). Sa ovim live location-om iz RTDB, kamera se centrira na member-ovu
+     * poslednju poznatu poziciju umesto planetu.
+     */
+    val seedLocation: StateFlow<LocationModel?> = locationRepository.observe(uid)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Trenutno izabran stil mape (Settings → Map style). */
     val mapStyle: StateFlow<MapStyleOption> = localPrefs.mapStyleKeyFlow

@@ -215,9 +215,18 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
                     invalidate()
                 }
         }
-        // Odvojen observer za Places aktivnog kruga.
+        // Odvojen observer za Places aktivnog kruga. Koristi isti fallback pattern kao
+        // MapViewModel.effectiveActiveCircleId — ako stored activeCircleId ne postoji među
+        // user-ovim krugovima (ili je null za fresh user-e koji nikad nisu setActiveCircle
+        // pozvali), pada na prvi krug. Bez toga Auto ekran je pokazivao 0 places-a iako je
+        // telefon prikazivao members i places normalno.
         scope.launch {
-            localPrefs.activeCircleIdFlow.flatMapLatest { activeId ->
+            kotlinx.coroutines.flow.combine(
+                circleRepository.observeMyCircles(selfUid),
+                localPrefs.activeCircleIdFlow,
+            ) { circles, stored ->
+                (circles.firstOrNull { it.id == stored } ?: circles.firstOrNull())?.id
+            }.flatMapLatest { activeId ->
                 if (activeId.isNullOrBlank()) flowOf(emptyList())
                 else placeRepository.observePlaces(activeId)
             }.collectLatest { list ->

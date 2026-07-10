@@ -278,15 +278,18 @@ class CircleRepository @Inject constructor(
 
     /** Obriši ceo krug. Samo vlasnik ima permission preko rules. */
     suspend fun deleteCircle(circleId: String) {
-        val membersSnap = members(circleId).get().await()
-        membersSnap.documents.forEach { runCatching { it.reference.delete().await() } }
-        // Bez Cloud Functions, subcollection-i ne cascade — očisti places + placeEvents
-        // ručno pre nego što obrišemo parent doc (posle brisanja parent-a, rules ne
-        // dozvoljavaju read/write jer circleData(cid) vraća null).
-        val places = circle(circleId).collection("places").get().await()
-        places.documents.forEach { runCatching { it.reference.delete().await() } }
-        val events = circle(circleId).collection("placeEvents").get().await()
-        events.documents.forEach { runCatching { it.reference.delete().await() } }
+        // Bez Cloud Functions, subcollection-i ne cascade — moramo eksplicitno pre nego
+        // što obrišemo parent doc (posle brisanja parent-a, rules ne dozvoljavaju
+        // read/write jer circleData(cid) vraća null). Cleanup obuhvata: members,
+        // places, placeEvents, etaShares, checkIns. Bez etaShares/checkIns cleanup-a,
+        // orphaned docs ostaju u Firestore storage-u (nedostupni preko rules, ali
+        // storage cost + GDPR incomplete).
+        listOf("members", "places", "placeEvents", "etaShares", "checkIns", "speedingEvents").forEach { name ->
+            runCatching {
+                val snap = circle(circleId).collection(name).get().await()
+                snap.documents.forEach { runCatching { it.reference.delete().await() } }
+            }.onFailure { Timber.w(it, "deleteCircle: subcollection %s cleanup failed", name) }
+        }
         circle(circleId).delete().await()
         Timber.i("Circle deleted id=%s", circleId)
     }

@@ -74,6 +74,7 @@ fun HistoryScreen(
     val activePlaces by viewModel.activePlaces.collectAsStateWithLifecycle()
     val range by viewModel.selectedDay.collectAsStateWithLifecycle()
     val mapStyle by viewModel.mapStyle.collectAsStateWithLifecycle()
+    val seedLocation by viewModel.seedLocation.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
     var dayOffset by remember { mutableStateOf(0) }
     var mapView by remember { mutableStateOf<MapView?>(null) }
@@ -251,18 +252,39 @@ fun HistoryScreen(
     //     ranom return-u pa uveče kad user nije mrdao ceo dan (ili je bio samo na jednom
     //     mestu) view je ostajao na celoj planeti sa malim pin-om.
     //
-    // Šta fit-uje:
-    //  - Ako ima ≥2 koordinata (points + activePlaces zajedno): cameraForCoordinates + padding
-    //  - Ako je tačno 1 koordinata: center + fixed zoom 15
-    //  - Ako je 0: leave alone (empty state banner je već vidljiv iznad mape)
+    // Šta fit-uje (prioritet):
+    //  - ≥2 koordinata (points + activePlaces): cameraForCoordinates + padding
+    //  - Tačno 1 koordinata: center + fixed zoom 15
+    //  - 0 koordinata + seedLocation (member-ova live pozicija iz RTDB): fit na seed
+    //  - Sve prazno (nema ni live location-a): leave alone
+    //
+    // Ključno: čekamo `loaded=true` (Firestore snapshot za history stigao) pre fit-a.
+    // Bez toga imali smo race — `activePlaces` obično stiže brže od `points`, pa je fit
+    // hvatao samo places, a `cameraFitDone=true` blokirao refit kad su points konačno
+    // stigli. Rezultat: user je gledao Kuću u Beogradu iako je Jelena danas u Novom Sadu.
+    //
+    // Seed fallback rešava „planeta" bug kad je i history i places prazan (svež krug,
+    // Jelena tek pridružila, još nema written history). Umesto zoom-0 sveta, kamera se
+    // centrira na member-ovu poslednju poznatu poziciju iz RTDB.
     //
     // Delay 250ms je i dalje neophodan — cameraForCoordinates zahteva ne-nula map layout.
-    LaunchedEffect(range.fromMs, points, activePlaces, mapView) {
+    LaunchedEffect(range.fromMs, loaded, points, activePlaces, seedLocation, mapView) {
         val mv = mapView ?: return@LaunchedEffect
         if (cameraFitDone) return@LaunchedEffect
-        val allCoords = points.map { Point.fromLngLat(it.lng, it.lat) } +
+        if (!loaded) return@LaunchedEffect
+        val trailAndPlaces = points.map { Point.fromLngLat(it.lng, it.lat) } +
             activePlaces.map { Point.fromLngLat(it.lng, it.lat) }
-        if (allCoords.isEmpty()) return@LaunchedEffect
+        val allCoords = if (trailAndPlaces.isNotEmpty()) {
+            trailAndPlaces
+        } else {
+            // Null-island guard: LocationModel default-uje lat=0.0/lng=0.0 pa member koji
+            // nikad nije publikovao (ili sa poluvalidnim RTDB unosom) ne sme da povuce
+            // kameru na Gulf of Guinea. Bez ovog, seed bi „radio" ali user ne bi razumeo
+            // šta gleda.
+            val seed = seedLocation?.takeIf { it.lat != 0.0 || it.lng != 0.0 }
+                ?: return@LaunchedEffect
+            listOf(Point.fromLngLat(seed.lng, seed.lat))
+        }
         cameraFitDone = true
         kotlinx.coroutines.delay(250L)
         val cam = if (allCoords.size == 1) {

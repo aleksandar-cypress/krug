@@ -137,7 +137,7 @@
 
     <!-- Enter code -->
     <string name="enter_code_title">Join a circle</string>
-    <string name="enter_code_body">Enter the 6-digit code you received</string>
+    <string name="enter_code_body">Enter the 6-character code you received</string>
     <string name="enter_code_input_label">Code</string>
     <string name="enter_code_join_cta">Join</string>
     <string name="enter_code_error_invalid">Code is invalid or expired</string>

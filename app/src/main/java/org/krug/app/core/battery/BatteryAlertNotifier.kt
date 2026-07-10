@@ -72,13 +72,13 @@ class BatteryAlertNotifier @Inject constructor(
             .build()
         runCatching {
             @Suppress("MissingPermission")
-            NotificationManagerCompat.from(context).notify(notificationIdFor(uid), notification)
+            NotificationManagerCompat.from(context).notify(NOTIF_TAG, notificationIdFor(uid), notification)
             Timber.d("battery alert posted for $uid ($resolvedName, $batteryPct%)")
         }.onFailure { Timber.w(it, "battery alert failed") }
     }
 
     fun cancel(uid: String) {
-        NotificationManagerCompat.from(context).cancel(notificationIdFor(uid))
+        NotificationManagerCompat.from(context).cancel(NOTIF_TAG, notificationIdFor(uid))
     }
 
     private fun notificationIdFor(uid: String): Int =
@@ -87,6 +87,8 @@ class BatteryAlertNotifier @Inject constructor(
     companion object {
         const val CHANNEL_ID = "krug_battery_alerts"
         const val EXTRA_FOCUS_MEMBER_UID = "krug_focus_battery_uid"
-        private const val NOTIFICATION_BASE_ID = 3_000
+        // Vidi SosNotifier o notif tag i BASE_ID collision defense.
+        private const val NOTIF_TAG = "krug_battery"
+        private const val NOTIFICATION_BASE_ID = 2_000_000
     }
 }

@@ -141,7 +141,7 @@
 
     <!-- Enter code -->
     <string name="enter_code_title">Pridruži se krugu</string>
-    <string name="enter_code_body">Unesite 6-cifreni kod koji ste dobili</string>
+    <string name="enter_code_body">Unesite 6-znakovni kod koji ste dobili</string>
     <string name="enter_code_input_label">Kod</string>
     <string name="enter_code_join_cta">Pridruži se</string>
     <string name="enter_code_error_invalid">Kod nije validan ili je istekao</string>

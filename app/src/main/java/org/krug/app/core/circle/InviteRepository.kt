@@ -30,7 +30,7 @@ class InviteRepository @Inject constructor(
     ): String {
         val expiry = Date(System.currentTimeMillis() + INVITE_TTL_MILLIS)
         repeat(MAX_GEN_ATTEMPTS) {
-            val code = generate6Digit()
+            val code = generateCode()
             try {
                 firestore.runTransaction { tx ->
                     val ref = invites().document(code)
@@ -64,7 +64,11 @@ class InviteRepository @Inject constructor(
     }
 
     suspend fun acceptInvite(code: String, uid: String): JoinResult {
-        val normalized = code.filter { it.isDigit() }
+        // Prihvati i old-style digit-only kod-ove (generated ≤1.2.3, još žive u TTL prozoru
+        // 24h) i new base36 alphanumeric kod-ove (≥1.2.4). Firestore doc ID je case-sensitive,
+        // pa uppercase-uj pre lookup-a. Space upgrade: 10^6 = 1M → 36^6 = ~2.17B, brute-force
+        // pri 100 req/s ide sa 3h (old) na ~250 dana (new) da hit-uje 50% space-a.
+        val normalized = code.uppercase().filter { it in CODE_ALPHABET }
         if (normalized.length != CODE_LENGTH) return JoinResult.Failure.Invalid
 
         // Sve provere + write-ovi idu u JEDNU Firestore transakciju da spreči race:
@@ -147,11 +151,12 @@ class InviteRepository @Inject constructor(
         return JoinResult.Success(cid, resolvedCircleName)
     }
 
-    private fun generate6Digit(): String =
-        Random.nextInt(0, 1_000_000).toString().padStart(CODE_LENGTH, '0')
+    private fun generateCode(): String =
+        (1..CODE_LENGTH).map { CODE_ALPHABET.random() }.joinToString("")
 
     companion object {
-        private const val CODE_LENGTH = 6
+        internal const val CODE_LENGTH = 6
+        internal const val CODE_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         private const val INVITE_TTL_MILLIS = 24L * 60 * 60 * 1000
         private const val MAX_GEN_ATTEMPTS = 5
     }

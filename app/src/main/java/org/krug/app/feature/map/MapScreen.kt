@@ -481,7 +481,12 @@ fun MapScreen(
         val (uid, since) = pending
         val loc = state.members.firstOrNull { it.uid == uid }?.location
         if (loc != null && loc.updatedAt > since) {
-            mapViewState.flyTo(loc.lng, loc.lat, sheetOffsetPx = MEMBER_SHEET_OFFSET_PX)
+            // Ako je user u međuvremenu zatvorio sheet (detailUid == null), ne dodaj
+            // MEMBER_SHEET_OFFSET_PX — sheet više nije vidljiv, taj padding bi bacio
+            // kameru dole van vidnog polja. Refresh je user-initiated iz sheet-a pa
+            // svakako vredi flyTo, samo bez sheet padding-a.
+            val offset = if (detailUid == uid) MEMBER_SHEET_OFFSET_PX else 0.0
+            mapViewState.flyTo(loc.lng, loc.lat, sheetOffsetPx = offset)
             pendingRefocus = null
         }
     }
@@ -490,6 +495,12 @@ fun MapScreen(
         val pending = pendingRefocus ?: return@LaunchedEffect
         kotlinx.coroutines.delay(30_000)
         if (pendingRefocus == pending) pendingRefocus = null
+    }
+    // Reset pendingRefocus kad user zatvori sheet ili prebaci fokus na drugog člana —
+    // izbegava scenario gde stari pending flyTo pobegne dok user gleda nešto drugo.
+    LaunchedEffect(detailUid) {
+        val current = pendingRefocus ?: return@LaunchedEffect
+        if (detailUid == null || detailUid != current.first) pendingRefocus = null
     }
 
     // Follow focused member: dok je MemberDetailSheet otvoren, kamera prati svaki nov

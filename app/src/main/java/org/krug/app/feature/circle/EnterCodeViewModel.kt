@@ -51,16 +51,19 @@ class EnterCodeViewModel @Inject constructor(
     private val submitInFlight = AtomicBoolean(false)
 
     /**
-     * Exponential backoff za brute-force pokušaje invite kod-a. 6 cifara = 10^6 mogućnosti;
-     * bez cooldown-a, napadač sa svojim auth-om može da pokuša ~10 kod/s i pogodi za par
-     * sati. Sa cooldown-om 1s/2s/5s/15s posle 1./2./3./4.+ fail-a, brute-force postaje
-     * neisplativ. Reset na uspeh.
+     * Exponential backoff za brute-force pokušaje invite kod-a. Base36 alphanumeric,
+     * 6 znakova = 36^6 ≈ 2.17B mogućnosti. Bez cooldown-a, napadač sa svojim auth-om
+     * može da pokuša ~100 kod/s i pogodi 50% space-a za ~250 dana (upgrade sa ~3h
+     * kod pure-digit 6-char šeme). Sa cooldown-om 1s/2s/5s/15s posle 1./2./3./4.+
+     * fail-a, brute-force postaje potpuno neisplativ. Reset na uspeh.
      */
     @Volatile private var consecutiveFailures: Int = 0
     @Volatile private var cooldownUntilMs: Long = 0L
 
     fun setCode(value: String) {
-        val filtered = value.filter { it.isDigit() }.take(CODE_LENGTH)
+        val filtered = value.uppercase()
+            .filter { it in InviteRepository.CODE_ALPHABET }
+            .take(CODE_LENGTH)
         _state.update { it.copy(code = filtered, errorRes = null) }
     }
 

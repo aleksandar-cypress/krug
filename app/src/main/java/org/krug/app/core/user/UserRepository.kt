@@ -85,17 +85,34 @@ class UserRepository @Inject constructor(
         awaitClose { reg.remove() }
     }
 
-    /** GDPR — obriši settings + locationHistory subcolection-e + user doc. */
+    /**
+     * GDPR — obriši sve user subcolection-e + user doc.
+     *
+     * Cleanup targets (per firestore.rules /users/{uid}/... subcollection-e):
+     *  - settings — per-user prefs
+     *  - locationHistory — 30d GPS point-i
+     *  - trips — driving reports (v1.2.0)
+     *  - devices — multi-device FCM tokens (v1.2.0). Bez ovog, tokeni obrisanog
+     *    user-a ostaju u Firestore i troše storage; Cloud Function-i mogu i dalje
+     *    da fetch-uju stale tokene ako bi neko slao push „unatrag" (obično nema
+     *    caller-a jer smo ukloni-li user-a iz svih krugova, ali GDPR incomplete).
+     */
     suspend fun deleteUser(uid: String) {
         runCatching {
             userDoc(uid).collection("settings").get().await().documents.forEach { d ->
                 runCatching { d.reference.delete().await() }
             }
         }
-        // locationHistory može biti veliki (do ~6000 dokumenata za 30d aktivnog user-a).
-        // Batch delete u chunk-ovima od 500 (Firestore batch limit) da izbegnemo OOM.
+        deleteSubcollectionInBatches(uid, "locationHistory")
+        deleteSubcollectionInBatches(uid, "trips")
+        deleteSubcollectionInBatches(uid, "devices")
+        runCatching { userDoc(uid).delete().await() }
+            .onFailure { Timber.w(it, "deleteUser doc failed for $uid") }
+    }
+
+    private suspend fun deleteSubcollectionInBatches(uid: String, name: String) {
         runCatching {
-            val col = userDoc(uid).collection("locationHistory")
+            val col = userDoc(uid).collection(name)
             var deleted = 0
             while (true) {
                 val batch = col.limit(500).get().await().documents
@@ -104,9 +121,7 @@ class UserRepository @Inject constructor(
                 deleted += batch.size
                 if (batch.size < 500) break
             }
-            if (deleted > 0) Timber.i("deleteUser: cleaned %d history points for %s", deleted, uid)
-        }.onFailure { Timber.w(it, "deleteUser locationHistory cleanup failed for $uid") }
-        runCatching { userDoc(uid).delete().await() }
-            .onFailure { Timber.w(it, "deleteUser doc failed for $uid") }
+            if (deleted > 0) Timber.i("deleteUser: cleaned %d %s docs for %s", deleted, name, uid)
+        }.onFailure { Timber.w(it, "deleteUser $name cleanup failed for $uid") }
     }
 }

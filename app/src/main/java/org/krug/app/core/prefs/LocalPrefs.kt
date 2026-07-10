@@ -236,6 +236,23 @@ class LocalPrefs @Inject constructor(
     }
 
     /**
+     * Atomic per-place update — read-modify-write pod istim lock-om. Bez ovog, dva
+     * broadcast-a GeofenceBroadcastReceiver-a koja stižu blisko (npr. EXIT home u t=0,
+     * ENTER work u t=1s) mogu da izgube jedan update: oba load-uju stari map, jedan
+     * upiše (home:EXIT), drugi upiše (work:ENTER) sa svojom stare copy (memory home:ENTER),
+     * pa `home:EXIT` bude izgubljen. Rezultat: sledeći EXIT za home vidi prevType=ENTER,
+     * ali PhantomFilter može donekle „kolebati" jer je u međuvremenu bio pogrešan.
+     *
+     * `@Synchronized` na cross-instance singleton (LocalPrefs) serijalizuje sve pozive.
+     */
+    @Synchronized
+    fun updatePlaceTransitionType(placeId: String, type: String) {
+        val current = loadPlaceTransitionTypes()
+        current[placeId] = type
+        savePlaceTransitionTypes(current)
+    }
+
+    /**
      * GDPR — pozvati nakon delete-account ili reinstall recovery-ja. Briše sve per-account
      * state da novi sign-in ne nasledi stari `activeCircleId` (ne postoji više), `sos_notified`
      * dedup ili `onboardingCompleted` flag (novi nalog treba čist onboarding). `pendingDeleteUid`
@@ -250,6 +267,11 @@ class LocalPrefs @Inject constructor(
             remove(KEY_LAST_SEEN_PLACE_EVENT_TS)
             remove(KEY_BATTERY_ALERTED)
             remove(KEY_PLACE_TRANSITION_TYPE)
+            // WhatsNew i battery-prompt cooldown su per-user, ne per-device — user A vidi
+            // v14 modal, sign-out, user B sign-in bi trebao da vidi modal sam za sebe.
+            // Bez ovog, B-ov WhatsNew flag je „already seen" (A ga je dismiss-ovao).
+            remove(KEY_LAST_SEEN_WHATS_NEW)
+            remove(KEY_LAST_BATTERY_PROMPT_MS)
         }
         _activeCircleId.value = null
     }

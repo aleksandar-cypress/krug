@@ -63,7 +63,7 @@ class EtaNotifier @Inject constructor(
         NotificationManagerCompat.from(context).let { mgr ->
             runCatching {
                 @Suppress("MissingPermission")
-                mgr.notify(notifIdStarted(share.userId), notif)
+                mgr.notify(TAG_STARTED, notifIdStarted(share.userId), notif)
             }.onFailure { Timber.w(it, "eta started notif failed") }
         }
     }
@@ -85,10 +85,10 @@ class EtaNotifier @Inject constructor(
         }
         val notif = build(title, body, pi, notifIdArrived(share.userId))
         // Poništi „na putu" notif kad stigne — clutter cleanup.
-        NotificationManagerCompat.from(context).cancel(notifIdStarted(share.userId))
+        NotificationManagerCompat.from(context).cancel(TAG_STARTED, notifIdStarted(share.userId))
         runCatching {
             @Suppress("MissingPermission")
-            NotificationManagerCompat.from(context).notify(notifIdArrived(share.userId), notif)
+            NotificationManagerCompat.from(context).notify(TAG_ARRIVED, notifIdArrived(share.userId), notif)
         }.onFailure { Timber.w(it, "eta arrived notif failed") }
     }
 
@@ -126,10 +126,15 @@ class EtaNotifier @Inject constructor(
         }
     }
 
-    private fun notifIdStarted(uid: String): Int = 4_000 + (uid.hashCode() and 0x7FFF)
-    private fun notifIdArrived(uid: String): Int = 5_000 + (uid.hashCode() and 0x7FFF)
+    // 3M / 4M base — vidi komentar u `SosNotifier` o notif ID collision-u
+    // (susedni notifier tipovi su se preklapali na starom 1_000-spacing rangeu).
+    private fun notifIdStarted(uid: String): Int = 3_000_000 + (uid.hashCode() and 0x7FFF)
+    private fun notifIdArrived(uid: String): Int = 4_000_000 + (uid.hashCode() and 0x7FFF)
 
     companion object {
         const val CHANNEL_ID = "krug_eta_shares"
+        // Vidi SosNotifier o notif tag pattern-u.
+        private const val TAG_STARTED = "krug_eta_started"
+        private const val TAG_ARRIVED = "krug_eta_arrived"
     }
 }

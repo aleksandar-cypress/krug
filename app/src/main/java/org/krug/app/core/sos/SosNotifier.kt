@@ -105,7 +105,7 @@ class SosNotifier @Inject constructor(
             // POST_NOTIFICATIONS (Android 13+) je runtime permission; user je može opozvati
             // između app start-a i SOS trigger-a. runCatching pokriva SecurityException.
             @Suppress("MissingPermission")
-            NotificationManagerCompat.from(context).notify(notificationIdFor(uid), notification)
+            NotificationManagerCompat.from(context).notify(NOTIF_TAG, notificationIdFor(uid), notification)
             Timber.d("notifySos posted for $uid")
         }.onFailure { Timber.w(it, "notifySos failed") }
         // Direktan Vibrator poziv — radi i ako je channel/notification silent
@@ -129,7 +129,7 @@ class SosNotifier @Inject constructor(
     }
 
     fun cancelSos(uid: String) {
-        NotificationManagerCompat.from(context).cancel(notificationIdFor(uid))
+        NotificationManagerCompat.from(context).cancel(NOTIF_TAG, notificationIdFor(uid))
     }
 
     private fun notificationIdFor(uid: String): Int =
@@ -140,7 +140,14 @@ class SosNotifier @Inject constructor(
         // moramo da pravimo novi channel kad menjamo importance/sound. v2 = HIGH + alarm.
         const val CHANNEL_ID = "krug_sos_v2"
         const val EXTRA_FOCUS_SOS_UID = "krug_focus_sos_uid"
-        private const val SOS_NOTIFICATION_BASE_ID = 2_000
+        // Notification tag namespace — Android identifikuje notif preko (tag, id) para,
+        // pa ista id vrednost može da postoji nezavisno u različitim tagovima. Bez tag-a,
+        // ID collision između tipova (SOS uid A hash → 3000; Battery uid B hash → 3000)
+        // može tiho da overwrite-uje kritičnu SOS notif battery upozorenjem. Fixed BASE_ID
+        // spacing (1M/2M/3M/4M) štiti od cross-notifier-uid collision-a, tag-ovi dodatno
+        // štite od event.id.hashCode() koje može da hash-uje u bilo koji Int range.
+        private const val NOTIF_TAG = "krug_sos"
+        private const val SOS_NOTIFICATION_BASE_ID = 1_000_000
         private val VIBRATION_PATTERN = longArrayOf(0, 500, 200, 500, 200, 500)
     }
 }

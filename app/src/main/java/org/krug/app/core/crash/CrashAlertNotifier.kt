@@ -79,12 +79,12 @@ class CrashAlertNotifier @Inject constructor(
             .build()
         runCatching {
             @Suppress("MissingPermission")
-            NotificationManagerCompat.from(context).notify(NOTIF_ID, notif)
+            NotificationManagerCompat.from(context).notify(NOTIF_TAG, NOTIF_ID, notif)
         }.onFailure { Timber.w(it, "crash countdown notif failed") }
     }
 
     fun cancel() {
-        NotificationManagerCompat.from(context).cancel(NOTIF_ID)
+        NotificationManagerCompat.from(context).cancel(NOTIF_TAG, NOTIF_ID)
     }
 
     companion object {
@@ -92,5 +92,7 @@ class CrashAlertNotifier @Inject constructor(
         const val NOTIF_ID = 6_001
         const val ACTION_CRASH_CANCEL = "org.krug.app.CRASH_CANCEL"
         const val ACTION_CRASH_SEND_NOW = "org.krug.app.CRASH_SEND_NOW"
+        // Vidi SosNotifier o notif tag pattern-u.
+        private const val NOTIF_TAG = "krug_crash"
     }
 }
