@@ -59,6 +59,23 @@ Cilj 1.2.3: sakupiti 5 fix-a koji su prijavljeni jutros pre odlaska na odmor. Ni
 - Ranije: modal je pokazivan kad je `lastSeenWhatsNewVersion < currentVersion` (BuildConfig.VERSION_CODE). User koji je video 1.2.0 modal sa 4 nove feature-a je isti sadržaj video opet na 1.2.1 (v12), 1.2.2 (v13), 1.2.3 (v14) — hotfix-i nemaju nove feature-e pa je modal bio pure spam
 - Fix: uveden `whatsNewContentVersion = 11` (versionCode kad je trenutni whats-new sadržaj uveden — 1.2.0). Modal se poredi sa ovim, ne sa live BuildConfig. Bump-uje se tek kad se doda nova feature copy u `whats_new_*` stringove, a hotfix versionCode-ovi ga ne diraju
 
+**#10 Log ring buffer za feedback flow (biggest ROI za 10-dnevni test)**
+`LogRingBuffer.kt` (nov) + `RingBufferTree.kt` (nov) + `KrugApplication.kt` + `DiagnosticsScreen.kt`:
+- Novi in-memory bounded bafer (kapacitet 500 linija, ~75KB memory footprint)
+- `RingBufferTree` Timber tree ide pored postojećih `DebugTree` (debug) i
+  `CrashlyticsTree` (release). U debug mode-u hvata sve (V/D/I/W/E/A), u release
+  hvata samo INFO+ (D/V su chatty u FGS/heartbeat vrelim putevima)
+- `sendFeedbackEmail` sada attach-uje poslednjih 150 linija u body-ju posle
+  dijagnostika snapshot-a. Cap 150 (a ne full 500) zbog mailto: URI limita
+  (~64KB pre Gmail truncate-a). Full bafer se dobija preko „Kopiraj sve" dugmeta
+  koje ide u clipboard bez URI limita
+- Format: `HH:mm:ss.SSS P TAG: message` — kompakt za email
+- Regresija-guard: 9 unit testova u `LogRingBufferTest` (append order, bound
+  cap-uje na 500, FIFO preliv, dump lastN, clear)
+- **ROI za odmor**: kad Jelena kaže „nešto je puklo", email dolazi sa
+  dijagnostika snapshot-om + last 150 log linija. Vidimo *kontekst* pre bug-a,
+  ne samo trenutno stanje
+
 **#9 Integration test za phantom EXIT (regresija guard)**
 `PhantomFilter.kt` (nov) + `PhantomFilterTest.kt` (nov) + `GeofenceBroadcastReceiver.kt` refactor:
 - Phantom decision logic izvučena iz `GeofenceBroadcastReceiver.onReceive` u pure funkciju `PhantomFilter.classify(type, prevType, verify)` sa `VerifyOutcome` (Confirmed(userInside) / Inconclusive) i `Decision` (Allow(reason) / Skip(reason)) sealed class-ovima

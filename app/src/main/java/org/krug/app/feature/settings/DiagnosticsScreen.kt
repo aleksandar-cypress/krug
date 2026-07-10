@@ -42,6 +42,7 @@ import com.google.firebase.auth.FirebaseAuth
 import org.krug.app.BuildConfig
 import org.krug.app.R
 import org.krug.app.core.location.LocationTrackingService
+import org.krug.app.core.logging.LogRingBuffer
 import org.krug.app.core.permissions.PermissionUtils
 import org.krug.app.core.util.DeviceNames
 import timber.log.Timber
@@ -187,6 +188,15 @@ private data class DiagSnapshot(val sections: List<DiagSection>) {
             appendLine("[${section.title}]")
             section.rows.forEach { (label, value) -> appendLine("$label: $value") }
         }
+        // Copy-all podrazumeva puno stanje — uključi ceo bafer (do 500 linija) tako da
+        // tester koji je odabrao Copy paste-ovanjem u chat/email dobija dubinski kontekst.
+        // Za mailto: intent koristimo cap na 150 linija zbog URI limit-a (vidi sendFeedbackEmail).
+        val logs = LogRingBuffer.dump()
+        if (logs.isNotEmpty()) {
+            appendLine()
+            appendLine("[Log poslednjih ${logs.size} linija]")
+            logs.forEach { appendLine(it) }
+        }
     }
 }
 
@@ -268,12 +278,22 @@ private fun sendFeedbackEmail(context: Context, snapshot: DiagSnapshot) {
     val versionCode = BuildConfig.VERSION_CODE
     val device = DeviceNames.friendly("${Build.MANUFACTURER} ${Build.MODEL}")
     val subject = "Krug problem — $device — $versionName ($versionCode)"
+    // Log dump: poslednjih 150 linija iz [LogRingBuffer]. Cap 150 (a ne full 500)
+    // jer mailto: URI ima praktičan limit ~64KB pre Gmail truncate-a. 150 linija *
+    // ~150 char = ~22KB — dovoljno da vidimo šta se desilo par minuta pre bug-a,
+    // sigurno unutar limita. Ako treba dublji dump, tester može da tapne „Kopiraj
+    // sve" pa da paste-uje ceo bafer ručno u email.
+    val logs = LogRingBuffer.dump(lastN = 150)
     val body = buildString {
         appendLine("[Napiši šta se desilo — koraci, vreme, koje ekran, koji član kruga:]")
         appendLine()
         appendLine()
-        appendLine("---")
+        appendLine("--- Dijagnostika ---")
         append(snapshot.toClipboardText())
+        appendLine()
+        appendLine()
+        appendLine("--- Log (poslednjih ${logs.size} linija) ---")
+        logs.forEach { appendLine(it) }
     }
     val uri = Uri.parse(
         "mailto:aleksandarr@gmail.com?subject=" +

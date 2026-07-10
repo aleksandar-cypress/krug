@@ -20,6 +20,7 @@ import kotlinx.coroutines.SupervisorJob
 import org.krug.app.core.location.LocationHealthWorker
 import org.krug.app.core.logging.CrashlyticsContext
 import org.krug.app.core.logging.CrashlyticsTree
+import org.krug.app.core.logging.RingBufferTree
 import timber.log.Timber
 
 @HiltAndroidApp
@@ -55,10 +56,15 @@ class KrugApplication : Application() {
             )
         }
         // Logging: u debug ide u logcat (DebugTree), u release ide u Crashlytics.
+        // Uz to, RingBufferTree u oba mode-a hvata poslednjih 500 linija u memoriju
+        // za Diagnostics feedback flow — tester klikne „Pošalji izveštaj" i mi dobijamo
+        // kontekst *pre* bug-a, ne samo snapshot trenutnog stanja.
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
+            Timber.plant(RingBufferTree(includeDebug = true))
         } else {
             Timber.plant(CrashlyticsTree())
+            Timber.plant(RingBufferTree(includeDebug = false))
         }
         // Crashlytics: prikupi samo u release. Debug crash-evi ostaju u logcat-u
         // da ne zatrpamo dashboard test-tipom.
