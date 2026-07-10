@@ -52,6 +52,27 @@ Cilj 1.2.3: sakupiti 5 fix-a koji su prijavljeni jutros pre odlaska na odmor. Ni
 - Otvara mailto: intent (`ACTION_SENDTO`) na `aleksandarr@gmail.com`, subject = „Krug problem — <device> — <version>", body = placeholder red („Napiši šta se desilo…") + full dijagnostika (App/FGS/Perms/Identity/Device snapshot)
 - Nova „App" sekcija u snapshot-u: versionName, versionCode, buildType — testeri i Aleksandar znaju exact build koji je u pitanju
 - Toast fallback ako user nema email app (retko na modernim Android-ima)
+- Copy dugmetu dodat Toast confirmation („Kopirano u clipboard") — user vidi da je tap prošao
+
+**#8 WhatsNewDialog fajrao na svaki versionCode bump (spam)**
+`MapScreen.kt`:
+- Ranije: modal je pokazivan kad je `lastSeenWhatsNewVersion < currentVersion` (BuildConfig.VERSION_CODE). User koji je video 1.2.0 modal sa 4 nove feature-a je isti sadržaj video opet na 1.2.1 (v12), 1.2.2 (v13), 1.2.3 (v14) — hotfix-i nemaju nove feature-e pa je modal bio pure spam
+- Fix: uveden `whatsNewContentVersion = 11` (versionCode kad je trenutni whats-new sadržaj uveden — 1.2.0). Modal se poredi sa ovim, ne sa live BuildConfig. Bump-uje se tek kad se doda nova feature copy u `whats_new_*` stringove, a hotfix versionCode-ovi ga ne diraju
+
+**#9 Integration test za phantom EXIT (regresija guard)**
+`PhantomFilter.kt` (nov) + `PhantomFilterTest.kt` (nov) + `GeofenceBroadcastReceiver.kt` refactor:
+- Phantom decision logic izvučena iz `GeofenceBroadcastReceiver.onReceive` u pure funkciju `PhantomFilter.classify(type, prevType, verify)` sa `VerifyOutcome` (Confirmed(userInside) / Inconclusive) i `Decision` (Allow(reason) / Skip(reason)) sealed class-ovima
+- Receiver sad pravi VerifyOutcome iz `verifyLocation` + `placeInfo` i deleguje odluku helper-u — jednostavniji flow, isti behavior
+- 14 unit testova u `PhantomFilterTest` pokrivaju sve edge case-ove:
+  - Confirmed IN + EXIT → Skip (phantom, user unutra)
+  - Confirmed OUT + ENTER → Skip (phantom, user van)
+  - Prvi EXIT (prevType=null) + confirmed OUT → Allow (legit izlazak posle create-while-inside)
+  - **Inconclusive + EXIT + null prevType → Skip (fail-closed, Jelena scenario)**
+  - Inconclusive + EXIT + prior ENTER → Allow
+  - Inconclusive + ENTER → Allow (ne fail-close-ujemo ENTER)
+  - Semantic guard (prev==type) hvata repeated
+- Sve prolaze: `14 tests, 0 failures, 0 errors`
+- Regresija-guard: ako neko sledeći put propusti bez provere, testovi padaju odmah
 
 ### R8 sanity check (per 1.2.1 postmortem lesson)
 

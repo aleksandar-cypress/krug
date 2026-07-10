@@ -118,7 +118,18 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                         Text(stringResource(R.string.action_refresh))
                     }
                     Button(
-                        onClick = { copyToClipboard(context, snapshot.toClipboardText()) },
+                        onClick = {
+                            copyToClipboard(context, snapshot.toClipboardText())
+                            // Vizuelni confirm — bez toast-a tester klikne pa ne zna
+                            // da li se ništa desilo (clipboard je nevidljiv). Kratak
+                            // toast je dovoljan; snackbar bi bio previše za jedno-tap
+                            // radnju.
+                            Toast.makeText(
+                                context,
+                                R.string.diagnostics_copied_toast,
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        },
                         modifier = Modifier.weight(1f),
                     ) {
                         Text(stringResource(R.string.action_copy_all))

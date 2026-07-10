@@ -305,22 +305,28 @@ fun MapScreen(
         }
     }
 
-    // Whats-new modal: prikazuje se jednom po version-code bump-u.
+    // Whats-new modal: prikazuje se jednom po *sadržaj-verziji* whats-new-a, ne po
+    // svakom versionCode bump-u. Do 1.2.3 je fajrao na svaki bump (11→12→13→14) što
+    // je značilo da user koji je video 1.2.0 modal vidi isti sadržaj još 3 puta jer
+    // hotfix-i (1.2.1, 1.2.2, 1.2.3) nemaju nove feature-e. `WHATS_NEW_CONTENT_VERSION`
+    // se bump-uje SAMO kad se dodaju nove feature reči u whats_new_* stringove; hotfix
+    // versionCode-ovi ga ne diraju.
+    val whatsNewContentVersion = 11 // 1.2.0 — kada su speeding/checkin/eta/crash dodati
     var showWhatsNew by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        val currentVersion = org.krug.app.BuildConfig.VERSION_CODE
         val lastSeen = viewModel.lastSeenWhatsNewVersion()
         if (lastSeen == 0) {
-            // Fresh install ili prvi put — ne prikazujemo modal, samo pamtimo trenutni version.
-            viewModel.markWhatsNewSeen(currentVersion)
-        } else if (lastSeen < currentVersion) {
+            // Fresh install ili prvi put — ne prikazujemo modal, samo pamtimo trenutni
+            // sadržaj-version tako da modal ne skoči na sledeći startup.
+            viewModel.markWhatsNewSeen(whatsNewContentVersion)
+        } else if (lastSeen < whatsNewContentVersion) {
             showWhatsNew = true
         }
     }
     if (showWhatsNew) {
         WhatsNewDialog(onDismiss = {
             showWhatsNew = false
-            viewModel.markWhatsNewSeen(org.krug.app.BuildConfig.VERSION_CODE)
+            viewModel.markWhatsNewSeen(whatsNewContentVersion)
         })
     }
 

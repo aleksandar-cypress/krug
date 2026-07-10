@@ -635,4 +635,5 @@
     <string name="diagnostics_section_device">Device</string>
     <string name="diagnostics_send_report">Send report to Aleksandar</string>
     <string name="diagnostics_send_no_email_app">No email app is installed on this device.</string>
+    <string name="diagnostics_copied_toast">Copied to clipboard</string>
 </resources>

@@ -237,52 +237,31 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                     val (circleId, placeId) = parseRequestId(fence.requestId) ?: return@forEach
                     val placeInfo = fetchPlaceInfo(circleId, placeId)
                     val prevType = persistedTypes[placeId]
-                    // GPS verifikacija (Filter 4). Dva režima:
-                    //  A) Verify uspešan (verifyLocation != null && placeInfo != null):
-                    //     radi puni distance check kao pre — odbaci phantom po fizičkoj
-                    //     poziciji spram center-a place-a.
-                    //  B) Verify inconclusive (bilo koja komponenta null — GPS timeout ili
-                    //     Firestore fetch fail): FAIL-CLOSED za EXIT — traži da postoji
-                    //     PRETHODNI persisted ENTER u prefs. Ako ga nema, event je 99%
-                    //     phantom (Play Services „reconciles" state za mesto gde user nikad
-                    //     nije bio → EXIT fajruje iz vazduha). ENTER u inconclusive režimu
-                    //     puštamo — miss legit ENTER je manja šteta od tihog gubljenja
-                    //     stvarnog dolaska.
-                    //
-                    //  Bug koji ovo popravlja (Jul 2026, Jelena): user prijavljuje EXIT
-                    //  notif za place na kome fizički nikad nije bio. Root cause: verify
-                    //  je vraćao null (GPS timeout posle Doze) pa je stariji kod propustao
-                    //  event bez ikakve provere. Novi fail-closed brani ovaj scenario jer
-                    //  prefs neće imati ENTER (user nikad tamo nije bio).
-                    if (verifyLocation != null && placeInfo != null) {
+                    // Izračunaj GPS verify outcome pa proslijedi u PhantomFilter (pure fn).
+                    // Bug koji ovo popravlja (Jul 2026, Jelena): user prijavljuje EXIT
+                    // notif za place na kome fizički nikad nije bio. Root cause: verify
+                    // je vraćao null (GPS timeout posle Doze) pa je stariji kod propustao
+                    // event bez ikakve provere. Novi fail-closed brani ovaj scenario jer
+                    // prefs neće imati ENTER (user nikad tamo nije bio).
+                    val verifyOutcome = if (verifyLocation != null && placeInfo != null) {
                         val distance = distanceMeters(
                             verifyLocation.latitude, verifyLocation.longitude,
                             placeInfo.lat, placeInfo.lng,
                         )
                         val thresholdIn = placeInfo.radius + PHANTOM_THRESHOLD_M
-                        when (type) {
-                            PlaceEventModel.TYPE_EXIT -> if (distance <= thresholdIn) {
-                                Timber.w(
-                                    "GeofenceReceiver: skip phantom EXIT place=%s dist=%.1fm radius=%d (user still inside)",
-                                    placeInfo.name, distance, placeInfo.radius,
-                                )
-                                return@forEach
-                            }
-                            PlaceEventModel.TYPE_ENTER -> if (distance > thresholdIn) {
-                                Timber.w(
-                                    "GeofenceReceiver: skip phantom ENTER place=%s dist=%.1fm radius=%d (user still outside)",
-                                    placeInfo.name, distance, placeInfo.radius,
-                                )
-                                return@forEach
-                            }
-                        }
-                    } else if (type == PlaceEventModel.TYPE_EXIT && prevType != PlaceEventModel.TYPE_ENTER) {
+                        PhantomFilter.VerifyOutcome.Confirmed(userInside = distance <= thresholdIn)
+                    } else {
+                        PhantomFilter.VerifyOutcome.Inconclusive
+                    }
+                    val decision = PhantomFilter.classify(type, prevType, verifyOutcome)
+                    if (decision is PhantomFilter.Decision.Skip) {
                         Timber.w(
-                            "GeofenceReceiver: skip phantom EXIT placeId=%s (verify inconclusive, no prior ENTER — verifyLoc=%s placeInfo=%s prevType=%s)",
-                            placeId,
-                            verifyLocation != null,
-                            placeInfo != null,
+                            "GeofenceReceiver: skip %s place=%s prev=%s verify=%s — %s",
+                            type,
+                            placeInfo?.name ?: placeId,
                             prevType ?: "null",
+                            verifyOutcome::class.simpleName,
+                            decision.reason,
                         )
                         return@forEach
                     }
@@ -293,18 +272,6 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                     val last = synchronized(lastEventTimes) { lastEventTimes[key] } ?: 0L
                     if (now - last < DEDUP_WINDOW_MS) {
                         Timber.d("GeofenceReceiver: dedup skip $key (last ${now - last}ms ago)")
-                        return@forEach
-                    }
-                    // Semantički guard: ne dopusti ENTER→ENTER (ili EXIT→EXIT) za isti place
-                    // bez suprotnog event-a između. Hvata slučaj kad phantom EXIT ipak prođe
-                    // distance filter (GPS drift preko radius+100m par minuta), pa sledeći
-                    // ENTER nema fizičku osnovu. Sada čita iz persisted prefs → survive
-                    // Doze/process kill.
-                    if (prevType == type) {
-                        Timber.w(
-                            "GeofenceReceiver: skip repeated %s for place=%s (no intervening opposite transition)",
-                            type, placeInfo?.name ?: placeId,
-                        )
                         return@forEach
                     }
                     synchronized(lastEventTimes) { lastEventTimes[key] = now }
