@@ -149,6 +149,7 @@ import org.krug.app.core.util.compactLastSeen
 import org.krug.app.core.util.formatDistance
 import org.krug.app.core.util.haversineMeters
 import org.krug.app.core.util.sosRelativeTime
+import org.krug.app.core.util.truncateWithEllipsis
 import org.krug.app.feature.circle.CircleIconAssets
 import org.krug.app.ui.theme.LogoBlue
 import org.krug.app.ui.theme.LogoBlueLight
@@ -2040,10 +2041,13 @@ private fun MapboxContainer(
                         .ifBlank { if (primary.isSelf) labelYou else labelMember }
                         .take(18)
                 } else {
-                    // Cluster label: prva 2 imena spojena zarezom, ako je više — "Ime i N".
-                    val names = group.map { it.displayName.ifBlank { labelMember }.take(10) }
+                    // Cluster label: prva 2 imena razdvojena tačkom (bez zareza — user je
+                    // prijavio "Dusica Baj, Magdalena" na screenshot-u koji izgleda kao
+                    // jedno ime "Ime, Prezime" jer zarez u srpskom kontekstu vizuelno
+                    // spaja dva reda. Ellipsis + `·` jasno pokazuje 2 odvojena čoveka.
+                    val names = group.map { it.displayName.ifBlank { labelMember }.truncateWithEllipsis(11) }
                     when (group.size) {
-                        2 -> "${names[0]}, ${names[1]}"
+                        2 -> "${names[0]} · ${names[1]}"
                         else -> "${names[0]} i ${group.size - 1}"
                     }
                 }

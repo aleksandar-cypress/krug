@@ -79,10 +79,13 @@ class PhantomFilterTest {
         assertThat(decision).isInstanceOf(PhantomFilter.Decision.Skip::class.java)
     }
 
-    @Test fun `Inconclusive EXIT sa prior ENTER → Allow (imamo dokaz ulaska)`() {
-        // User je bio unutra (persisted ENTER), sad izlazi, GPS ne može da potvrdi
-        // ali imamo prior state — puštamo.
-        val decision = PhantomFilter.classify(EXIT, prevType = ENTER, verify = inconclusiveVerify)
+    @Test fun `Inconclusive EXIT sa fresh prior ENTER → Allow (imamo dokaz ulaska)`() {
+        // User je bio unutra (persisted ENTER, npr. pre sat vremena), sad izlazi,
+        // GPS ne može da potvrdi ali imamo fresh prior state — puštamo.
+        val freshAge = 60L * 60L * 1000L
+        val decision = PhantomFilter.classify(
+            EXIT, prevType = ENTER, prevTypeAgeMs = freshAge, verify = inconclusiveVerify,
+        )
         assertThat(decision).isInstanceOf(PhantomFilter.Decision.Allow::class.java)
     }
 
@@ -101,5 +104,33 @@ class PhantomFilterTest {
     @Test fun `Inconclusive ENTER sa prior ENTER → Skip (repeated, guard prvi)`() {
         val decision = PhantomFilter.classify(ENTER, prevType = ENTER, verify = inconclusiveVerify)
         assertThat(decision).isInstanceOf(PhantomFilter.Decision.Skip::class.java)
+    }
+
+    // === TTL za stale prior ENTER (bug: Jana LEFT za place gde nije bila) ===
+
+    @Test fun `Inconclusive EXIT sa stale prior ENTER (13h) → Skip (TTL)`() {
+        val staleAge = PhantomFilter.STALE_ENTER_TTL_MS + 60_000L
+        val decision = PhantomFilter.classify(
+            EXIT, prevType = ENTER, prevTypeAgeMs = staleAge, verify = inconclusiveVerify,
+        )
+        assertThat(decision).isInstanceOf(PhantomFilter.Decision.Skip::class.java)
+    }
+
+    @Test fun `Inconclusive EXIT sa fresh prior ENTER (2h) → Allow`() {
+        val freshAge = 2L * 60L * 60L * 1000L
+        val decision = PhantomFilter.classify(
+            EXIT, prevType = ENTER, prevTypeAgeMs = freshAge, verify = inconclusiveVerify,
+        )
+        assertThat(decision).isInstanceOf(PhantomFilter.Decision.Allow::class.java)
+    }
+
+    @Test fun `Confirmed OUT EXIT sa stale prior ENTER → Allow (GPS potvrdio, TTL nebitno)`() {
+        // GPS je potvrdio da je user JASNO van place-a → legitiman EXIT bez obzira
+        // koliko je stari prior ENTER. TTL utiče samo na Inconclusive verify.
+        val staleAge = 48L * 60L * 60L * 1000L
+        val decision = PhantomFilter.classify(
+            EXIT, prevType = ENTER, prevTypeAgeMs = staleAge, verify = outsideVerify,
+        )
+        assertThat(decision).isInstanceOf(PhantomFilter.Decision.Allow::class.java)
     }
 }

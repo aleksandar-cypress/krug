@@ -7,6 +7,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
+import android.os.Process
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingEvent
@@ -56,16 +58,29 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
          * mesta 5+ puta u 5 min).
          */
         private const val DEDUP_WINDOW_MS = 5L * 60_000L
-        private val lastEventTimes = mutableMapOf<String, Long>()
 
         /**
-         * Timeout za fresh GPS fix pri verifikaciji. BroadcastReceiver.goAsync() daje
-         * oko 30s do system kill-a, ostavljamo margine za Firestore fetch (place info +
-         * logEvent write). 15s je uobičajen fused HIGH_ACCURACY warm-fix; ako uređaj
-         * nema recent GPS, može trajati duže i mi ćemo fallback-ovati na standardnu
-         * validaciju (bez GPS verify), tj. propustiti event kao pre.
+         * Cross-type dedup: kad za isti place stigne obrnuta tranzicija unutar ovog
+         * prozora (npr. LEFT pa ARRIVED, ili ENTER pa EXIT), drugi event je 99%
+         * phantom (GPS jitter na granici, Doze wake reconciliation, screen-wake
+         * fizika). Legitiman scenario „user zaboravio nesto pa se vratio unutar
+         * minute" je redak i bezopasan da se skip-uje. Bug (Jul 2026, screen-wake):
+         * user samo probudio ekran, drugi je dobio dve poruke LEFT + ARRIVED u
+         * istom trenutku iako se fizicki niko nije pomerio.
          */
-        private const val GPS_VERIFY_TIMEOUT_MS = 15_000L
+        private const val OPPOSITE_DEDUP_WINDOW_MS = 90_000L
+
+        /**
+         * Timeout za fresh GPS fix pri verifikaciji. BroadcastReceiver.goAsync() ima
+         * **10s Android limit** (ne 30s kako je bilo napisano — API dokumentacija). Za
+         * budžet: 10s ukupno, minus ~1-2s Firestore fetch (placeInfo + logEvent),
+         * minus ~500ms overhead → GPS timeout ne sme preći ~7s. 8s je bezbedan
+         * gornji limit; ako nema fresh fix-a, fallback na stale triggeringLocation
+         * (FALLBACK_LOC_* konstante) pa ako i to ne uspe → Inconclusive verify.
+         * Bug (Jul 2026): stariji 15s timeout je mogao dovesti do system kill BR-a
+         * bez `pendingResult.finish()` — event izgubljen, listener state nekonzistentan.
+         */
+        private const val GPS_VERIFY_TIMEOUT_MS = 8_000L
 
         /**
          * Tolerancija oko granice geofence-a pri verifikaciji. Play Services može
@@ -98,6 +113,19 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
          */
         private const val TRIGGERING_LOC_MAX_ACCURACY_M = 50f
         private const val TRIGGERING_LOC_MAX_AGE_MS = 30_000L
+
+        /**
+         * "Poslednji resort" — kad fresh GPS fetch fail-uje (Doze restrictions, no fix),
+         * pre nego što padnemo na Inconclusive, prihvatamo stale triggeringLocation
+         * sa širim tolerancijama. Bolje verifikovati sa 5min starim, 150m accuracy fix-om
+         * nego bez ičega. Bug (Jul 2026, screen-wake): telefon zaključan, Play fire
+         * spurious LEFT + ARRIVED za placeu gde je user fizički bio; sa strogim cheap
+         * path constraints (50m/30s) fell back na fresh fetch koji Doze prekinuo pa
+         * Inconclusive → phantom prošao. Sa širim fallback-om, stale fix pokaže da je
+         * user unutar place-a → Confirmed IN → phantom EXIT skip.
+         */
+        private const val FALLBACK_LOC_MAX_ACCURACY_M = 150f
+        private const val FALLBACK_LOC_MAX_AGE_MS = 5L * 60_000L
     }
 
     override fun onReceive(context: Context, intent: Intent?) {
@@ -134,11 +162,35 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
         // po instalaciji 1.1.2 geofence subsystem se re-registruje i Play Services "reconciles"
         // stanje slanjem ENTER Home + EXIT Banjica + EXIT babina kuca istovremeno iako user
         // nije mrdao. Drugi članovi kruga dobiju 3 spam notif-a.
-        val sinceRegister = System.currentTimeMillis() - GeofenceManager.lastRegisteredAtMs
-        if (GeofenceManager.lastRegisteredAtMs > 0L && sinceRegister < GeofenceManager.STARTUP_GRACE_MS) {
+        // In-memory companion se resetuje na 0 pri proces death, pa ako je Play Services
+        // fire-ovala broadcast pre nego što je LocationTrackingService podigao FGS +
+        // registerAll(), lastRegisteredAtMs=0 i grace ne štiti. Fallback: čitanje iz
+        // LocalPrefs (persist na disk). Bug (Jul 2026, Jelena restart): user je killed
+        // + reopened app dok je bio u placeu; Play je poslala reconciliation ENTER pre
+        // registracije, drugi članovi kruga su dobili phantom notif.
+        val nowMs = System.currentTimeMillis()
+        val effectiveRegisterMs = GeofenceManager.lastRegisteredAtMs.takeIf { it > 0L }
+            ?: localPrefs.lastGeofenceRegisterMs
+        val sinceRegister = nowMs - effectiveRegisterMs
+        if (effectiveRegisterMs > 0L && sinceRegister < GeofenceManager.STARTUP_GRACE_MS) {
             Timber.w(
                 "GeofenceReceiver: skip transition inside startup grace (%dms since register, type=%d, count=%d)",
                 sinceRegister, transition, triggered.size,
+            )
+            return
+        }
+        // Process uptime grace: pokriva scenario kad Play Services fire broadcast dok
+        // je proces tek startao — LocationTrackingService još nije stigao da re-registruje
+        // geofences pa `lastGeofenceRegisterMs` iz LocalPrefs pokazuje na prethodnu sesiju
+        // (starije od 2min pa gornji grace ne štiti). BroadcastReceiver može biti pozvan
+        // "cold" (Play Services starta samo proces za ovaj event), Process.getStartElapsedRealtime
+        // hvata tačno taj scenario. Bug (Jul 2026): Jelena kill+reopen dok je u placeu →
+        // Play fire reconciliation ENTER PRE nego što LocationTrackingService podigne FGS.
+        val processUptimeMs = SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime()
+        if (processUptimeMs in 0L until GeofenceManager.STARTUP_GRACE_MS) {
+            Timber.w(
+                "GeofenceReceiver: skip transition inside process startup grace (uptime=%dms, type=%d, count=%d)",
+                processUptimeMs, transition, triggered.size,
             )
             return
         }
@@ -224,7 +276,17 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                         triggeringLoc?.accuracy?.toString() ?: "null",
                         if (triggeringLoc != null) "${triggeringAgeMs}ms" else "n/a",
                     )
-                    tryGetFreshLocation(context)
+                    tryGetFreshLocation(context) ?: triggeringLoc?.takeIf {
+                        // Poslednji resort: prihvati stale triggeringLocation kad fresh
+                        // fetch fail (Doze). Vidi FALLBACK_LOC_* docs.
+                        it.accuracy < FALLBACK_LOC_MAX_ACCURACY_M &&
+                            triggeringAgeMs < FALLBACK_LOC_MAX_AGE_MS
+                    }?.also {
+                        Timber.d(
+                            "GeofenceReceiver: fresh fetch failed, fallback to stale triggeringLocation (acc=%.1fm age=%dms)",
+                            it.accuracy, triggeringAgeMs,
+                        )
+                    }
                 }
                 if (verifyLocation == null) {
                     Timber.w("GeofenceReceiver: no location for verify, proceeding without")
@@ -233,10 +295,21 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                 // load ovde (za PhantomFilter classify); commit ide preko atomic
                 // updatePlaceTransitionType da spreči race između paralelnih broadcast-a.
                 val persistedTypes = localPrefs.loadPlaceTransitionTypes()
+                // Dedup mape se učitavaju iz LocalPrefs (TTL-filtered) tako da process
+                // death ne resetuje stanje. Mutate lokalno u forEach loop-u, sačuvaj
+                // batch-u na kraju (izbegava per-event disk write). Vidi LocalPrefs
+                // docs za razlog persistence-a.
+                val eventDedupMap = localPrefs.loadEventDedup(DEDUP_WINDOW_MS)
+                val oppositeDedupMap = localPrefs.loadOppositeDedup(OPPOSITE_DEDUP_WINDOW_MS)
+                var dedupDirty = false
                 triggered.forEach { fence ->
                     val (circleId, placeId) = parseRequestId(fence.requestId) ?: return@forEach
                     val placeInfo = fetchPlaceInfo(circleId, placeId)
-                    val prevType = persistedTypes[placeId]
+                    val prevRecord = persistedTypes[placeId]
+                    val prevType = prevRecord?.type
+                    val prevAgeMs = prevRecord?.atMs?.let { atMs ->
+                        if (atMs <= 0L) Long.MAX_VALUE else (nowMs - atMs).coerceAtLeast(0L)
+                    } ?: Long.MAX_VALUE
                     // Izračunaj GPS verify outcome pa proslijedi u PhantomFilter (pure fn).
                     // Bug koji ovo popravlja (Jul 2026, Jelena): user prijavljuje EXIT
                     // notif za place na kome fizički nikad nije bio. Root cause: verify
@@ -253,29 +326,49 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                     } else {
                         PhantomFilter.VerifyOutcome.Inconclusive
                     }
-                    val decision = PhantomFilter.classify(type, prevType, verifyOutcome)
+                    val decision = PhantomFilter.classify(type, prevType, prevAgeMs, verifyOutcome)
                     if (decision is PhantomFilter.Decision.Skip) {
                         Timber.w(
-                            "GeofenceReceiver: skip %s place=%s prev=%s verify=%s — %s",
+                            "GeofenceReceiver: skip %s place=%s prev=%s age=%s verify=%s — %s",
                             type,
                             placeInfo?.name ?: placeId,
                             prevType ?: "null",
+                            if (prevAgeMs == Long.MAX_VALUE) "n/a" else "${prevAgeMs}ms",
                             verifyOutcome::class.simpleName,
                             decision.reason,
                         )
                         return@forEach
                     }
-                    // Dedup POSLE verify-a: da phantom event ne zauzme dedup slot i time
-                    // blokira legitiman event koji stigne par minuta kasnije.
-                    val key = "$placeId:$type"
-                    val now = System.currentTimeMillis()
-                    val last = synchronized(lastEventTimes) { lastEventTimes[key] } ?: 0L
-                    if (now - last < DEDUP_WINDOW_MS) {
-                        Timber.d("GeofenceReceiver: dedup skip $key (last ${now - last}ms ago)")
+                    // Cross-type dedup: ako je isti place upravo (unutar 90s) generisao
+                    // obrnutu tranziciju, ovo je 99% phantom (screen-wake burst iz Doze
+                    // reconciliation-a). Bug: user probudio ekran, drugi dobio LEFT +
+                    // ARRIVED skoro istovremeno iako se nisu pomerali. Persistent u
+                    // LocalPrefs jer process death između dva broadcast-a bi izgubio
+                    // in-memory state (proces može biti ubijen zbog memory pressure-a).
+                    val opposite = oppositeDedupMap[placeId]
+                    if (opposite != null && opposite.first != type &&
+                        (nowMs - opposite.second) < OPPOSITE_DEDUP_WINDOW_MS
+                    ) {
+                        Timber.w(
+                            "GeofenceReceiver: skip opposite %s (last %s %dms ago) place=%s",
+                            type, opposite.first, nowMs - opposite.second,
+                            placeInfo?.name ?: placeId,
+                        )
                         return@forEach
                     }
-                    synchronized(lastEventTimes) { lastEventTimes[key] = now }
-                    localPrefs.updatePlaceTransitionType(placeId, type)
+                    // Dedup POSLE verify-a: da phantom event ne zauzme dedup slot i time
+                    // blokira legitiman event koji stigne par minuta kasnije. Persistent
+                    // u LocalPrefs iz istog razloga kao opposite-dedup — proces death.
+                    val key = "$placeId:$type"
+                    val last = eventDedupMap[key] ?: 0L
+                    if (nowMs - last < DEDUP_WINDOW_MS) {
+                        Timber.d("GeofenceReceiver: dedup skip $key (last ${nowMs - last}ms ago)")
+                        return@forEach
+                    }
+                    eventDedupMap[key] = nowMs
+                    oppositeDedupMap[placeId] = type to nowMs
+                    dedupDirty = true
+                    localPrefs.updatePlaceTransitionType(placeId, type, nowMs)
                     val placeName = placeInfo?.name ?: fetchPlaceName(circleId, placeId) ?: placeId
                     placeRepository.logEvent(
                         circleId = circleId,
@@ -285,6 +378,12 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                         userName = userName,
                         type = type,
                     )
+                }
+                // Batch dedup persist na kraju loop-a — jedan disk write nezavisno
+                // od broja event-a. Ako nema izmena (svi skinuti), preskoči.
+                if (dedupDirty) {
+                    localPrefs.saveEventDedup(eventDedupMap)
+                    localPrefs.saveOppositeDedup(oppositeDedupMap)
                 }
             } catch (e: Exception) {
                 Timber.e(e, "GeofenceReceiver: logging failed")
@@ -310,6 +409,12 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
             val lng = doc.getDouble("lng") ?: return@runCatching null
             val radius = (doc.getLong("radius") ?: 100L).toInt()
             PlaceInfo(name = name, lat = lat, lng = lng, radius = radius)
+        }.onFailure { e ->
+            // Bez ovog log-a Crashlytics ne prijavljuje Firestore fail-ove →
+            // verify pada u Inconclusive tiho i phantom event prolazi. Ako se
+            // dešavaju masovno (permission denied, offline predugo), moraju biti
+            // vidljivi u dashboard-u.
+            Timber.w(e, "GeofenceReceiver: fetchPlaceInfo failed circle=%s place=%s", circleId, placeId)
         }.getOrNull()
     }
 
@@ -356,6 +461,8 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
         return runCatching {
             firestore.collection("users").document(uid).get().await()
                 .getString("displayName").orEmpty()
+        }.onFailure { e ->
+            Timber.w(e, "GeofenceReceiver: fetchUserName failed uid=%s", uid)
         }.getOrDefault("").ifBlank { "Član" }
     }
 
@@ -364,6 +471,8 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
             firestore.collection("circles").document(circleId)
                 .collection("places").document(placeId).get().await()
                 .getString("name")
+        }.onFailure { e ->
+            Timber.w(e, "GeofenceReceiver: fetchPlaceName failed circle=%s place=%s", circleId, placeId)
         }.getOrNull()
     }
 }

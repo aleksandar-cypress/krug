@@ -83,9 +83,19 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
     /** Sopstvena (auto) lat/lng za distance-to-member u subtitle. Null dok nemamo fix. */
     @Volatile private var selfLat: Double? = null
     @Volatile private var selfLng: Double? = null
+    /**
+     * UID člana na kog je user zadnje kliknuo. Koristi ga onGetTemplate za setAnchor —
+     * PlaceListMapTemplate centrira mapu na anchor. Bez ovog, klik na člana samo
+     * pokretao Google Maps intent (spolja) umesto da pomera mapu unutar Auto ekrana,
+     * što je user prijavio kao bug (scroll pomera, klik ne).
+     */
+    @Volatile private var focusedMemberUid: String? = null
 
     private val authListener = com.google.firebase.auth.FirebaseAuth.AuthStateListener {
         // User signs in/out — refresh Screen and (re)start observers ako je user prisutan.
+        // Sign-out treba da resetuje focusedMemberUid: bez toga anchor drži uid koji
+        // više nije u listi, sledeći render bi tražio non-existent member.
+        if (it.currentUser == null) focusedMemberUid = null
         invalidate()
         if (it.currentUser != null && collectorJob == null) {
             startObserving()
@@ -129,7 +139,13 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
                         )
                         .build()
                     row.setMetadata(Metadata.Builder().setPlace(place).build())
-                    row.setOnClickListener { launchNavigate(m.lat, m.lng, m.name) }
+                    // Klik = centriraj mapu na tog člana. Različito od Places (dole)
+                    // koje pokreću navigaciju jer su mesta statična; članovi se pomeraju
+                    // pa je „gde je sada" korisnije od „navigate do njega".
+                    row.setOnClickListener {
+                        focusedMemberUid = m.uid
+                        invalidate()
+                    }
                     row.setBrowsable(true)
                 }
                 listBuilder.addItem(row.build())
@@ -162,12 +178,24 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
                     .build(),
             )
             .build()
-        return PlaceListMapTemplate.Builder()
+        val builder = PlaceListMapTemplate.Builder()
             .setTitle(carContext.getString(R.string.car_title))
             .setHeaderAction(Action.APP_ICON)
             .setItemList(listBuilder.build())
             .setActionStrip(actionStrip)
-            .build()
+        // Anchor pomera default map center. Kad user klikne na člana, `focusedMemberUid`
+        // se postavi + invalidate pozove; sledeći render postavlja anchor na njegovu
+        // trenutnu poziciju. Bez ovog, klik nije davao vidljiv efekat na mapi (user bug).
+        val anchor = focusedMemberUid?.let { fid ->
+            members.firstOrNull { it.uid == fid }?.takeIf { it.lat != null && it.lng != null }
+        }
+        if (anchor?.lat != null && anchor.lng != null) {
+            val anchorPlace = Place.Builder(CarLocation.create(anchor.lat, anchor.lng))
+                .setMarker(PlaceMarker.Builder().setColor(CarColor.BLUE).build())
+                .build()
+            builder.setAnchor(anchorPlace)
+        }
+        return builder.build()
     }
 
     private fun startObserving() {
@@ -211,6 +239,11 @@ class MapCarScreen(carContext: CarContext) : Screen(carContext) {
                 }
                 .collectLatest { list ->
                     members = list
+                    // Ako je fokusirani član napustio circle (ili nije u novoj listi
+                    // posle circle switch-a), skini anchor da ne držimo stale uid.
+                    if (focusedMemberUid != null && list.none { it.uid == focusedMemberUid }) {
+                        focusedMemberUid = null
+                    }
                     loaded = true
                     invalidate()
                 }

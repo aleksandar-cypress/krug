@@ -207,6 +207,34 @@ class LocationTrackingService : Service() {
     @Volatile private var refreshBoostUntilMs: Long = 0L
 
     /**
+     * Timestamp poslednjeg fix-a sa `speed >= TRIP_START_SPEED_MPS` (~25 km/h).
+     * Koristi ga `computeProfile` da forsira VEHICLE profil čak i kada Activity
+     * Recognition još nije klasifikovao (npr. motor, koji AR često prijavljuje
+     * kao TILTING/UNKNOWN pa profil ostaje na LOW = 15min interval; TripDetector
+     * onda nikada ne vidi 2 uzastopna high-speed fix-a i vožnja se ne beleži).
+     * Bug (Jul 2026): user vozio motor u Banjica → history postoji, My Trips prazan.
+     * Sa speed-based override-om, čim jedan LOW fix pokupi >=25 km/h, profil se
+     * prebacuje na VEHICLE i sledeći fix za 45s takođe hvata high speed → trip
+     * počinje. Prozor od 10min pokriva kratke zastoje na semaforima bez preranog
+     * pada na LOW.
+     */
+    @Volatile private var lastHighSpeedAtMs: Long = 0L
+
+    /**
+     * Poslednji fix za `implied speed` fallback. GPS-derived `loc.speed` može biti 0
+     * ili odsutan (motor sa lošom accuracy, uređaj ne raportira brzinu iz Doppler-a).
+     * U tom slučaju računamo brzinu iz razmaka pozicija u odnosu na vreme. Bug (Jul
+     * 2026): user vozio motor u Banjica, `loc.hasSpeed()` false ili speed=0 pa
+     * lastHighSpeedAtMs nikada nije postavljen, profil ostao LOW, trip se ne beleži.
+     *
+     * Jedan @Volatile ref na immutable holder — bez ovog, 3 nezavisna @Volatile
+     * field-a su podložna torn read-u između Thread 1 read i Thread 2 write
+     * (mešane generacije lat/lng/time daju impliedSpeed=∞).
+     */
+    private data class LastFixForSpeed(val lat: Double, val lng: Double, val atMs: Long)
+    @Volatile private var lastFixForSpeed: LastFixForSpeed? = null
+
+    /**
      * Spam cap za refresh ping-ove — peer pošalje "Osveži lokaciju", dobije BURST 5min.
      * Ako isti peer spamuje dugme u tom roku, ignorišemo dodatne ping-ove (boost je
      * već u toku, novi boost samo ekstenduje period čime BURST drift-uje indefinitno
@@ -220,6 +248,34 @@ class LocationTrackingService : Service() {
             val loc = result.lastLocation ?: return
             if (!passesQualityGate(loc, isCachedLastLocation = false)) return
             val (battery, charging) = readBattery()
+            // Speed-based profile override — vidi lastHighSpeedAtMs docs. Uvek proveri
+            // PRE reconfigureIfNeeded-a da prvi high-speed fix odmah triger-uje switch
+            // na VEHICLE (motor, koji Activity Recognition ne klasifikuje pouzdano).
+            // Dva izvora brzine: (1) GPS-derived loc.speed kad je dostupan, (2) implied
+            // speed iz razmaka pozicija — motor može da ne raportira loc.speed
+            // pouzdano (loc.hasSpeed()=false ili 0), pa implied fallback pokriva to.
+            val nowForSpeed = System.currentTimeMillis()
+            val gpsSpeed = if (loc.hasSpeed()) loc.speed else 0f
+            // Snapshot ref za konzistentan read (jedan @Volatile load, ne torn).
+            val prevFix = lastFixForSpeed
+            val impliedSpeed = if (prevFix != null) {
+                val elapsedS = (nowForSpeed - prevFix.atMs) / 1000.0
+                if (elapsedS in 1.0..300.0) {
+                    val out = FloatArray(1)
+                    android.location.Location.distanceBetween(
+                        prevFix.lat, prevFix.lng,
+                        loc.latitude, loc.longitude, out,
+                    )
+                    val mps = out[0] / elapsedS
+                    // Sanity: teleport > 55 m/s (200 km/h) = GPS jitter, ne verujemo.
+                    if (mps < 55.0) mps.toFloat() else 0f
+                } else 0f
+            } else 0f
+            val effectiveSpeed = maxOf(gpsSpeed, impliedSpeed)
+            if (effectiveSpeed >= org.krug.app.core.driving.TripDetector.TRIP_START_SPEED_MPS) {
+                lastHighSpeedAtMs = nowForSpeed
+            }
+            lastFixForSpeed = LastFixForSpeed(loc.latitude, loc.longitude, nowForSpeed)
             reconfigureIfNeeded()
             // Temporary sharing auto-expiry: proverava na svaki fix. Ako je timer istekao,
             // gasi share + čisti flag. Peer-i odmah dobijaju "paused" preko Firestore
@@ -248,11 +304,15 @@ class LocationTrackingService : Service() {
             // Trip detection radi na SVAKI fix nezavisno od publish gate-a — čak i kad
             // movement filter odbaci publish (npr. staje na semaforu), speed je važan
             // signal za state machine (quiet timeout).
+            // Prosleđuj `effectiveSpeed` (gornji max od loc.speed i implied iz pozicije)
+            // umesto sirovog `loc.speed`. Motor često daje loc.hasSpeed()=false ili 0
+            // pa TripDetector nikada ne startuje trip; implied fallback iz haversine-a
+            // omogucava da se motor detektuje kao vožnja.
             tripDetector.onFix(
                 uid = uid,
                 lat = loc.latitude,
                 lng = loc.longitude,
-                speedMps = loc.speed,
+                speedMps = effectiveSpeed,
                 nowMs = System.currentTimeMillis(),
             )
             // Speeding detektor — filtrira sam po enabled flag-u, ne pozivamo uslovno
@@ -1461,6 +1521,15 @@ class LocationTrackingService : Service() {
         val (battery, charging) = readBattery()
         val lowBatt = battery in 0..LOW_BATTERY_THRESHOLD && !charging
         if (lowBatt) return LocationProfile.LOW_THROTTLED
+        // Speed-based VEHICLE override: motor (i biciklizam sa spuštanjem nizbrdo,
+        // e-trotinet, itd.) Activity Recognition često klasifikuje kao TILTING ili
+        // UNKNOWN pa profil ostaje LOW (15min) i TripDetector nikada ne vidi drugi
+        // uzastopni fix >=25 km/h. Ako je bilo koji nedavni fix imao high speed,
+        // forsiraj VEHICLE dok se prozor ne istekne — pojam „vožnja u toku" bez
+        // oslanjanja na AR classification.
+        if (lastHighSpeedAtMs > 0L && (now - lastHighSpeedAtMs) < HIGH_SPEED_HOLD_MS) {
+            return LocationProfile.VEHICLE
+        }
         return profileForActivity(detectedActivity) ?: LocationProfile.LOW
     }
 
@@ -1566,8 +1635,15 @@ class LocationTrackingService : Service() {
         BURST(intervalMs = 60_000L, fastestMs = 30_000L, displacementM = 0f),
         /** Battery mode MAX — eksplicitno opt-in. */
         HIGH(intervalMs = 300_000L, fastestMs = 120_000L, displacementM = 100f),
-        /** Activity Recognition: VEHICLE — vozi se, treba česti fix (1.5min). */
-        VEHICLE(intervalMs = 90_000L, fastestMs = 45_000L, displacementM = 0f),
+        /**
+         * Activity Recognition: VEHICLE — vozi se, treba česti fix. Bump interval
+         * 90s→45s (Jul 2026): user prijavio Trip distance 7.8 km umesto ~10 km na
+         * kraćoj ruti. Haversine chord aproksimacija skraćuje krivinu proporcionalno
+         * intervalu — sa 90s @ 60 km/h fixa je na 1.5 km apart, gube se svi zavoji.
+         * 45s daje 750m apart → bolja pratnja krivina. Baterijski oko 30% više
+         * GPS fixes-a tokom vožnje samo (ostatak vremena profil je STILL/LOW).
+         */
+        VEHICLE(intervalMs = 45_000L, fastestMs = 20_000L, displacementM = 0f),
         /** Activity Recognition: BICYCLE — biciklira, srednji interval (2min). */
         BICYCLE(intervalMs = 120_000L, fastestMs = 60_000L, displacementM = 30f),
         /** Activity Recognition: WALKING / RUNNING / ON_FOOT — hoda (4min). */
@@ -1594,6 +1670,13 @@ class LocationTrackingService : Service() {
         const val REFRESH_BOOST_DURATION_MS = 5 * 60_000L
         /** Spam cap — isti peer ne može da trigger-uje novi boost dok ovaj nije istekao. */
         const val REFRESH_BOOST_COOLDOWN_MS = REFRESH_BOOST_DURATION_MS
+        /**
+         * Koliko dugo posle poslednjeg high-speed fix-a držimo VEHICLE profil bez
+         * obzira na Activity Recognition. Pokriva zastoje na semaforima, gušenje AR
+         * signala u tunelima, i motor koji AR ne klasifikuje pouzdano. 10min je
+         * dovoljno da vožnja ne padne na LOW dok stane pola staze na semaforu.
+         */
+        const val HIGH_SPEED_HOLD_MS = 10L * 60_000L
         /** Movement filter — manje od 15m kretanja preskače publish. */
         const val SIGNIFICANT_MOVEMENT_M = 15f
         /** History write threshold — više od publish (15m) zbog cost-a. */

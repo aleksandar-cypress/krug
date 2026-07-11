@@ -84,15 +84,18 @@ class PlaceEventNotifier @Inject constructor(
                 pi,
             )
             .build()
-        NotificationManagerCompat.from(context).notify(NOTIF_TAG, event.id.hashCode(), notif)
+        // NotificationManager identifikuje notif kombinacijom (tag, id). Tag štiti
+        // cross-notifier collision. Unutar tag-a, hashCode može biti negativan (Int32
+        // range) — clamp-uj na positive da izbegnemo raritetne edge case-ove sa
+        // negativnim ID-jevima na starijim Android verzijama.
+        val notifId = event.id.hashCode() and Int.MAX_VALUE
+        NotificationManagerCompat.from(context).notify(NOTIF_TAG, notifId, notif)
     }
 
     companion object {
         const val CHANNEL_ID = "places_events"
         const val EXTRA_FOCUS_PLACE_ID = "focus_place_id"
         const val EXTRA_FOCUS_CIRCLE_ID = "focus_circle_id"
-        // Vidi SosNotifier o notif tag pattern-u — event.id.hashCode() može da hash-uje
-        // u bilo koji Int range i time collide sa SOS/Battery/ETA fixed BASE_ID range-om.
         private const val NOTIF_TAG = "krug_place_event"
     }
 }

@@ -16,6 +16,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.tasks.await
+import org.krug.app.core.prefs.LocalPrefs
 import timber.log.Timber
 
 /**
@@ -34,6 +35,7 @@ import timber.log.Timber
 @Singleton
 class GeofenceManager @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val localPrefs: LocalPrefs,
 ) {
     private val client: GeofencingClient by lazy {
         LocationServices.getGeofencingClient(context)
@@ -92,7 +94,15 @@ class GeofenceManager @Inject constructor(
             .build()
         return try {
             client.addGeofences(request, pendingIntent).await()
-            lastRegisteredAtMs = System.currentTimeMillis()
+            val now = System.currentTimeMillis()
+            lastRegisteredAtMs = now
+            // Persist da grace preživi proces death: BroadcastReceiver-i su statički
+            // entry point-i i Play Services zna da fire spurious event pre nego što
+            // se LocationTrackingService podigne (dakle pre poziva registerAll()).
+            // Bez persist-a, in-memory `lastRegisteredAtMs=0` znači grace ne štiti
+            // od prvog broadcast-a posle app reopen-a (bug: Jelena restart → phantom
+            // ENTER drugom članu).
+            localPrefs.lastGeofenceRegisterMs = now
             Timber.i("GeofenceManager: registered %d geofences (startup grace begins)", geofences.size)
             true
         } catch (e: Exception) {

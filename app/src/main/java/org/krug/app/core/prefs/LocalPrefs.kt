@@ -208,30 +208,48 @@ class LocalPrefs @Inject constructor(
     }
 
     /**
-     * Persistent per-place last transition type ("ENTER" ili "EXIT"). Koristi
-     * `GeofenceBroadcastReceiver` kao semantic guard + fail-closed za EXIT kad
-     * GPS verify ne uspe.
+     * Persistent per-place last transition. `type` je "ENTER" ili "EXIT",
+     * `atMs` je System.currentTimeMillis() u trenutku upisa. Koristi
+     * `GeofenceBroadcastReceiver` kao semantic guard + fail-closed za EXIT
+     * kad GPS verify ne uspe. Age check nad `atMs` sprečava scenario kad
+     * stari ENTER (npr. od jučer) "propušta" phantom EXIT sledeceg dana.
      *
      * Bez persistence-a (samo in-memory u companion), Doze wake/process death
      * resetuje state — prvi EXIT posle restart-a nema prior ENTER u memoriji pa
      * phantom EXIT prolazi kao „prvi legitiman". Prefs čuvaju state između procesa.
      *
-     * Format: "placeId1:TYPE1,placeId2:TYPE2,..." (jeftin string serialize).
+     * Format: "placeId1:TYPE1:ts1,placeId2:TYPE2:ts2,..." (jeftin string serialize).
+     * Backward compat: entries u starom formatu "placeId:TYPE" bez timestamp-a se
+     * učitavaju sa atMs=0 (tretira ih se kao vrlo stare, TTL will filter out).
      */
-    fun loadPlaceTransitionTypes(): MutableMap<String, String> {
+    data class TransitionRecord(val type: String, val atMs: Long)
+
+    fun loadPlaceTransitionTypes(): MutableMap<String, TransitionRecord> {
         val raw = prefs.getString(KEY_PLACE_TRANSITION_TYPE, null).orEmpty()
         if (raw.isBlank()) return mutableMapOf()
         return raw.split(',').mapNotNull { entry ->
             val parts = entry.split(':')
-            if (parts.size != 2) return@mapNotNull null
-            val pid = parts[0]
-            val type = parts[1]
-            if (pid.isBlank() || type.isBlank()) null else pid to type
+            when (parts.size) {
+                2 -> {
+                    val pid = parts[0]
+                    val type = parts[1]
+                    if (pid.isBlank() || type.isBlank()) null
+                    else pid to TransitionRecord(type, 0L)
+                }
+                3 -> {
+                    val pid = parts[0]
+                    val type = parts[1]
+                    val ts = parts[2].toLongOrNull() ?: 0L
+                    if (pid.isBlank() || type.isBlank()) null
+                    else pid to TransitionRecord(type, ts)
+                }
+                else -> null
+            }
         }.toMap().toMutableMap()
     }
 
-    fun savePlaceTransitionTypes(map: Map<String, String>) {
-        val serialized = map.entries.joinToString(",") { "${it.key}:${it.value}" }
+    fun savePlaceTransitionTypes(map: Map<String, TransitionRecord>) {
+        val serialized = map.entries.joinToString(",") { "${it.key}:${it.value.type}:${it.value.atMs}" }
         prefs.edit(commit = false) { putString(KEY_PLACE_TRANSITION_TYPE, serialized) }
     }
 
@@ -246,10 +264,81 @@ class LocalPrefs @Inject constructor(
      * `@Synchronized` na cross-instance singleton (LocalPrefs) serijalizuje sve pozive.
      */
     @Synchronized
-    fun updatePlaceTransitionType(placeId: String, type: String) {
+    fun updatePlaceTransitionType(placeId: String, type: String, atMs: Long = System.currentTimeMillis()) {
         val current = loadPlaceTransitionTypes()
-        current[placeId] = type
+        current[placeId] = TransitionRecord(type, atMs)
         savePlaceTransitionTypes(current)
+    }
+
+    /**
+     * Persist-ovan timestamp poslednje geofence re-registracije. Preživljava proces
+     * death — `GeofenceManager.lastRegisteredAtMs` je in-memory `@Volatile` companion
+     * koji se resetuje na 0 pri procesu restart-u, pa STARTUP_GRACE ne važi za
+     * spurious event koji stigne odmah posle app reopen-a. Persistent varijanta
+     * omogucava da grace pokrije 2min posle bilo koje registracije, bez obzira na
+     * proces lifecycle. Bug (Jul 2026, Jelena): user je killed + reopened app, drugi
+     * clanovi kruga su dobili phantom ENTER notif jer je Play Services fire-ovala
+     * reconciliation event izmedju kill-a i re-registracije.
+     */
+    var lastGeofenceRegisterMs: Long
+        get() = prefs.getLong(KEY_LAST_GEOFENCE_REGISTER_MS, 0L)
+        set(value) = prefs.edit(commit = false) { putLong(KEY_LAST_GEOFENCE_REGISTER_MS, value) }
+
+    /**
+     * Persistent dedup timestamp mapa za geofence transitions. Ključ `placeId:TYPE`
+     * (isti kao in-memory `GeofenceBroadcastReceiver.lastEventTimes`). Bez ovog,
+     * proces death briše in-memory mapu i sledeći identičan event (5-90s kasnije)
+     * ne biva blokiran → dupli event u Firestore, dupla notif drugim članovima.
+     *
+     * Format: "key1:ts1,key2:ts2,..." (isti pattern kao ostali dedup).
+     * TTL: čistimo entrije starije od 5min pri load-u (odgovara DEDUP_WINDOW_MS).
+     */
+    fun loadEventDedup(ttlMs: Long): MutableMap<String, Long> {
+        val raw = prefs.getString(KEY_EVENT_DEDUP, null).orEmpty()
+        if (raw.isBlank()) return mutableMapOf()
+        val now = System.currentTimeMillis()
+        val parsed = raw.split(',').mapNotNull { entry ->
+            val idx = entry.lastIndexOf(':')
+            if (idx < 0) return@mapNotNull null
+            val key = entry.substring(0, idx)
+            val ts = entry.substring(idx + 1).toLongOrNull() ?: return@mapNotNull null
+            if (key.isBlank() || now - ts > ttlMs) null else key to ts
+        }.toMap().toMutableMap()
+        return parsed
+    }
+
+    fun saveEventDedup(map: Map<String, Long>) {
+        val serialized = map.entries.joinToString(",") { "${it.key}:${it.value}" }
+        prefs.edit(commit = false) { putString(KEY_EVENT_DEDUP, serialized) }
+    }
+
+    /**
+     * Persistent opposite-transition timestamp mapa. Ključ = placeId, vrednost =
+     * (last type, timestamp). Koristi je BroadcastReceiver za cross-type dedup
+     * (LEFT→ARRIVED burst iz screen-wake reconciliation-a). Bez persist-a, ako
+     * proces umre između dva broadcast-a, drugi phantom prolazi.
+     *
+     * Format: "placeId1:TYPE1:ts1,placeId2:TYPE2:ts2,..."
+     */
+    fun loadOppositeDedup(ttlMs: Long): MutableMap<String, Pair<String, Long>> {
+        val raw = prefs.getString(KEY_OPPOSITE_DEDUP, null).orEmpty()
+        if (raw.isBlank()) return mutableMapOf()
+        val now = System.currentTimeMillis()
+        val parsed = raw.split(',').mapNotNull { entry ->
+            val parts = entry.split(':')
+            if (parts.size != 3) return@mapNotNull null
+            val pid = parts[0]
+            val type = parts[1]
+            val ts = parts[2].toLongOrNull() ?: return@mapNotNull null
+            if (pid.isBlank() || type.isBlank() || now - ts > ttlMs) null
+            else pid to (type to ts)
+        }.toMap().toMutableMap()
+        return parsed
+    }
+
+    fun saveOppositeDedup(map: Map<String, Pair<String, Long>>) {
+        val serialized = map.entries.joinToString(",") { "${it.key}:${it.value.first}:${it.value.second}" }
+        prefs.edit(commit = false) { putString(KEY_OPPOSITE_DEDUP, serialized) }
     }
 
     /**
@@ -291,5 +380,8 @@ class LocalPrefs @Inject constructor(
         const val KEY_BATTERY_ALERTED = "battery_alerted_ts"
         const val KEY_DEVICE_ID = "device_id"
         const val KEY_PLACE_TRANSITION_TYPE = "place_transition_type"
+        const val KEY_LAST_GEOFENCE_REGISTER_MS = "last_geofence_register_ms"
+        const val KEY_EVENT_DEDUP = "event_dedup_ts"
+        const val KEY_OPPOSITE_DEDUP = "opposite_dedup_ts"
     }
 }

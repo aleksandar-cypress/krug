@@ -12,3 +12,13 @@ fun String.capitalizeFirstLetter(): String {
     if (!first.isLetter() || first.isUpperCase()) return this
     return first.titlecase(Locale.forLanguageTag("sr")) + substring(1)
 }
+
+/**
+ * Skraćuje string na `maxLength` sa ellipsis-om. Bez ovog, `.take(N)` seče na sredini
+ * reči tako da izgleda kao nedovršeno ime („Dusica Bajčeta" → „Dusica Baj"). Sa
+ * ellipsis-om („Dusica Ba…") user jasno vidi da je tekst kraćen.
+ */
+fun String.truncateWithEllipsis(maxLength: Int): String {
+    if (maxLength <= 1) return take(maxLength)
+    return if (length > maxLength) take(maxLength - 1) + "…" else this
+}
