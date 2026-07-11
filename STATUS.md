@@ -2,6 +2,182 @@
 
 Snimljeno na kraju sesije.
 
+## Gde smo stali (2026-07-11 — 1.2.5 patch, Closed testing upload pending)
+
+**1.2.5 AAB build-ovan i signed** (`app/build/outputs/bundle/release/app-release.aab`, 38.9 MB, versionCode 16). Aleksandar uploaduje na Play Console → **Closed testing** track (ne Internal testing — Play Console i dalje pokazuje Closed testing = 0.1.0 od 2. jula, ceo tester flow treba preseliti u Closed testing zbog Google-ovog 12-testera-14-dana zahteva za production).
+
+Cilj 1.2.5: 10 user-prijavljenih bugova iz 1.2.4 usage-a (Jelena + Aleksandar + porodica) + 4 baga iz statičke analize + polish pass. Svih 14 fixova u jednom prolazu, R8 sanity + unit test suite (17 tests) prolaze.
+
+### Konteksta za 1.2.5 fixove
+
+User je javio 10 realnih bugova posle 1.2.4 install-a. Grupisano po klasi:
+
+**Phantom notifikacije (5 bugova):**
+- #1 Jelena kill+reopen app → drugi članovi dobijaju ENTER notif iako se nije pomerila
+- #2 User došao u Banjica → Jelena dobija „left babina kuca" (phantom EXIT za drugi place)
+- #5 User i Jelena zajedno u placeu → user dobija ENTER notif za nju
+- #7 Screen wake za zaključan telefon → Jelena dobija LEFT + ARRIVED istovremeno
+- #9 Jana LEFT za place gde uopšte nije bila taj dan
+
+**Trip tracking (3 baga):**
+- #3 Motor vožnja u Banjica, history ima poziciju ali My Trips prazan
+- #4 Isto za povratak motorom
+- #6 Auto vožnja beleži 7.8km umesto ~10km (i 5.4km na dužoj ruti)
+
+**UI (2 baga):**
+- #8 Cluster marker sa 2 člana pokazuje „Dusica Baj, Magdalena" — izgleda kao jedno ime
+- #10 Android Auto scroll pomera mapu (radi), ali klik na člana pokreće Google Maps intent umesto da centrira mapu unutar Auto ekrana
+
+### Šta je novo u 1.2.5 (od 1.2.4)
+
+**#1 Phantom ENTER kad Jelena kill+reopen app** (#1, #5 su isti root cause)
+`GeofenceBroadcastReceiver.kt` + `GeofenceManager.kt` + `LocalPrefs.kt`:
+- Root cause: `lastRegisteredAtMs` je bio in-memory `@Volatile` companion koji resetuje na 0 pri procesu death. Kad Jelena reopen app dok je unutar place-a, Play Services fire spurious reconciliation ENTER PRE nego što se novi `registerAll()` završi. Startup grace nije radio jer `lastRegisteredAtMs=0`.
+- Fix 1: Persist `lastGeofenceRegisterMs` u LocalPrefs (preživljava proces death). BroadcastReceiver čita in-memory PA fallback na persist.
+- Fix 2: Process uptime grace kroz `Process.getStartElapsedRealtime()`. Ako je proces mlađi od 2min (STARTUP_GRACE_MS), skip sve tranzicije. Hvata scenario kad Play fire event pre nego što se FGS podigne — BroadcastReceiver-i su „cold entry point" i mogu se pozvati bez ikakvog service-a.
+- Nov key u LocalPrefs: `KEY_LAST_GEOFENCE_REGISTER_MS`
+
+**#2 Phantom EXIT za drugi place („left babina kuca")** — vezano za #7 (isti Doze scenario)
+`GeofenceBroadcastReceiver.kt`:
+- Root cause: Jelena je bila kod babine kuće (persisted ENTER). Screen wake / Doze reconciliation fire spurious EXIT sa `Inconclusive` verify jer Doze prekida fresh GPS fetch. `PhantomFilter.classify` je propuštao EXIT jer imamo prior ENTER („legitiman izlazak").
+- Fix: **Stale triggeringLocation fallback**. Kad fresh GPS fetch fails, pre nego što padnemo na Inconclusive, prihvatamo stariji triggeringLocation sa širim tolerancijama (accuracy < 150m, age < 5min). Ako Jelena je fizički unutar place-a, taj stale fix pokaže Confirmed IN → phantom EXIT skip.
+- Nove konstante: `FALLBACK_LOC_MAX_ACCURACY_M=150f`, `FALLBACK_LOC_MAX_AGE_MS=5min`
+
+**#7 Screen wake LEFT + ARRIVED burst**
+`GeofenceBroadcastReceiver.kt` + `LocalPrefs.kt`:
+- Root cause: Play Services može fire spurious LEFT + ARRIVED sekvencijalno posle Doze wake reconciliation-a. `BATCH_RECONCILIATION` filter iz 1.2.3 hvata SAMO event-e u istom broadcast-u, ne sekvencijalne.
+- Fix: **Opposite-transition dedup** — 90s window. Ako za isti place stigne obrnuta tranzicija (EXIT posle ENTER-a ili obrnuto) unutar 90s, drugi je 99% phantom → skip.
+- Persistent u LocalPrefs (`KEY_OPPOSITE_DEDUP`, format `placeId:TYPE:ts`) jer proces death između dva broadcast-a bi izgubio in-memory state.
+- Dodatni sloj: postojeci `lastEventTimes` (same-type dedup 5min) takođe migriran u persistent LocalPrefs (`KEY_EVENT_DEDUP`).
+
+**#9 Jana LEFT za place gde nije bila taj dan**
+`PhantomFilter.kt` + `LocalPrefs.kt`:
+- Root cause: Fail-closed za Inconclusive EXIT već postojao (traži prior ENTER), ali bez TTL. Ako je Jana bila u placeu pre više dana, persisted ENTER je stariji ali i dalje se broji kao „prior ENTER" → phantom EXIT prolazi.
+- Fix 1: `LocalPrefs.TransitionRecord(type, atMs)` sa timestamp-om uz type. Backward-compat parse: entriji u starom formatu `placeId:TYPE` bez timestamp-a se učitavaju sa `atMs=0` (tretira ih se kao vrlo stare).
+- Fix 2: `PhantomFilter.classify` prošireno sa `prevTypeAgeMs` parametrom. `STALE_ENTER_TTL_MS=12h`. Za Inconclusive + EXIT: hasFreshPriorEnter = prevType==ENTER && age<=TTL. Bez toga → fail-closed.
+- 3 nova PhantomFilterTest scenarija (stale ENTER, fresh ENTER, Confirmed OUT overriding TTL) + 1 postojeći test ažuriran za novi signature.
+
+**#3, #4 Motor trip se ne beleži**
+`LocationTrackingService.kt`:
+- Root cause: Google Activity Recognition nema `ON_MOTORCYCLE` kategoriju — motor često daje `TILTING` ili `UNKNOWN` sa niskim confidence-om. `computeProfile` fallback-uje na `LocationProfile.LOW` (15min interval). TripDetector traži 2 uzastopna fix >= 25 km/h — sa 15min sampling to nikad se ne desi.
+- Fix 1: **Speed-based override**. `lastHighSpeedAtMs` u LocationTrackingService. Kad bilo koji fix ima speed >= 25 km/h (`TRIP_START_SPEED_MPS`), postavi timestamp. `computeProfile` proverava: ako je (now - lastHighSpeedAtMs) < `HIGH_SPEED_HOLD_MS=10min` → return `LocationProfile.VEHICLE`. Force VEHICLE bez oslanjanja na AR classification.
+- Fix 2: **Implied speed fallback**. Motor može davati `loc.hasSpeed()=false` ili `speed=0` (GPS Doppler ne kalkuliše). Sada računamo brzinu iz razmaka pozicija: `impliedSpeed = distance / elapsedS`. `effectiveSpeed = max(gpsSpeed, impliedSpeed)`. Sanity guard: `< 55 m/s` (200 km/h) da izbegnemo GPS teleport jitter.
+- Fix 3: `effectiveSpeed` prosleđen `TripDetector.onFix()` umesto sirovog `loc.speed`. TripDetector sada startuje trip i kad GPS ne raportira speed direktno.
+- Konsolidovan `lastFixForSpeed` u jedan `@Volatile` ref na immutable data class (bio 3 nezavisna `@Volatile` field-a → torn read race gde bi Thread 1 pročitao lat sa Thread 2 write-a).
+
+**#6 Trip distanca 7.8 km umesto ~10 km**
+`LocationTrackingService.kt`:
+- Root cause: `LocationProfile.VEHICLE.intervalMs = 90_000L`. Sa 60 km/h @ 90s, fix-evi su na 1.5 km apart — haversine chord aproksimacija seče krivinu (auto-put pun zavoja gubi ~20-25% distance).
+- Fix: **VEHICLE interval 90s → 45s** (`fastestMs` 45s → 20s). Fix-evi su na 750m apart → bolja pratnja krivine, greška spustena na ~5-10%. Trošak baterije: ~30% više GPS fix-a **samo tokom aktivne vožnje** (VEHICLE profil), ne globalno.
+- Perfect fix bi bio road-snapping preko Mapbox map-matching API-ja. Odbačeno u ovom wave-u: dodatna kompleksnost + Mapbox API troškovi + zahteva post-trip re-fit.
+
+**#10 Android Auto klik centrira mapu**
+`MapCarScreen.kt`:
+- Root cause: `row.setOnClickListener { launchNavigate(m.lat, m.lng, m.name) }` je pokretao Google Maps navigate intent (`Intent.ACTION_VIEW` sa geo: URI). User je hteo da klik pomeri mapu unutar Auto ekrana (kako scroll radi), ne da otvara eksternu app.
+- Fix: `@Volatile var focusedMemberUid` state. Klik postavlja uid + `invalidate()`. `onGetTemplate` pri render-u računa anchor iz `focusedMemberUid` (traži member u trenutnoj listi) i postavlja `PlaceListMapTemplate.Builder.setAnchor(place)` — Android Auto host centrira mapu na anchor. Places (statična mesta) i dalje pokreću navigate intent (semantika različita).
+- Reset `focusedMemberUid = null` pri sign-out (u authListener) i pri circle switch (u members collectLatest ako uid nije više u listi) — inače držimo stale uid za non-existent user-a.
+
+**#8 Cluster marker „Dusica Baj, Magdalena"**
+`MapScreen.kt` + `StringFormat.kt`:
+- Root cause: cluster label separator `", "` + `.take(10)` na svakom imenu. „Dusica Bajčeta" → „Dusica Baj" (bez ellipsis-a) + zarez u srpskom kontekstu vizuelno spaja dva reda → izgleda kao „Ime, Prezime" jednog čoveka umesto dva različita člana.
+- Fix 1: Separator `", "` → `" · "` (bez zareza, tačka + spacing jasan cluster separator).
+- Fix 2: Nov `String.truncateWithEllipsis(maxLength)` u `StringFormat.kt`. Cluster names koriste `.truncateWithEllipsis(11)` → „Dusica Ba…" umesto raw „Dusica Baj". Ellipsis signalizira user-u da je tekst kraćen.
+
+### Statička analiza — 4 dodatna P1/P2 baga u istom wave-u
+
+Posle prve pass-e sa 10 user bugova, statički audit koda je našao 4 dodatna baga koji nisu bili user-visible ali su realan production risk:
+
+**#11 (P1) goAsync() timeout preko Android limita**
+`GeofenceBroadcastReceiver.kt`:
+- `BroadcastReceiver.goAsync()` ima soft 10s limit (dokumentacija je bila pogrešna „30s"). `GPS_VERIFY_TIMEOUT_MS=15_000L` + Firestore fetch (`fetchPlaceInfo` + `fetchUserName` + `logEvent`) može preći 10s → system ubija BR bez `pendingResult.finish()` → listener state nekonzistentan.
+- Fix: 15s → 8s. Budžet: 10s ukupno, 1-2s Firestore, 500ms overhead, ~7s za GPS. Fallback na stale triggeringLocation (FALLBACK_LOC_*) ako fresh GPS fail.
+
+**#12 (P2) In-memory dedup mape gube state pri proces death**
+`GeofenceBroadcastReceiver.kt` + `LocalPrefs.kt`:
+- `lastEventTimes` (companion `mutableMapOf<String, Long>()`) i `lastOppositeTimes` bili in-memory. Android proces može biti ubijen (OOM, force stop) između broadcast-a → sledeći identičan event ne biva blokiran → dupli event u Firestore, dupla notif.
+- Fix: Persist u LocalPrefs (`KEY_EVENT_DEDUP`, `KEY_OPPOSITE_DEDUP`). TTL-filtered pri load (5min za event, 90s za opposite). Batch write na kraju loop-a — 1 disk hit nezavisno od broja event-a.
+
+**#13 (P2) Firestore fetch error swallowing**
+`GeofenceBroadcastReceiver.kt`:
+- `fetchPlaceInfo`, `fetchUserName`, `fetchPlaceName` koristili `runCatching { }.getOrNull()` bez log-a. Ako Firestore fail (permission denied, offline predugo), `placeInfo=null` → PhantomFilter dobija Inconclusive → phantom event može proći.
+- Fix: `.onFailure { Timber.w(...) }` na sva 3 metoda. Sada Crashlytics vidi Firestore failure-e — debug moguć umesto tihog fail-a.
+
+**#14 (P2) Notification ID hashCode collision**
+`PlaceEventNotifier.kt` + `SpeedingAlertNotifier.kt` + `CheckInNotifier.kt`:
+- Sva 3 notifiera koristila `event.id.hashCode()` kao ID — može biti negativan (Int32 range). Iako `notify(tag, id, notif)` tehnicki prihvata negative, neke starije Android verzije imaju edge case-ove sa negativnim ID-jevima.
+- Fix: `event.id.hashCode() and Int.MAX_VALUE` clamp na positive range. Tag namespace (`krug_place_event`, `krug_speeding`, `krug_checkin`) i dalje razdvaja cross-notifier.
+
+### Šta smo naučili iz 1.2.4 → 1.2.5 rerun-a
+
+Aleksandar je javio pitanje: „kako je moguce da imamo ove bugove kada si radio polish celog koda 5 ili 6 puta i rekao si mi da svaki prolaz sve manje bugova?"
+
+Iskren odgovor koji je zapisan u kontekstu:
+- Prethodni QA prolazi su bili **code-quality** prolazi (dead code, imports, mock cleanup, testabilnost, telemetrija) — NE **functional-testing** prolazi.
+- Klasa bugova iz 1.2.4 (phantom Play Services event-i, motor detection, GPS distance) **ne može se naći statičkom analizom** — samo real-world usage sa fizičkim uređajima. Play Services geofence je fundamentalno nepouzdan (Doze wake, reconciliation storm-ovi).
+- Neki su regresija od never-tested-in-reality dizajn odluka (npr. cluster label sa `,` separator dodan u 1.2.0 bez testinga sa Srpskim imenima; 90s VEHICLE interval odabran bez distance benchmarka).
+
+**Preporuka za budući QA workflow (nije implementirano u 1.2.5):**
+1. Play Console pre-launch report — Google-ov auto-test na ~10 realnih uređaja, besplatno, uključi u release pipeline.
+2. Manual pre-release checklist (markdown) sa 15 real-world scenaria — 30 min ručnog prolazenja pre bundleRelease.
+3. Extract BroadcastReceiver filter chain u pure funkcije (kao `PhantomFilter`) da se svaki phantom scenario može unit-testirati bez Play Services dependency-ja.
+4. Firebase Test Lab za instrumented testove na Google cloud fleet-u.
+5. Real beta testing sa 12+ ljudi u Closed testing track-u (Play zahtev).
+
+### Play Console status (2026-07-11)
+
+- **Internal testing** track: verovatno drži 1.2.4 (nije verifikovano)
+- **Closed testing** track: i dalje pokazuje **1 (0.1.0) od 2. jula** — Aleksandar prebacuje sve testere sa Internal → Closed jer Google zahteva 12 opted-in testera na Closed testing 14 kontinualnih dana pre production release-a
+- **Aktivni opted-in testeri:** 3 (bilo 12 pre par dana, 9 je verovatno napustilo program ili nije koristilo app 14 dana → Google marker „dormant")
+- Opt-in URL: `play.google.com/apps/testing/org.krug.app` (Play Console → Testing → Closed testing → Testers tab, sekcija „How testers join your test")
+- 1.2.5 AAB upload pending u Closed testing (ne Internal) — release notes na srpskom:
+
+```
+1.2.5 — više ispravki
+
+• Ispravljene lažne notifikacije o dolasku/odlasku iz mesta
+• Sređeno beleženje vožnji motorom u My Trips
+• Preciznija distanca u My Trips
+• Android Auto: klik na člana centrira mapu
+• Klaster imena više ne izgleda kao jedno ime
+• Više stabilnosti pri probuđenju ekrana i restartu aplikacije
+```
+
+### Fajlovi izmenjeni u 1.2.5 (13 fajlova)
+
+- `app/build.gradle.kts` — versionCode 15→16, versionName 1.2.4→1.2.5
+- `core/places/PhantomFilter.kt` — `STALE_ENTER_TTL_MS`, `prevTypeAgeMs` signature
+- `core/places/GeofenceBroadcastReceiver.kt` — persist grace fallback, process uptime grace, opposite-transition dedup, stale triggeringLocation fallback, GPS timeout 8s, Firestore fetch logging
+- `core/places/GeofenceManager.kt` — persist register timestamp u LocalPrefs
+- `core/places/PlaceEventNotifier.kt` — hashCode bounding
+- `core/prefs/LocalPrefs.kt` — `TransitionRecord` sa timestamp, `lastGeofenceRegisterMs`, `loadEventDedup`, `loadOppositeDedup`
+- `core/location/LocationTrackingService.kt` — `lastHighSpeedAtMs`, `LastFixForSpeed`, implied speed, VEHICLE 90s→45s, `HIGH_SPEED_HOLD_MS=10min`
+- `core/car/MapCarScreen.kt` — `focusedMemberUid`, `setAnchor`, reset logika
+- `core/speeding/SpeedingAlertNotifier.kt` — hashCode bounding
+- `core/checkin/CheckInNotifier.kt` — hashCode bounding
+- `core/util/StringFormat.kt` — `truncateWithEllipsis` extension
+- `feature/map/MapScreen.kt` — cluster label `·` separator + ellipsis, `truncateWithEllipsis` import
+- `test/PhantomFilterTest.kt` — 3 nova TTL testa + 1 ažuriran za novi signature (17 total)
+
+### Verifikacija
+
+- Kompilacija: ✓ (`compileDebugKotlin`, `compileReleaseKotlin`)
+- Unit testovi: ✓ (17 tests, uklj. PhantomFilterTest, LogRingBufferTest, ClusterTest, GeoTest, StringFormatTest, DeviceNamesTest, TimeBucketTest)
+- R8 release build: ✓ (`minifyReleaseWithR8`, 1m40s)
+- lintVital release: ✓
+- Bundle sign: ✓ (Play App Signing, 38.9 MB)
+- Debug APK install na S24 Ultra: ✓ (`org.krug.app.debug`, launch bez crash-a)
+- Real end-to-end fix test: ✗ (nije rađen — traži multi-user + motor scenarija; delegirano na testere kroz Closed testing 14-dan window)
+
+### Pending posle 1.2.5 upload-a
+
+1. **Play Console → Closed testing → New release → Upload AAB** (a NE Internal testing — ceo tester flow prebaciti na Closed testing)
+2. **Prebaciti 3 postojećih + 9 novih testera na Closed testing** (email lista ili opt-in link)
+3. **14-dan kontinualni countdown počinje kad broj opted-in testera dostigne 12** — production release nije moguć pre toga
+4. **RTDB rules deploy** (i dalje pending iz 1.2.4 — Firebase CLI preko `aleksandarr@gmail.com` naloga, NE login5)
+5. **Sledeći QA wave** (posle Closed testing feedback-a): potencijalne stavke iz statičkog audit-a koje nisu urađene u 1.2.5 — wall-clock vs elapsedRealtime za timing windows (P2, retko), scope.cancel() race u FGS shutdown (P2, traži redesign), P3 code-quality stavke.
+
+---
+
 ## Gde smo stali (2026-07-10, prepodne — 1.2.3 hotfix pre odmora)
 
 **1.2.3 AAB build-ovan i signed** (`app/build/outputs/bundle/release/app-release.aab`, versionCode 14). Aleksandar uploaduje na Play Console → Internal testing preko vikenda. Testeri (Jelena + porodica) instaliraju, testiraju 10 dana tokom odmora (utorak → sledeći ponedeljak).
